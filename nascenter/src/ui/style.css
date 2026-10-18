@@ -1,0 +1,85 @@
+/* Plugin-specific components. Shared chrome/theme live in palette.css. */
+[data-minas-plugin="nascenter"] *{box-sizing: border-box; -webkit-tap-highlight-color: transparent;}
+[data-minas-plugin="nascenter"]{overflow-x: hidden; text-size-adjust: 100%;}
+[data-minas-plugin="nascenter"] .minas-plugin-body{min-height: 100dvh; margin: 0px; overflow-x: hidden; color: var(--text); background: radial-gradient(circle at 105% -8%,rgba(139,92,246,.3),transparent 34rem),linear-gradient(180deg,#21164f 0,#3d2a8a 175px,var(--bg) 350px); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;}
+[data-minas-plugin="nascenter"] button{font: inherit; cursor: pointer;}
+[data-minas-plugin="nascenter"] [hidden]{display: none !important;}
+[data-minas-plugin="nascenter"] .shell{width: min(100%, 850px); margin: 0px auto; padding: max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(30px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));}
+[data-minas-plugin="nascenter"] h1, [data-minas-plugin="nascenter"] h2, [data-minas-plugin="nascenter"] h3, [data-minas-plugin="nascenter"] p{margin: 0px;}
+[data-minas-plugin="nascenter"] h1{font-size: 25px;}
+[data-minas-plugin="nascenter"] h2{font-size: 22px;}
+[data-minas-plugin="nascenter"] h3{font-size: 16px;}
+[data-minas-plugin="nascenter"] p{color: var(--muted); font-size: 13px; line-height: 1.55;}
+[data-minas-plugin="nascenter"] .icon-button{display: grid; place-items: center; width: 43px; height: 43px; padding: 0px; border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 14px; color: rgb(255, 255, 255); background: rgba(255, 255, 255, 0.1); font-size: 24px;}
+[data-minas-plugin="nascenter"] .status-pill{display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; color: rgb(89, 96, 110); background: rgb(233, 234, 240); font-size:13px; font-weight: 800;}
+[data-minas-plugin="nascenter"] .status-pill i{width: 7px; height: 7px; border-radius: 50%; background: currentcolor;}
+[data-minas-plugin="nascenter"] .status-pill.healthy{color: rgb(8, 119, 90); background: rgb(221, 247, 237);}
+[data-minas-plugin="nascenter"] .status-pill.warning{color: rgb(154, 101, 20); background: rgb(255, 240, 207);}
+[data-minas-plugin="nascenter"] .page{display: none; animation: 0.18s ease 0s 1 normal none running nascenter-fade;}
+[data-minas-plugin="nascenter"] .page.active{display: block;}
+@keyframes nascenter-fade {
+  0% { opacity: 0.4; transform: translateY(4px); }
+}
+[data-minas-plugin="nascenter"] .panel{border: 1px solid rgba(255, 255, 255, 0.82); background: var(--surface); box-shadow: var(--shadow);}
+[data-minas-plugin="nascenter"] .network-grid span{display: block; color: var(--muted); font-size:13px;}
+[data-minas-plugin="nascenter"] .network-grid small{display: block; color: var(--muted); font-size:13px;}
+[data-minas-plugin="nascenter"] .panel{margin-bottom: 12px; padding: 18px; border-radius: 20px;}
+[data-minas-plugin="nascenter"] .panel-heading, [data-minas-plugin="nascenter"] .section-heading{display: flex; align-items: center; justify-content: space-between; gap: 12px;}
+[data-minas-plugin="nascenter"] .panel-heading{margin-bottom: 14px;}
+[data-minas-plugin="nascenter"] .panel-heading p, [data-minas-plugin="nascenter"] .section-heading p{margin-top: 4px;}
+[data-minas-plugin="nascenter"] .section-heading{margin: 4px 2px 14px; color: rgb(255, 255, 255);}
+[data-minas-plugin="nascenter"] .section-heading p{color: rgba(255, 255, 255, 0.66);}
+[data-minas-plugin="nascenter"] .network-grid{display: grid; grid-template-columns: 1fr 1fr; gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: 15px; background: var(--line);}
+[data-minas-plugin="nascenter"] .network-grid > div{padding: 15px; background: var(--surface);}
+[data-minas-plugin="nascenter"] .network-grid strong{display: block; margin: 6px 0px 4px; font-size: 24px;}
+[data-minas-plugin="nascenter"] .stack{display: grid; gap: 9px;}
+[data-minas-plugin="nascenter"] .loading{padding: 25px; border: 1px dashed var(--line); border-radius: 15px; color: var(--muted); text-align: center; font-size: 13px;}
+[data-minas-plugin="nascenter"] .storage-row, [data-minas-plugin="nascenter"] .service-row{padding: 13px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface);}
+[data-minas-plugin="nascenter"] .row-head{display: flex; align-items: center; justify-content: space-between; gap: 12px;}
+[data-minas-plugin="nascenter"] .row-head strong{font-size: 13px;}
+[data-minas-plugin="nascenter"] .row-head span{color: var(--muted); font-size:13px;}
+[data-minas-plugin="nascenter"] .progress{height: 8px; margin-top: 10px; overflow: hidden; border-radius: 8px; background: var(--bg);}
+[data-minas-plugin="nascenter"] .progress i{display: block; height: 100%; border-radius: 8px; background: linear-gradient(90deg, rgb(139, 92, 246), rgb(91, 67, 207));}
+[data-minas-plugin="nascenter"] .progress i.warn{background: var(--amber);}
+[data-minas-plugin="nascenter"] .progress i.danger{background: var(--red);}
+[data-minas-plugin="nascenter"] .service-row{display: flex; align-items: center; justify-content: space-between;}
+[data-minas-plugin="nascenter"] .service-name{display: flex; align-items: center; gap: 9px;}
+[data-minas-plugin="nascenter"] .dot{width: 8px; height: 8px; border-radius: 50%; background: var(--red);}
+[data-minas-plugin="nascenter"] .dot.active{background: var(--green); box-shadow: rgba(21, 150, 109, 0.12) 0px 0px 0px 4px;}
+[data-minas-plugin="nascenter"] .service-row button{padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; color: var(--purple-dark); background: var(--purple-soft); font-size:13px; font-weight: 800;}
+[data-minas-plugin="nascenter"] .secondary-button, [data-minas-plugin="nascenter"] .danger-button{min-height: 39px; padding: 9px 13px; border-radius: 11px; font-size:13px; font-weight: 800;}
+[data-minas-plugin="nascenter"] .secondary-button{border: 1px solid var(--line); color: var(--purple-dark); background: var(--purple-soft);}
+[data-minas-plugin="nascenter"] .danger-button{border: 1px solid rgba(206, 77, 86, 0.28); color: var(--red); background: rgba(206, 77, 86, 0.1);}
+[data-minas-plugin="nascenter"] .disk-card{padding: 17px; border: 1px solid rgba(255, 255, 255, 0.84); border-radius: 19px; background: var(--surface); box-shadow: var(--shadow);}
+[data-minas-plugin="nascenter"] .disk-head{display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;}
+[data-minas-plugin="nascenter"] .disk-head h3{overflow-wrap: anywhere;}
+[data-minas-plugin="nascenter"] .disk-head p{margin-top: 4px;}
+[data-minas-plugin="nascenter"] .badge{padding: 5px 9px; border-radius: 999px; color: var(--green); background: rgba(21, 150, 109, 0.12); font-size:13px; font-weight: 800;}
+[data-minas-plugin="nascenter"] .badge.warning{color: var(--amber); background: rgba(214, 138, 21, 0.13);}
+[data-minas-plugin="nascenter"] .smart-grid{display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 14px;}
+[data-minas-plugin="nascenter"] .smart-item{padding: 10px; border-radius: 11px; background: var(--bg);}
+[data-minas-plugin="nascenter"] .smart-item span{display: block; color: var(--muted); font-size:13px;}
+[data-minas-plugin="nascenter"] .smart-item strong{display: block; margin-top: 5px; font-size: 13px;}
+[data-minas-plugin="nascenter"] .notice{margin-top: 12px; padding: 13px; border-radius: 14px; color: rgb(133, 101, 29); background: rgb(255, 242, 210); font-size:13px; line-height: 1.6;}
+[data-minas-plugin="nascenter"] .tool-card{display: grid; grid-template-columns: auto minmax(0px, 1fr) auto; align-items: center; gap: 13px;}
+[data-minas-plugin="nascenter"] .tool-icon{display: grid; place-items: center; width: 48px; height: 48px; border-radius: 15px; color: rgb(255, 255, 255); background: linear-gradient(145deg, rgb(139, 92, 246), rgb(79, 70, 199)); font-size:13px; font-weight: 900;}
+[data-minas-plugin="nascenter"] .tool-icon.logs{background: linear-gradient(145deg, rgb(245, 158, 11), rgb(180, 83, 9));}
+[data-minas-plugin="nascenter"] .tool-help{margin-top: 8px;}
+[data-minas-plugin="nascenter"] .backdrop{position: fixed; inset: 0px; z-index: 30; background: rgba(14, 10, 37, 0.58); backdrop-filter: blur(4px);}
+[data-minas-plugin="nascenter"] .dialog{position: fixed; top: 50%; left: 50%; z-index: 31; width: min(88%, 380px); max-height: calc(100dvh - 50px); padding: 23px 20px max(20px,env(safe-area-inset-bottom)); overflow: auto; border: 1px solid var(--line); border-radius: 24px; background: var(--surface); box-shadow: rgba(0, 0, 0, 0.3) 0px 25px 75px; text-align: center; transform: translate(-50%, -50%);}
+[data-minas-plugin="nascenter"] .dialog-icon{display: grid; place-items: center; width: 48px; height: 48px; margin: 0px auto 13px; border-radius: 15px; color: var(--red); background: rgba(206, 77, 86, 0.12); font-size: 24px; font-weight: 900;}
+[data-minas-plugin="nascenter"] .dialog p{margin-top: 8px;}
+[data-minas-plugin="nascenter"] .dialog-actions{display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 18px;}
+[data-minas-plugin="nascenter"] .toast{position: fixed; left: 50%; bottom: max(24px,env(safe-area-inset-bottom)); z-index: 50; max-width: calc(100% - 36px); padding: 11px 15px; border-radius: 12px; color: rgb(255, 255, 255); background: rgb(48, 40, 92); opacity: 0; pointer-events: none; transform: translate(-50%, 20px); transition: 0.18s;}
+[data-minas-plugin="nascenter"] .toast.show{opacity: 1; transform: translate(-50%, 0px);}
+[data-minas-plugin="nascenter"] .toast.error{background: rgb(140, 52, 59);}
+[data-minas-plugin="nascenter"] .minas-plugin-body.modal-open{overflow: hidden;}
+@media (max-width: 620px){
+[data-minas-plugin="nascenter"] .tool-card{grid-template-columns: auto minmax(0px, 1fr);}
+[data-minas-plugin="nascenter"] .tool-card button{grid-column: 1 / -1; width: 100%;}
+[data-minas-plugin="nascenter"] .smart-grid{grid-template-columns: 1fr 1fr;}
+[data-minas-plugin="nascenter"] .shell{padding-left: max(13px,env(safe-area-inset-left)); padding-right: max(13px,env(safe-area-inset-right));}
+}
+@media (prefers-color-scheme: dark){
+[data-minas-plugin="nascenter"]:not(.desktop-client) .notice{color: rgb(226, 197, 120); background: rgb(61, 50, 27);}
+}

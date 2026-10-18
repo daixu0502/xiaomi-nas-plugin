@@ -1,0 +1,20 @@
+{
+  "plugin": "dockermanager",
+  "name": "docker",
+  "id": 19091,
+  "version": "1.1.13",
+  "tags": [
+    "tool"
+  ],
+  "timestamp": 1792292975,
+  "desc": "容器、镜像与存储卷管理",
+  "developer": "daixu0502",
+  "publisher": "Local",
+  "changelog": "按标准目录重构源码及安装包，更新安装、卸载和恢复入口",
+  "system": false,
+  "size": 106348,
+  "port": "",
+  "type": "standard",
+  "forceupgrade": false,
+  "ext": {}
+}

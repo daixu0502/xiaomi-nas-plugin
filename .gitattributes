@@ -1,0 +1,15 @@
+* text=auto
+*.sh text eol=lf
+*.cgi text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.cjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+**/INFO text eol=lf
+**/scripts/control text eol=lf
+**/scripts/hotplug text eol=lf
+**/ui/config text eol=lf
+*.png -text
+*.gz -text
+*.zip -text

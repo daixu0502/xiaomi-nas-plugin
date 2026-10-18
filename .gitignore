@@ -1,0 +1,48 @@
+# Local artifacts and dependencies. Keep this project a single source repository.
+**/.git/
+/dist/
+**/dist/
+**/.cache/
+**/.test-cache/
+**/.pytest_cache/
+**/__pycache__/
+**/.tools/
+**/.deps/
+**/node_modules/
+**/offline/
+**/local/
+**/screenshots/
+**/artifacts/
+*.py[cod]
+*.tmp
+*.tgz
+*.tar
+*.tar.gz
+*.zip
+*.log
+
+# Test code stays local; Markdown remains publishable.
+**/tests/**
+!**/tests/**/
+!**/tests/**/*.md
+**/__tests__/**
+!**/__tests__/**/
+!**/__tests__/**/*.md
+**/test_*.py
+**/*_test.go
+**/*.test.*
+**/*.spec.*
+
+# Real credentials and generated runtime data.
+*.pem
+*.key
+**/id_rsa
+**/id_ed25519
+.env
+.env.*
+!.env.example
+
+# Local copies of separate NAS tools and device-specific diagnostics.
+/nas-root/
+/downloadcenter/tools/diagnose-qb-tasks.py
+

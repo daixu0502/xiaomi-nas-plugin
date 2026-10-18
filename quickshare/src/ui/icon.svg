@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
+  <title>文件快传</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="300" y2="300" gradientUnits="userSpaceOnUse"><stop stop-color="#34d399"/><stop offset="1" stop-color="#047857"/></linearGradient>
+    <mask id="folder" maskUnits="userSpaceOnUse" x="0" y="0" width="300" height="300">
+      <path fill="#fff" d="M63 100h15V72h78v28h81v124H63z"/>
+      <path fill="#000" d="M139 135h22v55h-22zM117 192.15 150 174l33 18.15V200h-66z"/>
+    </mask>
+  </defs>
+  <rect width="300" height="300" rx="58" fill="url(#bg)"/>
+  <rect width="300" height="300" fill="#fff" mask="url(#folder)"/>
+</svg>

@@ -1,0 +1,15 @@
+{
+  "apiVersion": 1,
+  "layoutVersion": 2,
+  "version": "1.1.5",
+  "plugin": "dockermanager",
+  "files": {
+    "common/component_admin.py": "0fe7680f59ff709d2de74efb31b7ca2d933f38fde2a3b518d8594b3ab7ed2058",
+    "common/privileged_runtime.py": "df85e329d2e044ee4f9164915f715fbc7cc63041d30ae7b0a06404e87e358b2b",
+    "common/telemetry_cache.py": "8e7c762862af1253a1464ebc41281952a5d7374c889202e3aacaf630af90e80b",
+    "common/user_state_io.py": "aeb1b5bd1a09d491c8dd59e8456e9aec93afb8ebc30845213a0d55ea4e53cebf",
+    "component_admin.py": "8d4832b4794f552ab2bf0a5d2d17ce44e614d28497f7f54c3efa620856ec9257",
+    "minas-helper": "8ed97c29410d8d0eca612b3ed1066cb7798bf8956a85cd073f86b27714c5b4f5",
+    "modules/dockermanager/docker-manager-helper": "376d7685c23ebf4efb4d2b11b1bee896880aa79b387ed072ca1827beb27517d7"
+  }
+}

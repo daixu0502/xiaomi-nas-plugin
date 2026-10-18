@@ -1,0 +1,20 @@
+{
+  "plugin": "taskcenter",
+  "name": "定时任务",
+  "id": 19094,
+  "version": "1.0.11",
+  "tags": [
+    "tool"
+  ],
+  "timestamp": 1792292978,
+  "desc": "可视化任务计划与执行记录",
+  "developer": "daixu0502",
+  "publisher": "Local",
+  "changelog": "按标准目录重构源码及安装包，更新安装、卸载和恢复入口",
+  "system": false,
+  "size": 89295,
+  "port": "",
+  "type": "standard",
+  "forceupgrade": false,
+  "ext": {}
+}

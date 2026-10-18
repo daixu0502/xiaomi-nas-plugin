@@ -1,0 +1,56 @@
+/* Plugin-specific components. Shared chrome/theme live in palette.css. */
+[data-minas-plugin="quickshare"] .modal-backdrop{backdrop-filter: none; animation: 0.14s ease-out 0s 1 normal both running quickshare-overlay-in;}
+[data-minas-plugin="quickshare"] .sheet{inset: 50% auto auto 50%; width: min(720px, -28px + 100vw); max-height: calc(100dvh - 28px); margin: 0px; padding-right: 0px; padding-bottom: 0px; padding-left: 0px; border: 1px solid var(--line); border-radius: 22px; box-shadow: rgba(0, 0, 0, 0.28) 0px 24px 64px; transform: translate(-50%, -50%); animation: 0.16s cubic-bezier(0.2, 0.7, 0.2, 1) 0s 1 normal both running quickshare-dialog-in;}
+[data-minas-plugin="quickshare"] .sheet-handle{display: none;}
+[data-minas-plugin="quickshare"] .sheet .file-list{min-height: 0px; flex: 1 1 auto;}
+[data-minas-plugin="quickshare"] .dialog{width: min(390px, -28px + 100vw); max-height: calc(100dvh - 28px); animation: 0.16s cubic-bezier(0.2, 0.7, 0.2, 1) 0s 1 normal both running quickshare-dialog-in;}
+[data-minas-plugin="quickshare"].dialog-scroll-locked, [data-minas-plugin="quickshare"].dialog-scroll-locked .minas-plugin-body{overflow: hidden; overscroll-behavior: none;}
+[data-minas-plugin="quickshare"] .sheet, [data-minas-plugin="quickshare"] .dialog{overscroll-behavior: contain;}
+@keyframes quickshare-overlay-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes quickshare-dialog-in {
+  0% { opacity: 0; transform: translate(-50%, calc(-50% + 8px)) scale(0.985); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce){
+[data-minas-plugin="quickshare"] .modal-backdrop, [data-minas-plugin="quickshare"] .sheet, [data-minas-plugin="quickshare"] .dialog{animation: auto ease 0s 1 normal none running none;}
+}
+/* Layout centering avoids a persistent transform/scale on desktop text. */
+[data-minas-plugin="quickshare"].desktop-client .desktop-frame>:is(.sheet,.dialog){inset:0;margin:auto;transform:none;animation:quickshare-overlay-in .14s ease-out;height:fit-content;max-height:calc(100% - 48px);}
+[data-minas-plugin="quickshare"].desktop-client .desktop-frame>.sheet{width:min(920px,calc(100% - 48px));max-height:min(760px,calc(100% - 48px));background:var(--surface);}
+[data-minas-plugin="quickshare"].desktop-client .sheet-header{flex:0 0 auto;gap:16px;padding:18px 24px;}
+[data-minas-plugin="quickshare"].desktop-client .sheet-header>div{min-width:0;}
+[data-minas-plugin="quickshare"].desktop-client .sheet-header h2{font-size:22px;line-height:1.4;overflow-wrap:anywhere;}
+[data-minas-plugin="quickshare"].desktop-client .sheet-header .close-button{flex:0 0 37px;}
+[data-minas-plugin="quickshare"].desktop-client .browser-toolbar{flex:0 0 auto;padding:12px 24px;gap:14px;border-bottom:1px solid var(--line);background:var(--bg);}
+[data-minas-plugin="quickshare"].desktop-client .browser-toolbar button{min-height:36px;padding:8px 12px;}
+[data-minas-plugin="quickshare"].desktop-client .browser-toolbar span{font-size:14px;line-height:1.6;color:var(--text);white-space:normal;overflow-wrap:anywhere;max-height:72px;overflow:auto;}
+[data-minas-plugin="quickshare"].desktop-client .sheet .file-list{padding:8px 16px 16px;background:var(--surface);scrollbar-gutter:stable;}
+[data-minas-plugin="quickshare"].desktop-client .file-row{gap:14px;padding:14px 8px;min-height:64px;}
+[data-minas-plugin="quickshare"].desktop-client .file-copy{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px 20px;flex:1;}
+[data-minas-plugin="quickshare"].desktop-client .file-copy strong{font-size:16px;font-weight:600;line-height:1.6;white-space:normal;overflow-wrap:anywhere;}
+[data-minas-plugin="quickshare"].desktop-client .file-copy span{margin:0;font-size:13px;font-weight:400;line-height:1.6;}
+[data-minas-plugin="quickshare"].desktop-client .file-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:8px;}
+[data-minas-plugin="quickshare"].desktop-client .file-row:hover{background:var(--soft);border-radius:8px;}
+[data-minas-plugin="quickshare"].desktop-client .choose-folder{flex:0 0 auto;margin:12px 24px 4px;}
+[data-minas-plugin="quickshare"].desktop-client .desktop-compact .file-copy{grid-template-columns:minmax(0,1fr);}
+@media(prefers-reduced-motion:reduce){[data-minas-plugin="quickshare"].desktop-client .desktop-frame>:is(.sheet,.dialog){animation:none;}}
+[data-minas-plugin="quickshare"] .dialog.extend-dialog{display:flex;flex-direction:column;text-align:left;width:min(520px,calc(100% - 28px));padding:0;overflow:hidden;}
+[data-minas-plugin="quickshare"] #extendForm{display:flex;flex-direction:column;min-height:0;max-height:inherit;}
+[data-minas-plugin="quickshare"] .extend-body{min-height:0;padding:20px;overflow:auto;overscroll-behavior:contain;}
+[data-minas-plugin="quickshare"] .extend-dialog .dialog-actions{flex:0 0 auto;margin:0;padding:14px 20px;border-top:1px solid var(--line);background:var(--surface);}
+[data-minas-plugin="quickshare"] .extend-name{margin:8px 0 12px;font-weight:600;color:var(--text);overflow-wrap:anywhere;}
+[data-minas-plugin="quickshare"] .extend-body>.field-note{padding:0;}
+[data-minas-plugin="quickshare"] .extend-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0;padding:10px;border:1px solid var(--line);border-radius:12px;min-width:0;}
+[data-minas-plugin="quickshare"] .extend-choices legend{padding:0 5px;font-size:14px;font-weight:600;color:var(--text);}
+[data-minas-plugin="quickshare"] .extend-choices label{display:flex;align-items:center;gap:8px;min-height:40px;padding:7px;border-radius:9px;background:var(--bg);color:var(--text);cursor:pointer;}
+[data-minas-plugin="quickshare"] .extend-choices label:has(:checked){background:var(--soft);box-shadow:inset 0 0 0 1px var(--accent);}
+[data-minas-plugin="quickshare"] .extend-choices input{width:18px;height:18px;flex:0 0 18px;margin:0;accent-color:var(--accent);}
+[data-minas-plugin="quickshare"] .extend-preview{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px 12px;padding:12px;background:var(--bg);border-radius:12px;overflow-wrap:anywhere;}
+[data-minas-plugin="quickshare"] .extend-preview span{color:var(--muted);font-size:13px;}
+[data-minas-plugin="quickshare"] .extend-preview strong{font-size:14px;color:var(--text);font-weight:600;}
+[data-minas-plugin="quickshare"] #extendError{margin:12px 0 0;font-size:14px;line-height:1.7;}
+[data-minas-plugin="quickshare"] #toast{pointer-events:none;}
+[data-minas-plugin="quickshare"] #toast:not(.show){visibility:hidden;}

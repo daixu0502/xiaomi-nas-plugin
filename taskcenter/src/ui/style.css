@@ -1,0 +1,104 @@
+/* Plugin-specific components. Shared chrome/theme live in palette.css. */
+[data-minas-plugin="taskcenter"] .field-box{display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 15px; min-width: 0px;}
+[data-minas-plugin="taskcenter"] .form-body textarea{font-style: inherit; font-variant: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; font-family: inherit; font-optical-sizing: inherit; font-size-adjust: inherit; font-kerning: inherit; font-feature-settings: inherit; font-variation-settings: inherit; font-language-override: inherit; width: 100%; min-width: 0px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); color: var(--text); resize: vertical; font-size: 16px;}
+[data-minas-plugin="taskcenter"] .form-body fieldset{min-width: 0px; margin: 0px; padding: 12px; border: 1px solid var(--line); border-radius: 12px;}
+[data-minas-plugin="taskcenter"] .form-body legend{font-size: 13px; color: var(--muted);}
+[data-minas-plugin="taskcenter"] .form-body .weekday-picks{display: grid; grid-template-columns: repeat(7, minmax(0px, 1fr)); gap: 5px;}
+[data-minas-plugin="taskcenter"] .form-body .weekday-picks label{display: flex; align-items: center; flex-direction: column; padding: 6px 0px; border-radius: 9px; background: var(--bg);}
+[data-minas-plugin="taskcenter"] .form-body .weekday-picks input{width: 18px; min-height: 18px; margin: 0px;}
+[data-minas-plugin="taskcenter"] .form-body label span{font-size:13px; font-weight: 400; line-height: 1.6; overflow-wrap: anywhere;}
+[data-minas-plugin="taskcenter"] .form-body .field-box > label + label{margin-top: 0px;}
+[data-minas-plugin="taskcenter"] #cleanupSummary{white-space: pre-wrap;}
+[data-minas-plugin="taskcenter"] #cleanupSamples{margin: 0px; white-space: pre-wrap; overflow-wrap: anywhere; font:15px/1.75 var(--font-code);}
+[data-minas-plugin="taskcenter"] #schedulePreview{line-height: 1.8;}
+[data-minas-plugin="taskcenter"] .form-body input:disabled{opacity: 0.45;}
+[data-minas-plugin="taskcenter"] *{box-sizing: border-box; -webkit-tap-highlight-color: transparent;}
+[data-minas-plugin="taskcenter"] [hidden]{display: none !important;}
+[data-minas-plugin="taskcenter"]{background: var(--bg); text-size-adjust: 100%; overflow-x: hidden;}
+[data-minas-plugin="taskcenter"] .minas-plugin-body{margin: 0px; min-height: 100vh; color: var(--text); background: linear-gradient(180deg,#633318,#975220 150px,var(--bg) 340px); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 14px;}
+[data-minas-plugin="taskcenter"] button, [data-minas-plugin="taskcenter"] input, [data-minas-plugin="taskcenter"] select{font: inherit;}
+[data-minas-plugin="taskcenter"] button{cursor: pointer; touch-action: manipulation;}
+[data-minas-plugin="taskcenter"] button:disabled{cursor: not-allowed; color: rgb(115, 121, 133) !important; background: rgb(232, 235, 239) !important; border-color: rgb(213, 218, 224) !important; box-shadow: none !important;}
+[data-minas-plugin="taskcenter"] button[aria-busy="true"]{display: inline-flex; align-items: center; justify-content: center; gap: 7px;}
+[data-minas-plugin="taskcenter"] button[aria-busy="true"]::before{content: ""; width: 13px; height: 13px; border-width: 2px; border-style: solid; border-color: currentcolor transparent currentcolor currentcolor; border-image: none; border-radius: 50%; animation: 0.8s linear 0s infinite normal none running taskcenter-spin;}
+@keyframes taskcenter-spin {
+  100% { transform: rotate(360deg); }
+}
+[data-minas-plugin="taskcenter"] h1, [data-minas-plugin="taskcenter"] h2, [data-minas-plugin="taskcenter"] h3, [data-minas-plugin="taskcenter"] p{margin: 0px;}
+[data-minas-plugin="taskcenter"] h1{font-size: 25px;}
+[data-minas-plugin="taskcenter"] h2{font-size: 22px;}
+[data-minas-plugin="taskcenter"] h3{font-size: 16px;}
+[data-minas-plugin="taskcenter"] p{color: var(--muted); line-height: 1.65; font-size: 13px; overflow-wrap: anywhere;}
+[data-minas-plugin="taskcenter"] button{min-height: 40px; padding: 9px 13px; border: 1px solid var(--line); border-radius: 12px; color: var(--text); background: var(--surface); font-weight: 650;}
+[data-minas-plugin="taskcenter"] button.primary{color: white; background: rgb(166, 83, 22); border-color: rgb(166, 83, 22);}
+[data-minas-plugin="taskcenter"] button.secondary{color: var(--accent); background: var(--soft);}
+[data-minas-plugin="taskcenter"] button.danger{color: var(--red); background: rgba(191, 54, 70, 0.08); border-color: rgba(191, 54, 70, 0.2);}
+[data-minas-plugin="taskcenter"] .shell{width: min(100%, 850px); margin: auto; padding: max(16px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(28px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left)); min-width: 0px;}
+[data-minas-plugin="taskcenter"] .eyebrow.accent{color: var(--accent);}
+[data-minas-plugin="taskcenter"] .icon-button{width: 40px; height: 40px; padding: 0px; color: rgb(255, 255, 255); background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.2); font-size: 24px;}
+[data-minas-plugin="taskcenter"] .badge{display: inline-block; border-radius: 20px; padding: 5px 9px; color: var(--accent); background: var(--soft); font-size:13px; font-weight: 700;}
+[data-minas-plugin="taskcenter"] .badge.enabled{color: rgb(8, 118, 92); background: rgb(220, 245, 233);}
+[data-minas-plugin="taskcenter"] .badge.failed{color: var(--red); background: rgba(191, 54, 70, 0.1);}
+[data-minas-plugin="taskcenter"] .page{display: none; min-width: 0px;}
+[data-minas-plugin="taskcenter"] .page.active{display: block;}
+[data-minas-plugin="taskcenter"] .panel, [data-minas-plugin="taskcenter"] .task-card{border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow);}
+[data-minas-plugin="taskcenter"] .panel, [data-minas-plugin="taskcenter"] .task-card{padding: 18px; margin-bottom: 12px; min-width: 0px;}
+[data-minas-plugin="taskcenter"] .panel > p{margin-top: 10px;}
+[data-minas-plugin="taskcenter"] .welcome h2{margin: 6px 0px 10px;}
+[data-minas-plugin="taskcenter"] .actions{display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px;}
+[data-minas-plugin="taskcenter"] .toolbar{display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface);}
+[data-minas-plugin="taskcenter"] .toolbar > p{color: var(--text); flex: 1 1 150px;}
+[data-minas-plugin="taskcenter"] .stack{display: grid; gap: 10px; min-width: 0px;}
+[data-minas-plugin="taskcenter"] .stack > .task-card{margin: 0px;}
+[data-minas-plugin="taskcenter"] .task-head{display: flex; justify-content: space-between; align-items: start; gap: 10px;}
+[data-minas-plugin="taskcenter"] .task-head h3{overflow-wrap: anywhere;}
+[data-minas-plugin="taskcenter"] .task-head > div{min-width: 0px;}
+[data-minas-plugin="taskcenter"] .task-head .badge{flex: 0 0 auto;}
+[data-minas-plugin="taskcenter"] .task-card p{margin-top: 9px;}
+[data-minas-plugin="taskcenter"] .task-meta{display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px;}
+[data-minas-plugin="taskcenter"] .chip{font-size:13px; padding: 5px 8px; border-radius: 8px; background: var(--bg); color: var(--muted); border: 1px solid var(--line); overflow-wrap: anywhere;}
+[data-minas-plugin="taskcenter"] .empty{padding: 26px 14px; border: 1px dashed var(--line); border-radius: 15px; text-align: center; color: var(--muted); background: var(--surface);}
+[data-minas-plugin="taskcenter"] .notice{padding: 13px 14px; background: var(--soft); color: var(--accent); border-radius: 14px; line-height: 1.65; font-size:13px; margin-bottom: 12px;}
+[data-minas-plugin="taskcenter"] .danger-note{color: var(--red); background: rgba(191, 54, 70, 0.08);}
+[data-minas-plugin="taskcenter"] .backdrop{position: fixed; inset: 0px; z-index: 30; background: rgba(25, 19, 12, 0.5); touch-action: none;}
+[data-minas-plugin="taskcenter"] .dialog{position: fixed; top: 50%; left: 50%; z-index: 31; transform: translate(-50%, -50%); width: min(380px, -28px + 100vw); max-height: calc(100dvh - 28px); overflow: auto; border: 1px solid var(--line); border-radius: 24px; background: var(--surface); box-shadow: rgba(0, 0, 0, 0.25) 0px 24px 64px; overscroll-behavior: contain; animation: 0.15s ease-out 0s 1 normal none running taskcenter-dialog-in;}
+[data-minas-plugin="taskcenter"] .confirm{padding: 23px 20px max(20px,env(safe-area-inset-bottom)); text-align: center;}
+[data-minas-plugin="taskcenter"] .confirm-icon{display: grid; place-items: center; width: 48px; height: 48px; margin: 0px auto 13px; border-radius: 15px; background: var(--soft); color: var(--accent); font-size: 24px; font-weight: 900;}
+[data-minas-plugin="taskcenter"] .confirm.risky .confirm-icon{background: rgba(191, 54, 70, 0.1); color: var(--red);}
+[data-minas-plugin="taskcenter"] .confirm p{margin-top: 8px; font-size: 14px; white-space: pre-wrap;}
+[data-minas-plugin="taskcenter"] .confirm-actions{display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 9px; margin-top: 18px;}
+[data-minas-plugin="taskcenter"] .confirm-actions button{min-height: 44px; min-width: 0px; white-space: normal;}
+[data-minas-plugin="taskcenter"] .editor{width: min(650px, -28px + 100vw);}
+[data-minas-plugin="taskcenter"] .dialog-head{display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 17px 18px; border-bottom: 1px solid var(--line);}
+[data-minas-plugin="taskcenter"] .dialog-head h2{font-size: 20px;}
+[data-minas-plugin="taskcenter"] .close-button{display: grid; place-items: center; flex: 0 0 38px; width: 38px; height: 38px; padding: 0px; border: 0px; border-radius: 50%; font-size: 23px; background: var(--bg);}
+[data-minas-plugin="taskcenter"] .form-body{display: grid; gap: 14px; padding: 18px;}
+[data-minas-plugin="taskcenter"] .form-body label{display: grid; gap: 7px; color: var(--muted); font-size: 13px; font-weight: 700;}
+[data-minas-plugin="taskcenter"] .form-body input, [data-minas-plugin="taskcenter"] .form-body select{width: 100%; min-height: 44px; min-width: 0px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); color: var(--text); font-size: 16px;}
+[data-minas-plugin="taskcenter"] .form-body > div > label + label{margin-top: 12px;}
+[data-minas-plugin="taskcenter"] .form-grid{display: grid; grid-template-columns: 1fr 1fr; gap: 12px;}
+[data-minas-plugin="taskcenter"] .form-body label.check{display: flex; align-items: center; gap: 10px;}
+[data-minas-plugin="taskcenter"] .check input{width: 20px; min-height: 20px; flex: 0 0 20px;}
+[data-minas-plugin="taskcenter"] .form-actions{position: sticky; bottom: 0px; display: flex; justify-content: flex-end; gap: 9px; padding: 14px 18px; border-top: 1px solid var(--line); background: var(--surface);}
+[data-minas-plugin="taskcenter"] .pick-trigger{display: flex; justify-content: space-between; align-items: center; text-align: left; width: 100%; font-weight: 400; font-size: 14px; min-width: 0px; overflow-wrap: anywhere;}
+[data-minas-plugin="taskcenter"] .pick-trigger::after{content: "⌄"; margin-left: 10px;}
+[data-minas-plugin="taskcenter"] .picker-backdrop{z-index: 40;}
+[data-minas-plugin="taskcenter"] .picker{z-index: 41; width: min(430px, -28px + 100vw);}
+[data-minas-plugin="taskcenter"] .picker-options{display: grid; padding: 8px 12px; gap: 4px; max-height: 55vh; overflow: auto; overscroll-behavior: contain;}
+[data-minas-plugin="taskcenter"] .picker-options button{min-height: 46px; text-align: left; border: 0px; overflow-wrap: anywhere;}
+[data-minas-plugin="taskcenter"] .picker-options button.selected{color: var(--accent); background: var(--soft);}
+[data-minas-plugin="taskcenter"] #logText{margin: 0px; padding: 18px; white-space: pre-wrap; word-break: break-word; font:15px/1.75 var(--font-code);}
+[data-minas-plugin="taskcenter"] .toast{position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 60; max-width: calc(100% - 32px); padding: 12px 16px; border-radius: 12px; color: white; background: rgb(80, 56, 33); pointer-events: none;}
+[data-minas-plugin="taskcenter"] .toast:empty{display: none;}
+[data-minas-plugin="taskcenter"] .toast.error{background: rgb(151, 49, 64);}
+[data-minas-plugin="taskcenter"].dialog-scroll-locked, [data-minas-plugin="taskcenter"].dialog-scroll-locked .minas-plugin-body{overflow: hidden; overscroll-behavior: none;}
+@keyframes taskcenter-dialog-in {
+  0% { opacity: 0; transform: translate(-50%, calc(-50% + 8px)) scale(0.985); }
+  100% { opacity: 1; transform: translate(-50%, -50%); }
+}
+@media (prefers-reduced-motion: reduce){
+[data-minas-plugin="taskcenter"] .dialog{animation: auto ease 0s 1 normal none running none;}
+}
+@media (max-width: 600px){
+[data-minas-plugin="taskcenter"] .form-grid{grid-template-columns: 1fr;}
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
+  <title>SSH 恢复</title>
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="300" y2="300" gradientUnits="userSpaceOnUse"><stop stop-color="#5384f0"/><stop offset="1" stop-color="#2b48a8"/></linearGradient></defs>
+  <rect width="300" height="300" rx="58" fill="url(#bg)"/>
+  <path d="m72 108 42 42-42 42" fill="none" stroke="#fff" stroke-width="18" stroke-linejoin="round"/>
+  <path fill="#fff" d="M143 180h83v16h-83z"/>
+</svg>

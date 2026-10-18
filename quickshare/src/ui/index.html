@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#eef1f5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#171a20" media="(prefers-color-scheme: dark)">
+  <title>文件快传</title>
+  <link rel="stylesheet" href="style.css?v=1.1.36&amp;ui=clipboard-20261015">
+  <link rel="stylesheet" href="modal.css?v=1.1.36">
+  <link rel="stylesheet" href="palette.css?v=1.1.36&amp;ui=clipboard-20261015">
+</head>
+<body><div data-minas-plugin="quickshare"><div class="minas-plugin-body">
+  <main class="shell">
+    <header class="topbar plugin-header">
+      <div><div class="eyebrow">XIAOMI SMART STORAGE</div><h1>文件快传</h1></div>
+      <button id="refresh" class="icon-button refresh-control" type="button" aria-label="刷新"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.2-2.1L20 11M4 13l2.7 4.1A7 7 0 0 0 17.9 15"/></svg></button>
+    </header>
+
+    <section class="plugin-status"><div class="status-main"><span id="serviceBadge" class="status-pill"><i></i>正在连接</span><h2 class="status-title">临时分享服务</h2></div><p class="status-description" id="endpoint">正在读取访问地址…</p></section>
+
+    <nav class="tabs">
+      <button class="tab active" data-page="create">创建</button>
+      <button class="tab" data-page="records">分享记录</button>
+      <button class="tab" data-page="settings">设置</button>
+    </nav>
+
+    <section id="page-create" class="page active">
+      <article class="panel">
+        <div class="panel-heading"><div><h3>分享类型</h3><p>分享文件、整个文件夹，或接收朋友上传的文件。</p></div></div>
+        <div id="kindSwitch" class="segmented"><button class="active" data-kind="download">文件下载</button><button data-kind="folder">文件夹分享</button><button data-kind="upload">上传入口</button></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-heading"><div><h3 id="targetTitle">选择文件</h3><p id="targetHint">只会开放选中的单个文件。</p></div><button id="browseButton" class="secondary-button" type="button">浏览</button></div>
+        <div id="selectedPath" class="selected-path empty">尚未选择文件</div>
+      </article>
+
+      <article class="panel">
+        <div class="form-grid">
+          <label class="wide"><span>访问密码（可选）</span><input id="password" type="password" minlength="4" maxlength="128" autocomplete="new-password" placeholder="至少 4 位；留空表示无需密码"></label>
+          <div class="wide"><span class="field-title">有效期</span><div id="expiryChoices" class="choice-grid"><button data-value="3600">1 小时</button><button data-value="21600">6 小时</button><button class="active" data-value="86400">1 天</button><button data-value="259200">3 天</button><button data-value="604800">7 天</button></div></div>
+          <label><span id="usesLabel">最多下载次数</span><input id="maxUses" type="number" inputmode="numeric" min="0" max="1000" value="3"></label>
+          <div class="field-note">填写 0 表示有效期内不限次数。下载开始传输即计一次，中断重试再次计次；整个文件夹 ZIP 计一次。上传成功计一次。</div>
+        </div>
+        <button id="createButton" class="primary-button full" type="button">生成临时链接</button>
+      </article>
+      <div class="security-note">公网使用密码时请优先配置 HTTPS。随机链接本身具有访问权限，请勿发送到公开群聊。</div>
+    </section>
+
+    <section id="page-records" class="page" aria-label="分享记录">
+      <div class="section-heading section-toolbar records-heading"><div class="records-title"><h2>分享记录</h2><p id="recordSummary">正在读取…</p></div><button id="clearShares" class="danger-button" type="button" hidden>清空记录</button></div>
+      <div id="shareList" class="stack loading">正在读取分享记录…</div>
+    </section>
+
+    <section id="page-settings" class="page">
+      <article class="panel">
+        <div class="panel-heading"><div><h3>分享服务</h3><p>安装时自动分配独立 TCP 端口，避免多用户冲突。</p></div></div>
+        <div class="button-row"><button id="startService" class="primary-button" type="button">启动服务</button><button id="stopService" class="danger-button" type="button">停止服务</button></div>
+      </article>
+      <article class="panel">
+        <div class="panel-heading"><div><h3>公网分享地址</h3><p>生成链接时使用；不会自动修改路由器。</p></div></div>
+        <label class="field-label"><span>外部基础地址</span><input id="externalBase" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例如 https://share.example.com 或 http://公网IP:端口"></label>
+        <div id="lanAddress" class="selected-path"></div>
+        <button id="saveSettings" class="primary-button full" type="button">保存地址</button>
+        <div class="warning-note">如果填写 HTTP 公网地址，密码和文件传输不会被加密。建议由路由器或反向代理提供 HTTPS，再转发到上方显示的局域网端口。</div>
+      </article>
+      <article class="panel compact"><h3>路由器端口转发</h3><p class="router-help">协议选择 TCP，内网主机填写本设备 IP，内网端口使用上方“局域网地址”中的端口；公网端口可以自定义。然后将完整公网地址填写到上方。</p></article>
+    </section>
+
+    <footer id="version">插件版本 1.1.36</footer>
+  </main>
+
+  <div id="modalBackdrop" class="modal-backdrop" hidden></div>
+  <section id="browserModal" class="sheet" role="dialog" aria-modal="true" aria-labelledby="browserTitle" hidden>
+    <div class="sheet-handle"></div>
+    <header class="sheet-header"><div><span class="eyebrow green">设备文件</span><h2 id="browserTitle">选择文件</h2></div><button id="closeBrowser" class="close-button" type="button">×</button></header>
+    <div class="browser-toolbar"><button id="browserBack" type="button">← 上一级</button><span id="browserPath">根目录</span></div>
+    <button id="chooseFolder" class="primary-button choose-folder" type="button" hidden>选择当前文件夹</button>
+    <div id="browserList" class="file-list loading">正在读取…</div>
+  </section>
+
+  <section id="linkModal" class="dialog" role="dialog" aria-modal="true" aria-labelledby="linkTitle" hidden>
+    <div class="success-icon">✓</div><h2 id="linkTitle">链接已生成</h2><p>可以复制后发送给朋友。</p>
+    <textarea id="createdLink" readonly aria-label="分享链接" aria-describedby="copyHelp" spellcheck="false"></textarea>
+    <p id="copyHelp" class="copy-help" role="status" aria-live="polite" hidden></p>
+    <div class="dialog-actions"><button id="closeLink" class="secondary-button" type="button">完成</button><button id="copyCreatedLink" class="primary-button" type="button">复制链接</button></div>
+  </section>
+
+  <section id="extendModal" class="dialog extend-dialog" role="dialog" aria-modal="true" aria-labelledby="extendTitle" hidden>
+    <form id="extendForm"><div class="extend-body">
+    <h2 id="extendTitle">延期分享</h2>
+    <p id="extendName" class="extend-name"></p>
+    <p class="field-note">有效分享从原到期时间追加；已过期分享从现在起重新计时。原链接和密码不变，不重置使用次数。</p>
+      <fieldset class="extend-choices"><legend>延长时间</legend>
+        <label><input type="radio" name="extendSeconds" value="3600">1 小时</label>
+        <label><input type="radio" name="extendSeconds" value="86400" checked>1 天</label>
+        <label><input type="radio" name="extendSeconds" value="604800">7 天</label>
+        <label><input type="radio" name="extendSeconds" value="2592000">30 天</label>
+      </fieldset>
+      <div class="extend-preview"><span>原到期时间</span><strong id="extendOld"></strong><span>预计到期时间</span><strong id="extendNew"></strong></div>
+      <p id="extendError" class="notice warning" role="alert" tabindex="-1" hidden></p>
+      </div>
+      <div class="dialog-actions"><button id="extendCancel" class="secondary-button" type="button">取消</button><button id="extendSave" class="primary-button" type="submit">确认延期</button></div>
+    </form>
+  </section>
+
+  <section id="confirmModal" class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" hidden>
+    <div class="danger-icon">!</div><h2 id="confirmTitle">确认操作</h2><p id="confirmMessage"></p>
+    <div class="dialog-actions"><button id="confirmCancel" class="secondary-button" type="button">取消</button><button id="confirmAccept" class="danger-button" type="button">确认</button></div>
+  </section>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="client-bridge.js?v=1.1.36&amp;ui=clipboard-20261015"></script>
+  <script src="app.js?v=1.1.36&amp;ui=clipboard-20261015"></script>
+  <script>
+    (function () {
+      var document = window.XiaomiPluginClient.document;
+      var root = document.documentElement, body = document.body;
+      var dialogs = document.querySelectorAll('[aria-modal="true"]');
+      var locked = false, savedX = 0, savedY = 0;
+      function sync() {
+        var open = Array.prototype.some.call(dialogs, function (dialog) { return !dialog.hidden; });
+        if (open === locked) return;
+        locked = open;
+        if (open) {
+          savedX = window.pageXOffset;
+          savedY = window.pageYOffset;
+          if (!root.classList.contains('desktop-client')) body.style.setProperty('--dialog-scroll-top', -savedY + 'px');
+          root.classList.add('dialog-scroll-locked');
+        } else {
+          root.classList.remove('dialog-scroll-locked');
+          body.style.removeProperty('--dialog-scroll-top');
+          if (!root.classList.contains('desktop-client')) window.scrollTo(savedX, savedY);
+        }
+      }
+      var observer = new MutationObserver(sync);
+      Array.prototype.forEach.call(dialogs, function (dialog) {
+        observer.observe(dialog, { attributes: true, attributeFilter: ['hidden'] });
+      });
+      sync();
+    })();
+  </script>
+</div></div></body>
+</html>

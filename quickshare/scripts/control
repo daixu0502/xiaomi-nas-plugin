@@ -1,0 +1,42 @@
+#!/bin/sh
+set -u
+SCRIPT_PATH=$(CDPATH= cd "$(dirname "$0")" && pwd)
+PLUGIN_USER=${PLUG_USER:-$(printf '%s\n' "$SCRIPT_PATH" | sed -n 's#^/home/\(u[0-9][0-9]*\)/plugin/quickshare/scripts$#\1#p')}
+case "$PLUGIN_USER" in u[0-9]*) ;; *) exit 1 ;; esac
+PLUGIN_HOME=${PLUG_HOME_DIR:-/home/$PLUGIN_USER/plugin/quickshare}
+SRC_DIR=${PLUG_SRC_DIR:-$(readlink "$PLUGIN_HOME/src" 2>/dev/null || true)}
+if [ "$(id -u)" = "0" ]; then
+    exec runuser -u "$PLUGIN_USER" -- env PLUG_USER="$PLUGIN_USER" PLUG_HOME_DIR="$PLUGIN_HOME" PLUG_SRC_DIR="$SRC_DIR" "$0" "$@"
+fi
+[ "$(id -un)" = "$PLUGIN_USER" ] || exit 1
+RUNTIME_DIR=$(python3 -B "$SRC_DIR/files/plugin_paths.py" "$PLUGIN_HOME") || exit 1
+export TMPDIR="$RUNTIME_DIR"
+VAR_DIR="$PLUGIN_HOME/var"; PID_FILE="$RUNTIME_DIR/server.pid"; LOG_FILE="$RUNTIME_DIR/server.log"; SERVER="$SRC_DIR/files/quickshare_server.py"; PORT_FILE="$VAR_DIR/server.port"; PORT=$(tr -d '[:space:]' < "$PORT_FILE" 2>/dev/null || true)
+case "$PORT" in ''|*[!0-9]*) PORT=19092 ;; esac
+
+running() {
+    [ -s "$PID_FILE" ] || return 1
+    pid=$(cat "$PID_FILE" 2>/dev/null || true); case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+    [ -r "/proc/$pid/cmdline" ] || return 1
+    tr '\000' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q 'quickshare_server.py'
+}
+start_server() {
+    running && return 0
+    rm -f "$PID_FILE"; mkdir -p "$VAR_DIR"; touch "$LOG_FILE"
+    nohup /usr/bin/python3 -B "$SERVER" --state "$VAR_DIR" --port "$PORT" >> "$LOG_FILE" 2>&1 & echo $! > "$PID_FILE"
+    sleep 1; running
+}
+stop_server() {
+    running || { rm -f "$PID_FILE"; return 0; }
+    pid=$(cat "$PID_FILE"); kill "$pid" 2>/dev/null || true
+    n=0; while [ "$n" -lt 20 ] && kill -0 "$pid" 2>/dev/null; do sleep 1; n=$((n+1)); done
+    kill -9 "$pid" 2>/dev/null || true; rm -f "$PID_FILE"
+}
+register() { [ -x "$SRC_DIR/files/register.sh" ] && "$SRC_DIR/files/register.sh" "$1" "$2" "$PLUGIN_USER" || true; }
+case "${1:-}" in
+ start|enable|postinstall|postupgrade) start_server; register running true ;;
+ stop|disable|preuninstall|preupgrade) stop_server; register stopped false ;;
+ restart) stop_server; start_server; register running true ;;
+ status) running ;;
+ *) exit 0 ;;
+esac

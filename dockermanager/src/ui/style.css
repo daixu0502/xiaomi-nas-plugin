@@ -1,0 +1,145 @@
+/* Plugin-specific components. Shared chrome/theme live in palette.css. */
+[data-minas-plugin="dockermanager"]{color-scheme: light; --navy: #071827; --navy-soft: #102b40; --cyan: #67e8f9;}
+[data-minas-plugin="dockermanager"] *{box-sizing: border-box; -webkit-tap-highlight-color: transparent;}
+[data-minas-plugin="dockermanager"], [data-minas-plugin="dockermanager"] .minas-plugin-body{min-height: 100%; margin: 0px; overflow-x: hidden; background: var(--background);}
+[data-minas-plugin="dockermanager"] .minas-plugin-body{color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif; background: radial-gradient(circle at 110% -5%, rgba(14,165,233,.25), transparent 34%),
+    linear-gradient(180deg, #071827 0, #0b2638 170px, var(--background) 340px);}
+[data-minas-plugin="dockermanager"] button, [data-minas-plugin="dockermanager"] input, [data-minas-plugin="dockermanager"] select, [data-minas-plugin="dockermanager"] textarea{font: inherit;}
+[data-minas-plugin="dockermanager"] button{cursor: pointer;}
+[data-minas-plugin="dockermanager"] [hidden]{display: none !important;}
+[data-minas-plugin="dockermanager"] .shell{width: min(100%, 820px); min-height: 100vh; margin: 0px auto; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(30px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));}
+[data-minas-plugin="dockermanager"] h1, [data-minas-plugin="dockermanager"] h2, [data-minas-plugin="dockermanager"] h3, [data-minas-plugin="dockermanager"] p{margin: 0px;}
+[data-minas-plugin="dockermanager"] h1{font-size: 25px; line-height: 1.15;}
+[data-minas-plugin="dockermanager"] h2{font-size: 21px;}
+[data-minas-plugin="dockermanager"] h3{font-size: 16px;}
+[data-minas-plugin="dockermanager"] p{color: var(--muted); font-size: 13px; line-height: 1.5;}
+[data-minas-plugin="dockermanager"] .icon-button{display: flex; align-items: center; justify-content: center; width: 43px; height: 43px; flex: 0 0 43px; padding: 0px; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 14px; color: rgb(255, 255, 255); background: rgba(255, 255, 255, 0.1); line-height: 1;}
+[data-minas-plugin="dockermanager"] .icon-button svg{display: block; width: 22px; height: 22px; fill: none; stroke: currentcolor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;}
+[data-minas-plugin="dockermanager"] .icon-button:active{transform: rotate(45deg);}
+[data-minas-plugin="dockermanager"] .page{display: none; width: 100%; min-width: 0px; overflow-x: hidden; animation: 0.18s ease 0s 1 normal none running dockermanager-page-in;}
+[data-minas-plugin="dockermanager"] .page.active{display: block;}
+@keyframes dockermanager-page-in {
+  0% { opacity: 0.4; transform: translateY(4px); }
+  100% { opacity: 1; transform: none; }
+}
+[data-minas-plugin="dockermanager"] .status-pill{display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; background: rgb(233, 240, 243); color: rgb(82, 101, 112); font-size:13px; font-weight: 800;}
+[data-minas-plugin="dockermanager"] .status-pill i{width: 7px; height: 7px; border-radius: 50%; background: currentcolor;}
+[data-minas-plugin="dockermanager"] .status-pill.running{color: rgb(4, 120, 87); background: rgb(223, 248, 237);}
+[data-minas-plugin="dockermanager"] .status-pill.stopped{color: rgb(180, 83, 9); background: rgb(255, 241, 214);}
+[data-minas-plugin="dockermanager"] .panel{margin-top: 12px; padding: 18px; border: 1px solid rgba(255, 255, 255, 0.85); border-radius: 19px; background: var(--surface); box-shadow: rgba(20, 57, 76, 0.07) 0px 7px 24px;}
+[data-minas-plugin="dockermanager"] .panel.compact{padding: 15px;}
+[data-minas-plugin="dockermanager"] .bulk-panel{margin: 0px 0px 11px;}
+[data-minas-plugin="dockermanager"] #imageList, [data-minas-plugin="dockermanager"] #volumeList{margin-top: 14px;}
+[data-minas-plugin="dockermanager"] .panel-heading, [data-minas-plugin="dockermanager"] .section-heading, [data-minas-plugin="dockermanager"] .modal-heading{display: flex; align-items: center; justify-content: space-between; gap: 14px;}
+[data-minas-plugin="dockermanager"] .panel-heading{margin-bottom: 14px;}
+[data-minas-plugin="dockermanager"] .panel-heading p, [data-minas-plugin="dockermanager"] .section-heading p{margin-top: 4px;}
+[data-minas-plugin="dockermanager"] .section-heading{margin: 5px 2px 14px; color: rgb(255, 255, 255);}
+[data-minas-plugin="dockermanager"] .section-heading p{color: rgba(255, 255, 255, 0.66);}
+[data-minas-plugin="dockermanager"] .detail-list{display: grid; grid-template-columns: repeat(2, minmax(0px, 1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--line);}
+[data-minas-plugin="dockermanager"] .detail-item{min-width: 0px; padding: 13px; background: rgb(255, 255, 255);}
+[data-minas-plugin="dockermanager"] .detail-item span{display: block; margin-bottom: 4px; color: var(--muted); font-size:13px;}
+[data-minas-plugin="dockermanager"] .detail-item strong{display: block; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap;}
+[data-minas-plugin="dockermanager"] .stack{display: grid; width: 100%; min-width: 0px; gap: 10px;}
+[data-minas-plugin="dockermanager"] .resource-card{width: 100%; min-width: 0px; overflow: hidden; padding: 16px; border: 1px solid rgba(255, 255, 255, 0.86); border-radius: 18px; background: var(--surface); box-shadow: rgba(20, 57, 76, 0.07) 0px 7px 22px;}
+[data-minas-plugin="dockermanager"] .resource-head{display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;}
+[data-minas-plugin="dockermanager"] .resource-title{min-width: 0px;}
+[data-minas-plugin="dockermanager"] .resource-title h3{overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+[data-minas-plugin="dockermanager"] .resource-title p{max-width: 100%; margin-top: 4px; overflow-wrap: anywhere; word-break: break-all;}
+[data-minas-plugin="dockermanager"] .badge{flex: 0 0 auto; padding: 5px 9px; border-radius: 999px; color: rgb(82, 101, 112); background: rgb(232, 240, 243); font-size:13px; font-weight: 800;}
+[data-minas-plugin="dockermanager"] .badge.running{color: rgb(4, 120, 87); background: rgb(223, 248, 237);}
+[data-minas-plugin="dockermanager"] .badge.paused{color: rgb(180, 83, 9); background: rgb(255, 241, 214);}
+[data-minas-plugin="dockermanager"] .badge.exited, [data-minas-plugin="dockermanager"] .badge.dead{color: rgb(185, 28, 28); background: rgb(254, 226, 226);}
+[data-minas-plugin="dockermanager"] .resource-meta{display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px;}
+[data-minas-plugin="dockermanager"] .meta-chip{min-width: 0px; max-width: 100%; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; color: rgb(74, 93, 104); background: rgb(247, 250, 251); font-size:13px; white-space: normal; overflow-wrap: anywhere; word-break: break-all;}
+[data-minas-plugin="dockermanager"] .resource-actions{display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px;}
+[data-minas-plugin="dockermanager"] .action-button, [data-minas-plugin="dockermanager"] .secondary-button, [data-minas-plugin="dockermanager"] .danger-button{min-height: 38px; padding: 9px 13px; border-radius: 11px; font-size:13px; font-weight: 800;}
+[data-minas-plugin="dockermanager"] .action-button, [data-minas-plugin="dockermanager"] .secondary-button{border: 1px solid var(--line); color: rgb(56, 80, 94); background: rgb(255, 255, 255);}
+[data-minas-plugin="dockermanager"] .danger-button{border: 1px solid rgb(254, 202, 202); color: var(--danger); background: rgb(255, 245, 245);}
+[data-minas-plugin="dockermanager"] .action-button:disabled, [data-minas-plugin="dockermanager"] .primary-button:disabled{opacity: 0.45;}
+[data-minas-plugin="dockermanager"] .danger-button:disabled{opacity: 0.45;}
+[data-minas-plugin="dockermanager"] .control-grid{display: grid; grid-template-columns: repeat(3, minmax(0px, 1fr)); gap: 9px;}
+[data-minas-plugin="dockermanager"] .control-grid button{width: 100%; min-width: 0px;}
+[data-minas-plugin="dockermanager"] .button-loading{display: inline-flex; align-items: center; justify-content: center; gap: 7px;}
+[data-minas-plugin="dockermanager"] .button-spinner{width: 14px; height: 14px; flex: 0 0 14px; border-width: 2px; border-style: solid; border-color: currentcolor transparent currentcolor currentcolor; border-image: none; border-radius: 50%; animation: 0.72s linear 0s infinite normal none running dockermanager-spin;}
+[data-minas-plugin="dockermanager"] .filter-bar{display: flex; gap: 7px; margin-bottom: 11px;}
+[data-minas-plugin="dockermanager"] .filter{padding: 7px 12px; border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 999px; color: rgba(255, 255, 255, 0.75); background: rgba(7, 24, 39, 0.24); font-size:13px;}
+[data-minas-plugin="dockermanager"] .filter.active{color: var(--navy); background: rgb(255, 255, 255);}
+[data-minas-plugin="dockermanager"] .field-label, [data-minas-plugin="dockermanager"] .form-grid label > span{display: block; margin-bottom: 7px; color: rgb(64, 86, 100); font-size:13px; font-weight: 800;}
+[data-minas-plugin="dockermanager"] .inline-form{display: grid; grid-template-columns: minmax(0px, 1fr) auto; gap: 9px;}
+[data-minas-plugin="dockermanager"] input, [data-minas-plugin="dockermanager"] select, [data-minas-plugin="dockermanager"] textarea{width: 100%; border: 1px solid var(--line); border-radius: 11px; outline: none; color: var(--text); background: rgb(255, 255, 255);}
+[data-minas-plugin="dockermanager"] input, [data-minas-plugin="dockermanager"] select{height: 42px; padding: 0px 12px;}
+[data-minas-plugin="dockermanager"] textarea{min-height: 74px; padding: 10px 12px; resize: vertical;}
+[data-minas-plugin="dockermanager"] input:focus, [data-minas-plugin="dockermanager"] select:focus, [data-minas-plugin="dockermanager"] textarea:focus{border-color: var(--blue); box-shadow: rgba(14, 165, 233, 0.12) 0px 0px 0px 3px;}
+[data-minas-plugin="dockermanager"] .loading-row, [data-minas-plugin="dockermanager"] .empty-state{padding: 28px 15px; border: 1px dashed rgba(102, 121, 133, 0.35); border-radius: 16px; color: var(--muted); background: rgba(255, 255, 255, 0.62); text-align: center; font-size: 13px;}
+[data-minas-plugin="dockermanager"] .modal-backdrop{position: fixed; inset: 0px; z-index: 30; background: rgba(3, 12, 20, 0.52); backdrop-filter: blur(4px);}
+[data-minas-plugin="dockermanager"] .modal{position: fixed; right: 0px; bottom: 0px; left: 0px; z-index: 31; width: min(100%, 720px); max-height: min(88vh, 850px); margin: 0px auto; border-radius: 24px 24px 0px 0px; background: rgb(246, 250, 251); box-shadow: rgba(0, 0, 0, 0.3) 0px -20px 70px; overflow: auto; padding-bottom: max(14px, env(safe-area-inset-bottom));}
+[data-minas-plugin="dockermanager"] .modal-handle{width: 42px; height: 4px; margin: 9px auto 4px; border-radius: 4px; background: rgb(200, 214, 220);}
+[data-minas-plugin="dockermanager"] .modal-heading{position: sticky; top: 0px; z-index: 2; padding: 14px 18px; background: rgba(246, 250, 251, 0.94); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line);}
+[data-minas-plugin="dockermanager"] .modal-heading p{margin-top: 3px;}
+[data-minas-plugin="dockermanager"] .close-modal{flex: 0 0 auto;}
+[data-minas-plugin="dockermanager"] .modal-heading .close-modal{width: 36px; height: 36px; padding: 0px; border: 0px; border-radius: 50%; color: rgb(82, 101, 112); background: rgb(231, 239, 242); font-size: 23px;}
+[data-minas-plugin="dockermanager"] .modal-body{padding: 17px;}
+[data-minas-plugin="dockermanager"] .form-grid{display: grid; grid-template-columns: repeat(2, minmax(0px, 1fr)); gap: 14px;}
+[data-minas-plugin="dockermanager"] .form-grid .wide, [data-minas-plugin="dockermanager"] .form-grid .check-row{grid-column: 1 / -1;}
+[data-minas-plugin="dockermanager"] .check-row{align-items: center; gap: 10px; margin: 0px; display: flex !important;}
+[data-minas-plugin="dockermanager"] .check-row input{width: 19px; height: 19px;}
+[data-minas-plugin="dockermanager"] .check-row span{margin: 0px !important;}
+[data-minas-plugin="dockermanager"] .image-filter{font-size:13px;color:var(--muted);cursor:pointer;flex-wrap:nowrap;max-width:100%;}
+[data-minas-plugin="dockermanager"] .image-filter input{flex:0 0 19px;accent-color:var(--green);}
+[data-minas-plugin="dockermanager"] .modal-actions{position: sticky; bottom: 0px; display: flex; justify-content: flex-end; gap: 9px; padding: 13px 17px; border-top: 1px solid var(--line); background: rgba(246, 250, 251, 0.95); backdrop-filter: blur(12px);}
+[data-minas-plugin="dockermanager"] .text-modal{max-height: 82vh;}
+[data-minas-plugin="dockermanager"] .confirm-modal{max-width: 520px;}
+[data-minas-plugin="dockermanager"] .confirm-message{color: var(--text); font-size: 14px; line-height: 1.65; white-space: pre-line;}
+[data-minas-plugin="dockermanager"] .log-view{min-height: 260px; max-height: 58vh; margin: 14px; padding: 14px; border-radius: 14px; overflow: auto; color: rgb(217, 239, 248); background: rgb(7, 24, 39); font:15px/1.75 var(--font-code); white-space: pre-wrap; overflow-wrap: anywhere;}
+[data-minas-plugin="dockermanager"] .busy{position: fixed; inset: 0px; z-index: 50; display: grid; place-content: center; justify-items: center; gap: 13px; color: rgb(255, 255, 255); background: rgba(3, 12, 20, 0.58); backdrop-filter: blur(5px); font-size: 13px; font-weight: 700;}
+[data-minas-plugin="dockermanager"] .spinner{width: 38px; height: 38px; border-width: 4px; border-style: solid; border-color: rgb(255, 255, 255) rgba(255, 255, 255, 0.25) rgba(255, 255, 255, 0.25); border-image: none; border-radius: 50%; animation: 0.8s linear 0s infinite normal none running dockermanager-spin;}
+@keyframes dockermanager-spin {
+  100% { transform: rotate(360deg); }
+}
+[data-minas-plugin="dockermanager"] .toast{position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); z-index: 60; max-width: calc(100% - 36px); padding: 11px 16px; border-radius: 12px; color: rgb(255, 255, 255); background: rgb(16, 43, 64); box-shadow: rgba(0, 0, 0, 0.24) 0px 12px 35px; font-size:13px; transform: translate(-50%, 18px); opacity: 0; pointer-events: none; transition: 0.18s;}
+[data-minas-plugin="dockermanager"] .toast.show{transform: translate(-50%, 0px); opacity: 1;}
+[data-minas-plugin="dockermanager"] .toast.error{background: rgb(153, 27, 27);}
+[data-minas-plugin="dockermanager"] .modal-backdrop{background: rgba(3, 12, 20, 0.56); backdrop-filter: none; animation: 0.14s ease-out 0s 1 normal both running dockermanager-modal-backdrop-in;}
+[data-minas-plugin="dockermanager"] .modal{inset: 50% auto auto 50%; width: min(720px, -28px + 100vw); max-height: calc(100dvh - 28px); margin: 0px; border: 1px solid var(--line); border-radius: 22px; box-shadow: rgba(0, 0, 0, 0.27) 0px 24px 64px; transform: translate(-50%, -50%); animation: 0.16s cubic-bezier(0.2, 0.7, 0.2, 1) 0s 1 normal both running dockermanager-modal-center-in; overscroll-behavior: contain;}
+[data-minas-plugin="dockermanager"] .modal-handle{display: none;}
+[data-minas-plugin="dockermanager"] .modal-heading, [data-minas-plugin="dockermanager"] .modal-actions{backdrop-filter: none;}
+[data-minas-plugin="dockermanager"] .confirm-modal{width: min(380px, -28px + 100vw); padding: 23px 20px max(20px, env(safe-area-inset-bottom)); border-radius: 24px; color: var(--text); background: var(--surface-solid); text-align: center;}
+[data-minas-plugin="dockermanager"] .confirm-icon{display: grid; place-items: center; width: 48px; height: 48px; margin: 0px auto 13px; border-radius: 15px; color: var(--blue-dark); background: rgb(224, 242, 254); font-size: 24px; font-weight: 900;}
+[data-minas-plugin="dockermanager"] .confirm-modal.danger .confirm-icon{color: var(--danger); background: rgb(252, 232, 232);}
+[data-minas-plugin="dockermanager"] .confirm-modal h2{margin: 0px; font-size: 22px; overflow-wrap: anywhere;}
+[data-minas-plugin="dockermanager"] .confirm-modal .confirm-message{margin: 8px 0px 0px; color: var(--muted); overflow-wrap: anywhere;}
+[data-minas-plugin="dockermanager"] .confirm-actions{display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 9px; margin-top: 18px;}
+[data-minas-plugin="dockermanager"] .confirm-actions button{min-width: 0px; min-height: 44px; border-radius: 12px; white-space: normal; overflow-wrap: anywhere;}
+[data-minas-plugin="dockermanager"] .confirm-actions .secondary-button{border: 1px solid rgb(204, 228, 241); color: var(--blue-dark); background: rgb(224, 242, 254); box-shadow: none;}
+[data-minas-plugin="dockermanager"].dialog-scroll-locked, [data-minas-plugin="dockermanager"].dialog-scroll-locked .minas-plugin-body{overflow: hidden; overscroll-behavior: none;}
+[data-minas-plugin="dockermanager"] .modal-backdrop{overscroll-behavior: none; touch-action: none;}
+@keyframes dockermanager-modal-backdrop-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+@keyframes dockermanager-modal-center-in {
+  0% { opacity: 0; transform: translate(-50%, calc(-50% + 8px)) scale(0.985); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce){
+[data-minas-plugin="dockermanager"] .modal, [data-minas-plugin="dockermanager"] .modal-backdrop{animation: auto ease 0s 1 normal none running none;}
+}
+@media (max-width: 540px){
+[data-minas-plugin="dockermanager"] .shell{padding-left: max(13px, env(safe-area-inset-left)); padding-right: max(13px, env(safe-area-inset-right));}
+[data-minas-plugin="dockermanager"] .detail-list{grid-template-columns: 1fr;}
+[data-minas-plugin="dockermanager"] .form-grid{grid-template-columns: 1fr;}
+[data-minas-plugin="dockermanager"] .form-grid label{grid-column: 1 / -1;}
+[data-minas-plugin="dockermanager"] .control-grid{grid-template-columns: 1fr;}
+}
+[data-minas-plugin="dockermanager"] .minas-plugin-body button:disabled{color: var(--disabled-text) !important; background: var(--disabled-bg) !important; border-color: var(--disabled-border) !important; box-shadow: none !important; opacity: 1 !important; cursor: not-allowed !important;}
+[data-minas-plugin="dockermanager"] .minas-plugin-body button:disabled.button-loading, [data-minas-plugin="dockermanager"] .minas-plugin-body button:disabled[aria-busy="true"]{cursor: progress !important;}
+[data-minas-plugin="dockermanager"] .section-heading.section-toolbar{min-width: 0px; margin: 0px 0px 14px; padding: 12px 14px; flex-wrap: wrap; gap: 10px 14px; border: 1px solid var(--line); border-radius: 16px; color: var(--text); background: var(--surface);}
+[data-minas-plugin="dockermanager"] .section-toolbar > div{min-width: 0px; flex: 1 1 150px;}
+[data-minas-plugin="dockermanager"] .section-heading.section-toolbar p{margin: 0px; color: var(--text); line-height: 1.6; overflow-wrap: anywhere;}
+[data-minas-plugin="dockermanager"] .section-toolbar h2{margin: 0px 0px 4px;}
+[data-minas-plugin="dockermanager"] .section-heading.section-toolbar > button{flex: 0 0 auto; max-width: 100%; min-height: 44px; margin-left: auto; white-space: normal;}
+[data-minas-plugin="dockermanager"]:not(.desktop-client) .section-toolbar h2{display: none;}
+[data-minas-plugin="dockermanager"] .section-heading.section-toolbar{background: var(--surface-solid);}
+[data-minas-plugin="dockermanager"] .filter-bar{flex-wrap: wrap;}
+[data-minas-plugin="dockermanager"] .filter{border-color: var(--line); color: var(--text); background: var(--surface-solid);}
+[data-minas-plugin="dockermanager"] .filter.active{border-color: var(--blue-dark); color: var(--blue-dark); background: rgb(223, 243, 252);}

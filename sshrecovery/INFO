@@ -1,0 +1,20 @@
+{
+  "plugin": "sshrecovery",
+  "name": "SSH 恢复",
+  "id": 19098,
+  "version": "1.1.13",
+  "tags": [
+    "tool"
+  ],
+  "timestamp": 1792292979,
+  "desc": "手动开启 SSH、恢复主机密钥与登录公钥",
+  "developer": "daixu0502",
+  "publisher": "Local",
+  "changelog": "按标准目录重构源码及安装包，更新安装、卸载和恢复入口",
+  "system": false,
+  "size": 66668,
+  "port": "",
+  "type": "standard",
+  "forceupgrade": false,
+  "ext": {}
+}

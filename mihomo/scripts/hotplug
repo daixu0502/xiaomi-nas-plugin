@@ -1,0 +1,19 @@
+#!/bin/sh
+
+CONTROL_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+
+plugin_user=${PLUG_USER:-$(printf '%s\n' "$CONTROL_DIR" | sed -n 's#^/home/\(u[0-9][0-9]*\)/plugin/mihomo/scripts$#\1#p')}
+[ -n "$plugin_user" ] || exit 1
+jq -e '.mihomo.install == true and .mihomo.enable == true' "/data/plugin/$plugin_user.list" >/dev/null 2>&1 || exit 0
+
+# Network/pool hotplug events may occur repeatedly. start is idempotent.
+case "${ACTION:-${1:-}}" in
+    remove|down|stop)
+        exit 0
+        ;;
+    *)
+        sleep 3
+        "$CONTROL_DIR/control" enable
+        ;;
+esac
+
