@@ -2,7 +2,7 @@
   "plugin": "mihomo",
   "name": "Mihomo",
   "id": 19090,
-  "version": "1.7.34",
+  "version": "1.7.35",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "Mihomo 代理管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "按标准目录重构源码及安装包，更新安装、卸载和恢复入口",
+  "changelog": "独立用户服务托管，修复恢复进程退出时代理被停止",
   "system": false,
-  "size": 248374,
+  "size": 249359,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

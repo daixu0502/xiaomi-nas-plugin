@@ -14,7 +14,7 @@ import sys
 import tempfile
 import time
 
-PLUGIN, VERSION = 'sshrecovery', '1.1.13'
+PLUGIN, VERSION = 'sshrecovery', '1.1.14'
 SYSTEM = Path('/data/.minas-privileged')
 
 def system_install(user, payload):
@@ -171,7 +171,7 @@ def install(p, payload):
         require(check.returncode == 0, '系统源码校验未通过，正在回退安装')
         report=system_install(p['user'],payload)
         print('公共权限组件：'+report['helperVersion']+'；安装事务完成，临时回退文件已清理')
-        print('SSH 恢复 1.1.13 已安装：' + p['user'] + '；未改动开机修复服务，未预置登录公钥。')
+        print('SSH 恢复 1.1.14 已安装：' + p['user'] + '；未改动开机修复服务，未预置登录公钥。')
     except BaseException:
         st=registry.stat(); atomic(registry,old_registry,st.st_mode & 0o777,(st.st_uid,st.st_gid))
         if not web_existed and web.is_symlink(): web.unlink()

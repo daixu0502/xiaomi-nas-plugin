@@ -32,13 +32,14 @@ def validate_component(base,folder):
     runtime=base/'src/files/plugin_paths.py'
     if runtime.exists():
         assert runtime.read_bytes().replace(b'\r\n',b'\n')==(ROOT/'workspace-tools/plugin-runtime/plugin_paths.py').read_bytes().replace(b'\r\n',b'\n'),folder+': stale user runtime helper'
+        assert (base/'src/files/service_control.sh').read_bytes().replace(b'\r\n',b'\n')==(ROOT/'workspace-tools/plugin-runtime/service_control.sh').read_bytes().replace(b'\r\n',b'\n'),folder+': stale service control bridge'
     assert not (base/'payload').exists(),folder+': duplicate legacy resource tree'
     common=base/'installer/common'
     if folder not in PRIVILEGED:
         assert not common.exists(),folder+': unneeded privileged dependency'
         return
     policy=json.loads((common/'manifest.json').read_text(encoding='utf-8'))
-    assert policy['plugin']==PRIVILEGED[folder] and policy['version']=='1.1.5'
+    assert policy['plugin']==PRIVILEGED[folder] and policy['version']=='1.1.6'
     for relative,digest in policy['files'].items():
         target=common/relative;assert target.is_file() and not target.is_symlink()
         value=target.read_bytes().replace(b'\r\n',b'\n')

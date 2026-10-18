@@ -21,8 +21,9 @@ BASE = Path('/data/.minas-plugin-recovery')
 DATA = Path('/data/.minas-plugin-data')
 PLUGINS = {'mihomo', 'dockermanager', 'taskcenter', 'nascenter', 'sshrecovery', 'quickshare', 'downloadcenter'}
 SERVERS = {'mihomo', 'quickshare', 'downloadcenter'}
+MANAGED = SERVERS | {'taskcenter'}
 UNIT = 'minas-plugin-recovery'
-VERSION = '1.1.0'
+VERSION = '1.2.0'
 
 
 def require(ok, message):
@@ -123,8 +124,103 @@ def call(command, *, environment=None, check=True, timeout=120):
 
 def control(user, plugin, home, src, action, check=True):
     # No root execution of control scripts from the user's plugin tree.
+    if plugin in SERVERS and (Path('/etc/systemd/system') / daemon_unit(user, plugin)).is_file():
+        operation = 'is-active' if action == 'status' else action
+        return call(['systemctl', operation, daemon_unit(user, plugin)], check=check)
+    return legacy_control(user, plugin, home, src, action, check)
+
+
+def legacy_control(user, plugin, home, src, action, check=True):
     return call(['runuser', '-u', user, '--', '/bin/sh', home / 'scripts/control', action],
-                environment=env(user, plugin, home, src), check=check)
+                environment=dict(env(user, plugin, home, src), MINAS_SERVICE_MANAGED='1'), check=check)
+
+
+def daemon_unit(user, plugin):
+    require(re.fullmatch(r'u[0-9]+', user) and plugin in SERVERS, 'invalid daemon identity')
+    return 'minas-plugin-' + plugin + '-' + user + '.service'
+
+
+@contextlib.contextmanager
+def record_lock(directory):
+    plain(directory)
+    with open(plain(directory / '.service.lock'), 'a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def install_daemon(user, plugin):
+    home, owner = identity(user, plugin)
+    unit = daemon_unit(user, plugin)
+    pidfile = {'mihomo': 'mihomo.pid', 'quickshare': 'server.pid', 'downloadcenter': 'service.pid'}[plugin]
+    content = ('[Unit]\nDescription=Local NAS plugin ' + plugin + ' (' + user + ')\nAfter=local-fs.target network.target\n'
+        '[Service]\nType=forking\nUser=' + user + '\nGroup=' + str(owner[1]) + '\n'
+        'Environment=MINAS_SERVICE_MANAGED=1 PYTHONDONTWRITEBYTECODE=1 PLUG_USER=' + user +
+        ' PLUG_HOME_DIR=' + str(home) + ' PLUG_SRC_DIR=' + str(home / 'src') + '\n'
+        'WorkingDirectory=' + str(home) + '\nPIDFile=' + str(home / 'tmp/runtime' / pidfile) + '\n'
+        'ExecStart=/bin/sh ' + str(home / 'scripts/control') + ' start\n'
+        'ExecStop=/bin/sh ' + str(home / 'scripts/control') + ' stop\n'
+        'GuessMainPID=no\nRestart=no\nKillMode=control-group\nTimeoutStartSec=90\nTimeoutStopSec=90\nUMask=0077\n')
+    target = Path('/etc/systemd/system') / unit
+    if not target.exists() or target.read_text() != content:
+        atomic(target, content.encode(), 0o644)
+        call(['systemctl', 'daemon-reload'])
+    # Only fixed actions for this user's registered plugin. No command/path input.
+    operations = ('start', 'stop', 'restart', 'status', 'lifecycle-start', 'lifecycle-stop')
+    prefix = '/usr/bin/python3 -B ' + str(BASE / 'recovery.py') + ' service --user ' + user + ' --plugin ' + plugin + ' --operation '
+    policy = user + ' ALL=(root) NOPASSWD: ' + ', '.join(prefix + action for action in operations) + '\n'
+    rules = Path('/etc/sudoers.d') / ('minas-service-' + user + '-' + plugin)
+    if not rules.exists() or rules.read_text() != policy:
+        fd, name = tempfile.mkstemp(prefix='.minas-service-', dir=rules.parent)
+        try:
+            with os.fdopen(fd, 'w') as output:
+                output.write(policy); output.flush(); os.fsync(output.fileno()); os.fchmod(output.fileno(), 0o440)
+            call(['visudo', '-cf', name])
+            os.replace(name, rules)
+        finally:
+            if os.path.exists(name): os.unlink(name)
+    marker = Path('/etc/minas-plugin-services')
+    protected(marker, 0o755)
+    atomic(marker / (user + '-' + plugin), unit.encode(), 0o644)
+
+
+def service_operation(user, plugin, operation):
+    identity(user, plugin)
+    unit = daemon_unit(user, plugin)
+    directory = BASE / 'records' / (user + '-' + plugin)
+    require(directory.is_dir() and not (directory / 'removed').exists(), 'plugin is not registered')
+    if operation == 'status':
+        return call(['systemctl', 'is-active', '--quiet', unit], check=False).returncode
+    with record_lock(directory):
+        require((Path('/etc/systemd/system') / unit).is_file(), 'daemon unit missing')
+        if operation == 'lifecycle-start':
+            record = read(load_generation(directory) / 'record.json')
+            apply_service_intent(record, directory)
+            if not record['enabled'] or not record['running']:
+                return 0
+        if not operation.startswith('lifecycle-'):
+            # A dedicated intent file cannot be overwritten by an in-flight
+            # registry refresh. A stop keeps the UI installed and accessible.
+            save(directory / 'service-intent.json', dict(running=operation != 'stop', time=time.time()))
+        action = operation.removeprefix('lifecycle-')
+        result = call(['systemctl', action, unit], check=False)
+        require(result.returncode == 0, '服务操作失败，请查看服务日志：' + unit)
+    return 0
+
+
+def apply_service_intent(record, directory):
+    path = directory / 'service-intent.json'
+    if not path.is_file(): return
+    intent = read(path)
+    require(isinstance(intent.get('running'), bool) and isinstance(intent.get('time'), (int, float)), 'invalid service intent')
+    if intent['time'] < record.get('intent_time', 0):
+        return
+    record['running'] = intent['running']
+    record['service_intent_time'] = intent['time']
+    record['intent_time'] = intent['time']
+    if intent['running']:
+        record['enabled'] = True
+        record['entry']['enable'] = True
+    record['entry']['status'] = 'running' if intent['running'] else 'stopped'
 
 
 @contextlib.contextmanager
@@ -142,6 +238,140 @@ def linked(path, target, owner):
         require(not path.exists(), 'path occupied: ' + str(path))
         path.symlink_to(target)
     os.lchown(path, *owner)
+
+
+def prepare_tmp(user, src, tmp, owner):
+    """Initialize the trusted parent only; access cache entries as their owner."""
+    require(str(tmp) == str(src).replace('/pluginsrc/', '/plugintmp/'), 'invalid temporary path')
+    parent = plain(tmp.parent)
+    # Firmware creates this shared, per-user parent as root:root 0755. Do not
+    # inspect/chown existing cache contents or make another user's cache writable.
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    fd = os.open(parent.anchor, flags)
+    try:
+        # Hold each ancestor open, rather than reopening an absolute pathname
+        # after validation: user-writable ancestors cannot redirect root's
+        # metadata operation through a symlink race.
+        for index, part in enumerate(parent.parts[1:], 1):
+            try:
+                child = os.open(part, flags, dir_fd=fd)
+            except FileNotFoundError:
+                require(index == len(parent.parts) - 1, 'temporary parent ancestor missing')
+                os.mkdir(part, mode=0o755, dir_fd=fd)
+                child = os.open(part, flags, dir_fd=fd)
+            os.close(fd)
+            fd = child
+        metadata = os.fstat(fd)
+        require(metadata.st_uid in (0, owner[0]), 'unexpected temporary parent owner')
+        os.fchown(fd, metadata.st_uid, owner[1])
+        os.fchmod(fd, stat.S_IMODE(metadata.st_mode) | 0o070)
+    finally:
+        os.close(fd)
+    script = '''import os, stat, sys
+from pathlib import Path
+p = Path(sys.argv[1])
+for node in (p, *p.parents):
+    if node.is_symlink(): raise RuntimeError('redirected temporary path')
+p.mkdir(mode=0o700, exist_ok=True)
+s = p.lstat()
+if not stat.S_ISDIR(s.st_mode) or s.st_uid != os.getuid():
+    raise RuntimeError('unexpected temporary directory owner/type')
+p.chmod(0o700)
+if not os.access(p, os.W_OK | os.X_OK): raise RuntimeError('temporary directory not writable')
+'''
+    result = call(['runuser', '-u', user, '--', sys.executable, '-B', '-c', script, tmp], check=False)
+    # This fixed script accepts only the validated cache path, no configuration
+    # or credentials. Its last error line is safe and useful in the journal.
+    error = result.stderr.decode('utf-8', errors='replace').strip().splitlines()
+    require(result.returncode == 0, 'temporary directory initialization failed: ' + str(tmp)
+            + ('; ' + error[-1][:400] if error else ''))
+
+
+def native_intents():
+    """Read successful explicit toggles; boot/uninstall hook calls are excluded."""
+    try:
+        result = call(['journalctl', '--boot', 'SYSLOG_IDENTIFIER=plugincenter',
+                       '--no-pager', '-o', 'json'], check=False, timeout=20)
+        if result.returncode:
+            return {}
+        return parse_native_intents(result.stdout.decode('utf-8', errors='replace'))
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+
+
+def parse_native_intents(output):
+    pending, intents = {}, {}
+    for line in output.splitlines():
+        try:
+            row = json.loads(line)
+            if not isinstance(row, dict):
+                continue
+            message, pid = row.get('MESSAGE', ''), row.get('SYSLOG_PID', row.get('_PID'))
+            started = re.search(r'\[do_(enable|disable):[0-9]+\] (u[0-9]+) (enable|disable) plugin ([a-z0-9]+)$', message)
+            if started:
+                if started[1] == started[3] and started[4] in PLUGINS:
+                    pending[pid] = (started[2], started[4], started[1] == 'enable')
+                continue
+            done = re.search(r'\[plugin_(enable|disable):[0-9]+\] plugin ([a-z0-9]+) (enable|disable) success$', message)
+            if done and pid in pending:
+                user, plugin, enabled = pending[pid]
+                if done[1] == done[3] and plugin == done[2] and enabled == (done[1] == 'enable'):
+                    intents[user, plugin] = dict(enabled=enabled,
+                        time=int(row['__REALTIME_TIMESTAMP']) / 1000000, cursor=row.get('__CURSOR', ''))
+                pending.pop(pid, None)
+        except (ValueError, TypeError, KeyError):
+            continue
+    return intents
+
+
+def apply_native_intent(record, event):
+    cutoff = record.get('intent_time', record['entry'].get('changetime', 0))
+    if not event or event['time'] <= cutoff:
+        return
+    record['enabled'] = event['enabled']
+    record['entry']['enable'] = event['enabled']
+    record['entry']['status'] = 'running' if event['enabled'] else 'disable'
+    record['intent_time'] = event['time']
+    record['intent_event'] = event['cursor']
+    # A successful explicit enable resumes managed services. A disable remains
+    # disabled even if the registry and source are removed before the next poll.
+    if record['plugin'] in MANAGED:
+        record['running'] = event['enabled']
+
+
+def observe_state(record, live, user, plugin, home, src):
+    """Only accept a newer, usable registration as a changed user intent.
+
+    Firmware boot rewrites enable without advancing changetime. Market refresh
+    marks entries offline before uninstalling them. Neither is a user toggle.
+    """
+    if live.get('online') is False or live.get('status') in ('uninstalling', 'installing', 'upgrading', 'error'):
+        return
+    enabled = live.get('enable')
+    if not isinstance(enabled, bool):
+        return
+    current = live.get('changetime', 0)
+    previous = record['entry'].get('changetime', 0)
+    newer = isinstance(current, (int, float)) and isinstance(previous, (int, float)) and current > previous
+    if enabled != record['enabled'] and not newer:
+        return
+    changed = enabled != record['enabled']
+    record['enabled'] = enabled
+    record['entry']['enable'] = enabled
+    if newer:
+        record['entry']['status'] = live.get('status', 'stopped')
+        record['entry']['changetime'] = current
+        if changed:
+            record['intent_time'] = time.time()
+    if plugin in MANAGED:
+        if changed:
+            record['running'] = enabled
+        elif plugin == 'taskcenter':
+            # Scheduler enable is a persistent, explicit flag in the protected
+            # task state, independent of the plugin UI's enable flag.
+            record['running'] = control(user, plugin, home, src, 'status', False).returncode == 0
+        elif enabled and control(user, plugin, home, src, 'status', False).returncode == 0:
+            record['running'] = True
 
 
 def normalize(user, plugin, payload):
@@ -311,6 +541,15 @@ WantedBy=timers.target
 
 def snapshot(user, plugin, payload):
     home, src, owner, entry = normalize(user, plugin, payload)
+    prepare_tmp(user, src, Path(os.readlink(home / 'tmp')), owner)
+    if plugin in SERVERS:
+        unit = Path('/etc/systemd/system') / daemon_unit(user, plugin)
+        migrate_running = not unit.exists() and legacy_control(user, plugin, home, src, 'status', False).returncode == 0
+        if migrate_running:
+            legacy_control(user, plugin, home, src, 'stop')
+        install_daemon(user, plugin)
+        if migrate_running and entry.get('enable', True):
+            control(user, plugin, home, src, 'start')
     verify(user, plugin, home, src)
     report = call(['plugincenter', '-u', user, 'list'])
     try:
@@ -341,7 +580,8 @@ def snapshot(user, plugin, payload):
         atomic(stage / 'INFO', (home / 'INFO').read_bytes())
         record = dict(user=user, plugin=plugin, src=str(src), tmp=str(Path(os.readlink(home / 'tmp'))),
                       entry=entry, enabled=bool(entry.get('enable', True)),
-                      running=plugin in SERVERS and control(user, plugin, home, src, 'status', False).returncode == 0)
+                      intent_time=time.time(),
+                      running=plugin in MANAGED and control(user, plugin, home, src, 'status', False).returncode == 0)
         atomic(stage / 'record.json', encoded(record))
         # A committed generation is selected by a same-directory atomic pointer.
         generation = 'generation-' + str(time.time_ns())
@@ -414,7 +654,12 @@ def restore_missing_source(src, backup, owner):
             atomic(path, expected.read_bytes(), stat.S_IMODE(expected.stat().st_mode), owner)
 
 
-def restore_record(directory):
+def restore_record(directory, intents=None):
+    with record_lock(directory):
+        return restore_locked_record(directory, intents)
+
+
+def restore_locked_record(directory, intents=None):
     if (directory / 'removed').exists():
         return
     saved = load_generation(directory)
@@ -422,6 +667,8 @@ def restore_record(directory):
     user, plugin = record['user'], record['plugin']
     home, owner = identity(user, plugin)
     require(directory.name == user + '-' + plugin, 'record identity mismatch')
+    apply_native_intent(record, (native_intents() if intents is None else intents).get((user, plugin)))
+    apply_service_intent(record, directory)
     src = Path(record['src'])
     match = re.fullmatch(r'/nas/(pool[0-9]+)/' + user + r'/plugin/pluginsrc/' + plugin, str(src))
     require(match and os.path.ismount('/nas/' + match[1]), 'data pool not ready')
@@ -439,19 +686,10 @@ def restore_record(directory):
                     and all((home / 'scripts' / p.name).is_file() for p in ((saved / 'scripts') if (saved / 'scripts').is_dir() else (saved / 'payload/scripts')).iterdir())
                     and all((home / name).is_symlink() for name in ('src', 'tmp', 'etc', 'var')) and source_ok)
         if complete and isinstance(live, dict) and live.get('install') is True and live.get('info', {}).get('version') == expected_info['version']:
-            # Observe deliberate disable/enable while a complete installation exists.
-            previously_enabled = record['enabled']
-            record['enabled'] = live.get('enable', record['enabled']) is True
-            record['entry']['enable'] = record['enabled']
-            record['entry']['status'] = live.get('status', 'stopped')
-            record['entry']['changetime'] = live.get('changetime', record['entry']['changetime'])
-            if plugin in SERVERS:
-                if previously_enabled != record['enabled']:
-                    record['running'] = record['enabled']
-                elif control(user, plugin, home, src, 'status', False).returncode == 0:
-                    record['running'] = True
-            if read(saved / 'record.json') != record:
-                save(saved / 'record.json', record)
+            observe_state(record, live, user, plugin, home, src)
+        apply_service_intent(record, directory)
+        if read(saved / 'record.json') != record:
+            save(saved / 'record.json', record)
         repair = not complete or not isinstance(live, dict) or live.get('install') is not True
         if (home / 'INFO').is_file():
             require(read(home / 'INFO')['version'] == expected_info['version'], 'different installed version; capture it explicitly')
@@ -490,11 +728,13 @@ def restore_record(directory):
             atomic(home / 'INFO', encoded(expected_info), 0o644, owner)
             linked(home / 'src', src, owner)
             linked(src / 'INFO', home / 'INFO', owner)
-            tmp = Path(record['tmp'])
-            require(str(tmp) == str(src).replace('/pluginsrc/', '/plugintmp/'), 'invalid temporary path')
-            # Creation and access to the official user cache happen after dropping privileges.
-            call(['runuser', '-u', user, '--', 'mkdir', '-p', tmp])
-            linked(home / 'tmp', tmp, owner)
+        # A tmp symlink can survive while its target is removed. Initialize the
+        # parent and check the target even when the rest of the install is intact.
+        tmp = Path(record['tmp'])
+        prepare_tmp(user, src, tmp, owner)
+        linked(home / 'tmp', tmp, owner)
+        if plugin in SERVERS:
+            install_daemon(user, plugin)
         webroot = Path(read(Path('/etc/config/plugin')).get('settings', {}).get('nginx_plugin', '/data/plugin/www'))
         plain(webroot / user).mkdir(parents=True, exist_ok=True)
         web = webroot / user / plugin
@@ -519,10 +759,20 @@ def restore_record(directory):
         verify(user, plugin, home, src)
     # Do not hold the list lock while lifecycle hooks update the list themselves.
     restore_component(saved, user, plugin)
-    if plugin in SERVERS and record['enabled'] and record['running']:
+    if plugin in SERVERS and not record['running'] and record.get('service_intent_time') == record.get('intent_time'):
+        if control(user, plugin, home, src, 'status', False).returncode == 0:
+            control(user, plugin, home, src, 'stop')
+    if plugin in MANAGED and record['enabled'] and record['running']:
         if control(user, plugin, home, src, 'status', False).returncode:
-            control(user, plugin, home, src, 'start')
-    # Task scheduler/SSH actions are never enabled/replayed here.
+            result = control(user, plugin, home, src, 'start', False)
+            # A user-owned control may start successfully but cannot update the
+            # firmware's root-owned list. Verify the service independently.
+            deadline = time.monotonic() + 20
+            while control(user, plugin, home, src, 'status', False).returncode:
+                require(time.monotonic() < deadline,
+                        'service did not recover: ' + plugin + ' (start exit ' + str(result.returncode) + ')')
+                time.sleep(0.25)
+    # Only resume the scheduler flag; never execute a task or an SSH recovery.
     if repair:
         print('已恢复：' + user + '/' + plugin, flush=True)
 
@@ -532,11 +782,12 @@ def reconcile():
     records = BASE / 'records'
     if not records.is_dir():
         return
+    intents = native_intents()
     for directory in sorted(records.iterdir()):
         if not directory.is_dir():
             continue
         try:
-            restore_record(directory)
+            restore_record(directory, intents)
         except Exception as error:
             failures += 1
             print(directory.name + ': ' + str(error), file=sys.stderr, flush=True)
@@ -548,16 +799,26 @@ def forget(user, plugin):
     directory = BASE / 'records' / (user + '-' + plugin)
     if directory.is_dir():
         atomic(directory / 'removed', b'explicit manage.sh uninstall\n')
+    if plugin in SERVERS:
+        unit = Path('/etc/systemd/system') / daemon_unit(user, plugin)
+        if unit.is_file():
+            call(['systemctl', 'stop', unit.name])
+            unit.unlink()
+            call(['systemctl', 'daemon-reload'])
+        for path in (Path('/etc/sudoers.d') / ('minas-service-' + user + '-' + plugin),
+                     Path('/etc/minas-plugin-services') / (user + '-' + plugin)):
+            plain(path).unlink(missing_ok=True)
     port_registry(user, plugin, '', remove=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('capture', 'normalize', 'reconcile', 'bootstrap', 'forget', 'status'))
+    parser.add_argument('action', choices=('capture', 'normalize', 'reconcile', 'bootstrap', 'forget', 'status', 'service'))
     parser.add_argument('--user')
     parser.add_argument('--plugin', choices=sorted(PLUGINS))
     parser.add_argument('--package', '--payload', dest='payload', type=Path)
     parser.add_argument('--quiet', action='store_true')
+    parser.add_argument('--operation', choices=('start', 'stop', 'restart', 'status', 'lifecycle-start', 'lifecycle-stop'))
     args = parser.parse_args()
     require(os.geteuid() == 0, 'root required')
     protected(BASE)
@@ -570,7 +831,10 @@ def main():
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 return
-        if args.action in ('capture', 'normalize'):
+        if args.action == 'service':
+            require(args.user and args.plugin and args.operation, 'user/plugin/operation required')
+            sys.exit(service_operation(args.user, args.plugin, args.operation))
+        elif args.action in ('capture', 'normalize'):
             require(args.user and args.plugin and args.payload, 'user/plugin/payload required')
             plain(args.payload.resolve())
             if args.action == 'capture':

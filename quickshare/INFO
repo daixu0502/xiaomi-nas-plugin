@@ -2,7 +2,7 @@
   "plugin": "quickshare",
   "name": "文件快传",
   "id": 19092,
-  "version": "1.1.36",
+  "version": "1.1.37",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "临时下载链接与文件上传入口",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "按标准目录重构源码及安装包，更新安装、卸载和恢复入口",
+  "changelog": "修复失效 PID 导致端口占用，独立托管快传服务",
   "system": false,
-  "size": 142216,
+  "size": 144272,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

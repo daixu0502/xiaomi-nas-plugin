@@ -16,6 +16,8 @@
 
 安装器同时登记插件恢复服务，在插件目录、桌面入口或注册项被清理时尝试恢复。
 
+[NAS root 工具](nas-root/README.md) 提供独立 SSH 开启与开机恢复、Docker 网络检查与修复，以及容器部署辅助工具，源码统一收录在本仓库。
+
 ## 如何使用
 
 ### 安装与更新
@@ -47,6 +49,16 @@ bash dockermanager/manage.sh install --users u123456789
 ### 打开与使用
 
 安装完成后，在小米客户端应用列表中打开对应插件，按各插件 README 配置。列表或页面没有更新时，完全退出客户端后重新打开。需要运行后台服务的插件，在其页面中检查并启动服务；定时任务还需分别启用调度和具体任务。
+
+### NAS root 工具
+
+在仓库根目录的 WSL / Linux 终端执行以下命令，为已有 root SSH 安装或更新开机恢复：
+
+```bash
+bash nas-root/install-ssh-autostart-fix.sh 192.168.31.100
+```
+
+首次开启 SSH、Docker 网络修复和其他工具的运行环境与参数见 [NAS root 工具说明](nas-root/README.md)。
 
 ### 卸载
 

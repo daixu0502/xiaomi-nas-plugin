@@ -5,7 +5,7 @@ umask 077
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 WORK=/data/ssh-autostart-fix
-STATE=/data/.minas-privileged/sshrecovery
+STATE=/data/.minas-privileged/modules/sshrecovery/var
 PASSWD=/etc/passwd
 SHELL_DROPIN=/etc/systemd/system/dropbear@.service.d/90-normal-shell.conf
 BOOT_DROPIN=/etc/systemd/system/minas.boot_check.service.d/90-keep-ssh.conf

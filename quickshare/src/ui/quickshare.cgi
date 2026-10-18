@@ -21,6 +21,7 @@ PORT_FILE=STATE_DIR/"server.port"
 sys.path.insert(0,str(SCRIPT_DIR.parent/"files"))
 from quickshare_lib import ShareError, Store, public_record
 from plugin_paths import runtime_directory
+from service_process import managed_pids
 
 def service_port():
     try: value=int(PORT_FILE.read_text().strip())
@@ -80,11 +81,10 @@ def base_url():
     return f"http://{lan_ip()}:{PORT}"
 
 def running():
-    try:
-        pid=int((runtime_directory(PLUGIN_HOME)/"server.pid").read_text().strip())
-        command=Path(f"/proc/{pid}/cmdline").read_bytes()
-        return b"quickshare_server.py" in command,pid
-    except (OSError,ValueError): return False,0
+    pid=next(managed_pids(PLUGIN_HOME),0)
+    if pid:
+        (runtime_directory(PLUGIN_HOME)/"server.pid").write_text(str(pid)+'\n')
+    return bool(pid),pid
 
 def control(command):
     script=PLUGIN_HOME/"scripts/control"
@@ -100,8 +100,8 @@ try:
     data=body(); base=base_url()
     if action=="status":
         is_running,pid=running(); records=STORE.list(); active=sum(1 for item in records if Store.status(item)=="active")
-        try: version=json.loads((PLUGIN_HOME/"INFO").read_text()).get("version","1.1.36")
-        except Exception: version="1.1.36"
+        try: version=json.loads((PLUGIN_HOME/"INFO").read_text()).get("version","1.1.37")
+        except Exception: version="1.1.37"
         respond({"ok":True,"running":is_running,"pid":pid,"port":PORT,"lanUrl":f"http://{lan_ip()}:{PORT}","baseUrl":base,"activeShares":active,"totalShares":len(records),"pluginVersion":version})
     if action=="list": respond({"ok":True,"shares":[public_record(item,base) for item in STORE.list()]})
     if action=="browse": respond({"ok":True,**STORE.browse(data.get('path',''),data.get('offset',0),data.get('limit',200),data.get('dirsOnly',False))})

@@ -159,6 +159,11 @@ var document = window.XiaomiPluginClient.document;
   function render() {
     const heartbeat=data.lastTick&&data.serverTime-data.lastTick<180;
     $('health').textContent=!data.scheduler?'调度已停用':heartbeat?'调度正常':'等待调度心跳'; $('health').className='badge'+(data.scheduler&&heartbeat?' enabled':'');
+    $('schedulerToggle').textContent=data.scheduler?'停止调度服务':'启动调度服务';
+    $('schedulerToggle').disabled=!!data.runs.some(r=>r.state==='running');
+    $('schedulerToggle').className=data.scheduler?'secondary':'primary';
+    $('schedulerToggle').setAttribute('aria-pressed',data.scheduler?'true':'false');
+    $('schedulerHint').textContent=data.scheduler?'已启用的任务将按计划运行。':'调度服务已停止，任务配置仍保留。';
     $('clock').textContent='NAS 时间 '+timestamp(data.serverTime)+' · '+(data.timezone||''); $('poolInfo').textContent=data.poolReady?'存储池已挂载，可执行要求存储池就绪的任务。':'存储池尚未挂载：依赖存储池的任务不会执行。';
     $('countTotal').textContent=data.tasks.length;$('countEnabled').textContent=data.tasks.filter(t=>t.enabled).length;$('countRunning').textContent=data.runs.filter(r=>r.state==='running').length;
     const failedCount=data.runs.filter(r=>['failed','timeout','interrupted'].includes(r.state)).length;
@@ -171,6 +176,12 @@ var document = window.XiaomiPluginClient.document;
   async function refresh() { if(loading)return; loading=true;try{data=await request('list');if(!templates.length)templates=(await request('templates')).templates;render();}finally{loading=false;} }
   document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>switchPage(b.dataset.page));document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>switchPage(b.dataset.go));
   $('newTask').onclick=()=>busy($('newTask'),()=>edit());$('refresh').onclick=()=>busy($('refresh'),refresh);$('refreshHistory').onclick=()=>busy($('refreshHistory'),refresh);
+  $('schedulerToggle').onclick=()=>busy($('schedulerToggle'),async()=>{
+    const enabled=!data.scheduler, count=data.tasks.filter(t=>t.enabled).length;
+    const message=enabled?'当前有 '+count+' 个已启用任务。启动后按各自计划运行；请先核对任务列表。':'停止后保留任务和配置，并取消等待中的重试。';
+    if(!await confirm(enabled?'启动调度服务？':'停止调度服务？',message,enabled&&count>0))return;
+    await request('scheduler',{enabled});await refresh();toast(enabled?'调度服务已启动':'调度服务已停止');
+  });
   refresh().catch(e=>{ $('health').textContent='连接失败';toast(e.message,true); });
   let refreshTimer, disposed=false;
   function scheduleRefresh(){clearTimeout(refreshTimer);if(disposed||document.hidden)return;refreshTimer=setTimeout(async()=>{if(!dialogs().length)await refresh().catch(()=>{});scheduleRefresh();},15000);}

@@ -4,6 +4,8 @@ CONTROL_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 PLUG_HOME_DIR=${PLUG_HOME_DIR:-$(dirname "$CONTROL_DIR")}
 PLUG_SRC_DIR=${PLUG_SRC_DIR:-$PLUG_HOME_DIR/src}
 RUNNER="$PLUG_SRC_DIR/files/mihomo.sh"
+. "$PLUG_SRC_DIR/files/service_control.sh"
+minas_service_control mihomo "${PLUG_USER:-$(id -un)}" "${1:-}" || true
 if [ "$(id -u)" = 0 ]; then
     plugin_user=$(printf '%s\n' "$PLUG_HOME_DIR" | sed -n 's#^/home/\(u[0-9][0-9]*\)/plugin/mihomo$#\1#p')
     [ -n "$plugin_user" ] || exit 1

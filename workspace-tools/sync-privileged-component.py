@@ -41,8 +41,8 @@ def synchronize():
         for name,value in files.items():
             if name in CORE:
                 p=target/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(value)
-        manifest={'apiVersion':1,'layoutVersion':2,'version':'1.1.5','plugin':plugin,'files':{name:hashlib.sha256(value).hexdigest() for name,value in sorted(files.items())}}
+        manifest={'apiVersion':1,'layoutVersion':2,'version':'1.1.6','plugin':plugin,'files':{name:hashlib.sha256(value).hexdigest() for name,value in sorted(files.items())}}
         (target/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-        print(folder+': common 1.1.5 + '+str(len(files)-len(CORE))+' private files')
+        print(folder+': common 1.1.6 + '+str(len(files)-len(CORE))+' private files')
 
 if __name__=='__main__':synchronize()

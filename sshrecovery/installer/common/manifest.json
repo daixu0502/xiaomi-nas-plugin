@@ -1,16 +1,16 @@
 {
   "apiVersion": 1,
   "layoutVersion": 2,
-  "version": "1.1.5",
+  "version": "1.1.6",
   "plugin": "sshrecovery",
   "files": {
-    "common/component_admin.py": "0fe7680f59ff709d2de74efb31b7ca2d933f38fde2a3b518d8594b3ab7ed2058",
-    "common/privileged_runtime.py": "df85e329d2e044ee4f9164915f715fbc7cc63041d30ae7b0a06404e87e358b2b",
+    "common/component_admin.py": "69eccdf483c6c090c789106c9f43b823d19a7957be4dbaac36061852d168c22e",
+    "common/privileged_runtime.py": "3e999e26dfb40a74637e78befe973017ca141c0b34303a527fb85f343b10aeb4",
     "common/telemetry_cache.py": "8e7c762862af1253a1464ebc41281952a5d7374c889202e3aacaf630af90e80b",
     "common/user_state_io.py": "aeb1b5bd1a09d491c8dd59e8456e9aec93afb8ebc30845213a0d55ea4e53cebf",
     "component_admin.py": "8d4832b4794f552ab2bf0a5d2d17ce44e614d28497f7f54c3efa620856ec9257",
     "minas-helper": "8ed97c29410d8d0eca612b3ed1066cb7798bf8956a85cd073f86b27714c5b4f5",
-    "modules/sshrecovery/restore-ssh.sh": "05fb1a11793a515741ab270b1795ef47a743f98010fb612ef8290dc9fc16d216",
-    "modules/sshrecovery/ssh-recovery-helper": "58e3c7f1bae49ce60e06762acc8684a2c833642c44c25de2a70b0671f850c688"
+    "modules/sshrecovery/restore-ssh.sh": "e5b5f70e1edafea1832b5c12f64d7341039abaf17bc0ce2d3a5859f013fba85b",
+    "modules/sshrecovery/ssh-recovery-helper": "d1851ebad568c9b325d1ac50ad7d9580a61f47e31c317546a1b53f49843901e3"
   }
 }

@@ -257,13 +257,19 @@ def ssh_state_lock(plugin):
 
 def migrate_ssh_state():
     legacy, target = BASE/'sshrecovery', BASE/'modules/sshrecovery/var'
-    # Standalone tools do not use the shared API lock. Refuse migration if one
-    # was already running before its on-disk entry point was updated.
+    # Standalone tools do not use the shared API lock. After replacing their
+    # entry points, refuse retirement if an old process may still hold/wait on
+    # the legacy lock. Never remove an unknown legacy file or real key material.
     if legacy.exists():
+        workers = {b'/data/ssh-autostart-fix/recover-ssh.py',
+                   b'/data/ssh-autostart-fix/restore-ssh.sh',
+                   os.fsencode(BASE/'ssh-recovery-helper'),
+                   os.fsencode(BASE/'ssh-recovery-boot.sh'),
+                   os.fsencode(BASE/'modules/sshrecovery/restore-ssh.sh')}
         for process in Path('/proc').glob('[0-9]*/cmdline'):
             try: arguments = process.read_bytes().split(b'\0')
             except (OSError, ProcessLookupError): continue
-            if b'/data/ssh-autostart-fix/recover-ssh.py' in arguments:
+            if workers.intersection(arguments):
                 raise ValueError('独立 SSH 恢复工具正在运行，请结束后再更新')
         if target.exists() and not ssh_lock_stub(legacy):
             raise ValueError('新旧 SSH 恢复数据同时存在，拒绝覆盖')
@@ -271,7 +277,11 @@ def migrate_ssh_state():
             validate_tree(legacy)
             runtime.secure_directory(target.parent,create=True)
             os.rename(legacy,target)  # Preserve key permissions and lock inode.
-        # Keep a lock-only legacy stub in place so no lock inode is replaced.
+        else:
+            # The current lock inode stays intact; the retired legacy lock is
+            # already held by ssh_state_lock and no old standalone writer lives.
+            (legacy/'operations.lock').unlink()
+            legacy.rmdir()
     for path in (target,target/'keys',target/'host',target/'tmp'):
         runtime.secure_directory(path,create=True,mode=0o700)
 
@@ -373,11 +383,22 @@ def install(payload, plugin, user, plugin_version, backup):
             previous = worker.read_bytes()
             # Change only the retired asset lookup, preserving standalone fixes.
             updated = previous.replace(b"BASE/'ssh-recovery-boot.sh'", b"Path('/data/ssh-autostart-fix/restore-ssh.sh')")
+            updated = updated.replace(b"if not STATE.exists() and (BASE/'sshrecovery').exists():\n    STATE = BASE/'sshrecovery'\n", b'')
             updated = updated.replace(b"STATE = BASE/'sshrecovery'", b"STATE = BASE/'modules/sshrecovery/var'")
             if updated != previous:
                 compile(updated, str(worker), 'exec')
                 atomic(backup/'standalone-ssh-worker', previous, 0o600)
                 atomic(worker, updated, worker.stat().st_mode & 0o777)
+        shell_worker = Path('/data/ssh-autostart-fix/restore-ssh.sh')
+        if shell_worker.is_file():
+            validate_tree(shell_worker)
+            previous = shell_worker.read_bytes()
+            updated = previous.replace(b'STATE=/data/.minas-privileged/sshrecovery\n',
+                                       b'STATE=/data/.minas-privileged/modules/sshrecovery/var\n')
+            if updated != previous:
+                subprocess.run(['/bin/sh','-n'],input=updated,check=True,capture_output=True)
+                atomic(backup/'standalone-ssh-shell-worker',previous,0o600)
+                atomic(shell_worker,updated,shell_worker.stat().st_mode & 0o777)
         migrate_ssh_state()
     atomic(BASE/'registry.json', data)
     with migration(user, backup) if plugin == 'taskcenter' else contextlib.nullcontext():
@@ -484,7 +505,7 @@ def main():
         except BaseException:
             # Restore grouped code and protected state, preserving live lock inodes.
             migrated=BASE/'modules/sshrecovery/var'
-            if (saved/'sshrecovery').exists() and not (BASE/'sshrecovery').exists() and migrated.exists():
+            if (saved/'sshrecovery').exists() and not (saved/'modules/sshrecovery/var').exists() and not (BASE/'sshrecovery').exists() and migrated.exists():
                 os.rename(migrated,BASE/'sshrecovery')
             for name in ('common','modules','users','sshrecovery'):
                 restore_tree(BASE/name,saved/name)
@@ -498,6 +519,8 @@ def main():
             if (backup/'legacy-mihomo-sudoers').exists():atomic(old_mihomo_rule,(backup/'legacy-mihomo-sudoers').read_bytes(),0o440)
             if (backup/'standalone-ssh-worker').exists():
                 atomic(Path('/data/ssh-autostart-fix/recover-ssh.py'),(backup/'standalone-ssh-worker').read_bytes(),0o700)
+            if (backup/'standalone-ssh-shell-worker').exists():
+                atomic(Path('/data/ssh-autostart-fix/restore-ssh.sh'),(backup/'standalone-ssh-shell-worker').read_bytes(),0o700)
             if (backup / 'legacy-source.json').exists():
                 legacy = Path(json.loads((backup / 'legacy-source.json').read_text())['path'])
                 if legacy not in [p / 'users' / args.user for p in LEGACY]:

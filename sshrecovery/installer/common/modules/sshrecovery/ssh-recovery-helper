@@ -22,11 +22,9 @@ import zipfile
 
 sys.dont_write_bytecode = True
 BASE = Path('/data/.minas-privileged')
-# Exported emergency tools can read legacy state before the plugin is upgraded.
-# Only the root installer migrates it; status requests never move key material.
+# Only the root installer reads/migrates legacy state. All runtime writers,
+# including exported emergency tools, use the module's persistent directory.
 STATE = BASE/'modules/sshrecovery/var'
-if not STATE.exists() and (BASE/'sshrecovery').exists():
-    STATE = BASE/'sshrecovery'
 WORKER = Path('/data/ssh-autostart-fix/restore-ssh.sh')
 CRON = Path('/etc/cron.d/keep-ssh')
 DROPIN = Path('/etc/systemd/system/minas.boot_check.service.d/90-keep-ssh.conf')

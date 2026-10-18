@@ -2,43 +2,43 @@
   "dockermanager": {
     "version": "1.1.13",
     "file": "dist/dockermanager-v1.1.13.tar.gz",
-    "sha256": "4b5599dbc44eacaf9f06808be825955d5d35b6c56e9d932a854b0591a2f16b0b",
+    "sha256": "16e1c32b29ca8458ecef400c9d481316228a269bcca7b984ac526749fcd304f3",
     "files": 28
   },
   "mihomo": {
-    "version": "1.7.34",
-    "file": "dist/mihomo-v1.7.34.tar.gz",
-    "sha256": "c7b8eb1f93444b9b83d3d792388a388838333eb9c7f570ca2198708fe12bb8b3",
-    "files": 47
+    "version": "1.7.35",
+    "file": "dist/mihomo-v1.7.35.tar.gz",
+    "sha256": "57b24d993a421684b76d342320b41ac2dd5963036f053f20f58fe967b883b5b9",
+    "files": 48
   },
   "taskcenter": {
-    "version": "1.0.11",
-    "file": "dist/taskcenter-v1.0.11.tar.gz",
-    "sha256": "09cf544fcb1c3f0e4d32aa7eed5671d6df7a27c6841dccf77c8c96fcfccb5ad7",
+    "version": "1.0.12",
+    "file": "dist/taskcenter-v1.0.12.tar.gz",
+    "sha256": "71d9521d876d57ac6aad4c6ad52a5742f6bf8485624a66d9f492881ba7dff881",
     "files": 29
   },
   "nascenter": {
     "version": "1.1.35",
     "file": "dist/nascenter-v1.1.35.tar.gz",
-    "sha256": "ef91b3982dc454019c981a4e17b1bb37e313a918b73d7a8a2b0ebb387371db6d",
+    "sha256": "14e89c474174b45a25f5946e8b01b649bc1f3ca5957b3fcbcbbbe2cc357db74c",
     "files": 31
   },
   "sshrecovery": {
-    "version": "1.1.13",
-    "file": "dist/sshrecovery-v1.1.13.tar.gz",
-    "sha256": "fe1ef715f3c586b70a93f42e0434c85de846622e5d28329e2f0165dea8f03268",
+    "version": "1.1.14",
+    "file": "dist/sshrecovery-v1.1.14.tar.gz",
+    "sha256": "6e2ead13d335665db211e1b0b70b00df9aa5db47a6e211802ac0e66492e0c00a",
     "files": 29
   },
   "quickshare": {
-    "version": "1.1.36",
-    "file": "dist/quickshare-v1.1.36.tar.gz",
-    "sha256": "35f758f9b16c419d9df8dfd064cef9137f82fec22a1c08e17a1994b35ccf2d6e",
-    "files": 23
+    "version": "1.1.37",
+    "file": "dist/quickshare-v1.1.37.tar.gz",
+    "sha256": "8aab91c26c8adbda009879d5643dd32d80f97f9e9c8318c927248c55ceccabd9",
+    "files": 25
   },
   "downloadcenter": {
-    "version": "1.1.13",
-    "file": "dist/downloadcenter-v1.1.13.tar.gz",
-    "sha256": "e222c51e8dfd39100145592eb2e665ab0a82dd020398b55700a581b4e901b419",
-    "files": 31
+    "version": "1.1.14",
+    "file": "dist/downloadcenter-v1.1.14.tar.gz",
+    "sha256": "a437f868e4220f025920c6c40e05340327ec10f7b1e93254c94b1f25b37c6b17",
+    "files": 32
   }
 }

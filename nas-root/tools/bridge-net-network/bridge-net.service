@@ -1,0 +1,14 @@
+[Unit]
+Description=IPv4 outbound networking for Docker bridge-net
+Requires=docker.service
+After=docker.service network-online.target
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -B /data/bridge-net/apply.py
+RemainAfterExit=yes
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target docker.service

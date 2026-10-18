@@ -17,7 +17,7 @@ def sha(data):
 def main():
     manifest = json.loads((ROOT / 'workspace-tools/package-manifest.json').read_text())
     reference={name:(ROOT/'workspace-tools/privileged-component'/name).read_bytes().replace(b'\r\n',b'\n') for name in FILES}
-    report={'commonVersion':'1.1.5','packages':{}}
+    report={'commonVersion':'1.1.6','packages':{}}
     for folder,plugin in PROJECTS.items():
         entry=manifest[folder];archive=ROOT/entry['file']
         assert sha(archive.read_bytes())==entry['sha256'],folder+': archive mismatch'
@@ -33,7 +33,7 @@ def main():
                 report['packages'][folder]={'version':entry['version'],'archiveVerified':True,'noComponentDependency':True}
                 continue
             policy=json.loads(included.pop('manifest.json'))
-            assert policy['plugin']==plugin and policy['version']=='1.1.5'
+            assert policy['plugin']==plugin and policy['version']=='1.1.6'
             assert set(included)==set(policy['files'])
             assert all(sha(value)==policy['files'][name] for name,value in included.items())
             assert all(included[name]==value for name,value in reference.items())
@@ -44,7 +44,7 @@ def main():
             installer=package.extractfile(folder+'/manage.sh').read()
             if plugin=='sshrecovery':installer=package.extractfile(folder+'/installer/install.py').read()
             assert b'component_admin.py' in installer and b'install' in installer
-            report['packages'][folder]={'version':entry['version'],'commonVersion':'1.1.5','privateFiles':len(private),'archiveVerified':True,'noForeignModules':True}
+            report['packages'][folder]={'version':entry['version'],'commonVersion':'1.1.6','privateFiles':len(private),'archiveVerified':True,'noForeignModules':True}
 
     print(json.dumps(report, ensure_ascii=False, indent=2))
 

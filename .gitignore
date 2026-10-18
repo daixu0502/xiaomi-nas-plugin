@@ -42,7 +42,8 @@
 .env.*
 !.env.example
 
-# Local copies of separate NAS tools and device-specific diagnostics.
-/nas-root/
+# Device-specific diagnostics and container recreation records stay local.
+/nas-root/tools/bridge-net-network/create-containers.sh
+/nas-root/tools/bridge-net-network/CONTAINERS.md
 /downloadcenter/tools/diagnose-qb-tasks.py
 
