@@ -16,6 +16,8 @@
 
 安装器同时登记插件恢复服务，在插件目录、桌面入口或注册项被清理时尝试恢复。
 
+恢复服务使用目录事件监听，合并变化后检查；开机及存储池挂载后补查。空闲时不定时扫描插件源码，Cron 仅检查监听服务是否运行。源码异常或实际恢复时才执行完整摘要校验。
+
 [NAS root 工具](nas-root/README.md) 提供独立 SSH 开启与开机恢复、Docker 网络检查与修复，以及容器部署辅助工具，源码统一收录在本仓库。
 
 ## 如何使用
@@ -79,6 +81,13 @@ python3 -B /data/.minas-plugin-recovery/recovery.py status
 python3 -B /data/.minas-plugin-recovery/recovery.py reconcile
 ```
 
+查看事件监听状态：
+
+```bash
+systemctl status minas-plugin-recovery-watch.service
+cat /run/minas-plugin-recovery/watch-status.json
+```
+
 若升级后恢复服务的启动入口丢失，但恢复程序仍在，可手动重新登记：
 
 ```bash
@@ -93,4 +102,5 @@ python3 -B /data/.minas-plugin-recovery/recovery.py bootstrap
 - 配置和持久数据通过插件的 `etc/var` 入口访问，实际存放于 `/data/.minas-plugin-data/<用户>/<插件>/`；恢复程序和副本位于 `/data/.minas-plugin-recovery/`。这些目录包含正在使用的数据，请勿当作临时缓存删除。
 - 正式卸载使用 `manage.sh uninstall`，它会取消自动恢复登记。仅在应用市场中删除插件时，恢复服务可能将它补回；保留数据及卸载影响以各插件说明和执行提示为准。
 - 恢复需要 `/data` 中的程序、数据及所需系统依赖仍存在。如果固件同时清除所有启动入口，需要手动恢复；不能保证适配任意固件升级。
+- 监听器不监控配置、下载进度、普通日志和 PID 内容，等待事件不会反复访问存储池。其他插件、容器和系统服务仍可能访问硬盘，不能据此保证整机休眠。冲突源码不会被静默覆盖；连续失败后需修正问题并手动检查或等待新事件。
 - 订阅地址、接口密钥、登录私钥和离线应急材料应妥善保管；文件删除、系统维护及容器升级前备份重要数据。

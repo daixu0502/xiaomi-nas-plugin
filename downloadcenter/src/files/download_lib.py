@@ -4,6 +4,7 @@ import base64
 import contextlib
 import errno
 import fcntl
+from runtime_lock import open_lock
 import hashlib
 import json
 import os
@@ -18,7 +19,7 @@ from urllib.parse import urlsplit, parse_qs, unquote
 from urllib.request import Request, build_opener, ProxyHandler
 from urllib.error import HTTPError
 
-VERSION = "1.1.14"
+VERSION = "1.1.15"
 MAX_TORRENT = 4 * 1024 * 1024
 DEFAULTS = {"directory": "", "concurrent": 3, "connections": 4, "downloadKiB": 0,
             "uploadKiB": 1024, "seedRatio": 1.0, "seedMinutes": 60,
@@ -254,7 +255,7 @@ class Manager:
     @contextlib.contextmanager
     def locked(self):
         self.ready()
-        with (self.runtime / "api.lock").open("a") as handle:
+        with open_lock(self.runtime / "api.lock") as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             yield
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Per-user, verified static-core updates. No arbitrary URLs or root helper."""
 import fcntl
+from runtime_lock import open_lock
 import hashlib
 import io
 import json
@@ -129,7 +130,7 @@ def install_candidate(m, candidate, version):
         shutil.copy2(candidate, pending)
         shutil.copy2(core_path(m), previous)
         old_version = binary_version(previous)
-        with (m.runtime/'lifecycle.lock').open('a') as lock:
+        with open_lock(m.runtime/'lifecycle.lock') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             enabled = (m.var/'enabled').exists()
             running = bool(live(m))
@@ -183,7 +184,7 @@ def run(m, command, proxy):
     if command not in ('check', 'apply'): raise DownloadError('无效核心更新操作')
     if os.geteuid() == 0: raise DownloadError('核心更新禁止以 root 运行')
     m.ready()
-    with (m.runtime/'core-update.lock').open('a') as lock:
+    with open_lock(m.runtime/'core-update.lock') as lock:
         try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError: return
         common = {'command': command, 'proxy': proxy}

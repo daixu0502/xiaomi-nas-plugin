@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Unprivileged supervisor: graceful shutdown, session persistence and tracker refresh."""
 import fcntl
+from runtime_lock import open_lock
 import json
 import os
 import signal
@@ -60,7 +61,7 @@ def tracker_error(exc):
 
 def update_trackers(m):
     # Prevent duplicate workers without blocking normal API calls.
-    with (m.runtime / "tracker-update.lock").open("a") as lock:
+    with open_lock(m.runtime / "tracker-update.lock") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -163,11 +164,15 @@ def normalize_aria_session(session, completed_gids=()):
 
 def serve(m):
     m.ready()
-    lock = (m.runtime / "supervisor.lock").open("a")
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        return
+    with open_lock(m.runtime / "supervisor.lock") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        _serve_locked(m)
+
+
+def _serve_locked(m):
     # Refuse root even if launched outside the lifecycle script.
     if os.geteuid() == 0:
         raise DownloadError("下载核心禁止以 root 运行")
@@ -273,11 +278,13 @@ def serve(m):
             except subprocess.TimeoutExpired:
                 child.kill(); child.wait()
         (m.runtime / "service.pid").unlink(missing_ok=True)
+    if not stopping[0]:
+        raise DownloadError("下载核心意外退出，交由系统服务重新启动")
 
 
 def control(m, command):
     m.ready()
-    with (m.runtime / "lifecycle.lock").open("a") as lock:
+    with open_lock(m.runtime / "lifecycle.lock") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         control_locked(m, command)
 
@@ -314,7 +321,8 @@ def control_locked(m, command):
         return
     if command not in ("start", "ensure", "enable", "postinstall", "postupgrade"):
         raise DownloadError("未知服务操作")
-    (m.var / "enabled").touch(mode=0o600)
+    if not (m.var / "enabled").exists():
+        (m.var / "enabled").touch(mode=0o600)
     if live(m):
         return
     logfile = m.runtime / "service.log"

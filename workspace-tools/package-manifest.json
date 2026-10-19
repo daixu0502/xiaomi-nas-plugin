@@ -2,43 +2,43 @@
   "dockermanager": {
     "version": "1.1.13",
     "file": "dist/dockermanager-v1.1.13.tar.gz",
-    "sha256": "16e1c32b29ca8458ecef400c9d481316228a269bcca7b984ac526749fcd304f3",
+    "sha256": "1058cb143b6651f8e3c35403187ec8d8e16da77dd2bec30d061550cb32e7a264",
     "files": 28
   },
   "mihomo": {
     "version": "1.7.35",
     "file": "dist/mihomo-v1.7.35.tar.gz",
-    "sha256": "57b24d993a421684b76d342320b41ac2dd5963036f053f20f58fe967b883b5b9",
+    "sha256": "0c4a516227e3cbf49bf36ea4648d52f245b5c18930179454f729a9e0c918b04a",
     "files": 48
   },
   "taskcenter": {
     "version": "1.0.12",
     "file": "dist/taskcenter-v1.0.12.tar.gz",
-    "sha256": "71d9521d876d57ac6aad4c6ad52a5742f6bf8485624a66d9f492881ba7dff881",
+    "sha256": "24bc4519d5bd8b77204db0dc84a7995f85ebe71408cca6cf92aaf731aff6960c",
     "files": 29
   },
   "nascenter": {
     "version": "1.1.35",
     "file": "dist/nascenter-v1.1.35.tar.gz",
-    "sha256": "14e89c474174b45a25f5946e8b01b649bc1f3ca5957b3fcbcbbbe2cc357db74c",
+    "sha256": "884e98d252d16005327710df50dfa95c4b5938f7341c9d145cb7466e4b22d620",
     "files": 31
   },
   "sshrecovery": {
     "version": "1.1.14",
     "file": "dist/sshrecovery-v1.1.14.tar.gz",
-    "sha256": "6e2ead13d335665db211e1b0b70b00df9aa5db47a6e211802ac0e66492e0c00a",
+    "sha256": "79bbbef5a6beeed013f7812ff1567f5af3600a9f9e9f935aed6a3fdbe4039a4f",
     "files": 29
   },
   "quickshare": {
     "version": "1.1.37",
     "file": "dist/quickshare-v1.1.37.tar.gz",
-    "sha256": "8aab91c26c8adbda009879d5643dd32d80f97f9e9c8318c927248c55ceccabd9",
+    "sha256": "890bd176b83ed334d5d5f963fa34b3437b8ed3d7f3e9579a897d44819563be45",
     "files": 25
   },
   "downloadcenter": {
-    "version": "1.1.14",
-    "file": "dist/downloadcenter-v1.1.14.tar.gz",
-    "sha256": "a437f868e4220f025920c6c40e05340327ec10f7b1e93254c94b1f25b37c6b17",
-    "files": 32
+    "version": "1.1.15",
+    "file": "dist/downloadcenter-v1.1.15.tar.gz",
+    "sha256": "a46c33919a9d86d4de92c4b87e098cf6718a7ad6f535fefad55d9845e5f71dd1",
+    "files": 33
   }
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Verified qBittorrent 5 / libtorrent 2 updates, isolated from firmware src."""
 import fcntl
+from runtime_lock import open_lock
 import json
 import hashlib
 import os
@@ -142,7 +143,7 @@ def install_candidate(m, candidate, version):
         pending, previous, profile = stage / 'new', stage / 'old', m.var / 'qb-profile'
         shutil.copy2(candidate, pending); shutil.copy2(core_path(m), previous)
         old_version = binary_version(previous, m.runtime)
-        with (m.runtime / 'lifecycle.lock').open('a') as lock:
+        with open_lock(m.runtime / 'lifecycle.lock') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             enabled, running = (m.var / 'enabled').exists(), bool(live(m))
             stopped, switched, saved_profile = False, False, False
@@ -200,7 +201,7 @@ def run(m, command, proxy):
     from service import tracker_error
     if os.geteuid() == 0 or command not in ('check', 'apply'): raise DownloadError('更新必须由插件所属用户执行')
     m.ready()
-    with (m.runtime / 'core-update.lock').open('a') as lock:
+    with open_lock(m.runtime / 'core-update.lock') as lock:
         try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             write_state(m, state='error', message='另一个核心正在更新，请稍后重试'); return

@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='downloadcenter'
 PLUGIN_LABEL='下载中心'
-PLUGIN_VERSION='1.1.14'
+PLUGIN_VERSION='1.1.15'
 UNINSTALL_NOTE='停止所选用户下载服务；配置、种子和任务记录先备份。已下载及未完成文件均保留，不影响其他用户。'
 
 # Common installation flow adapted from the existing standalone plugins.
@@ -518,7 +518,7 @@ chmod 0700 "$HOME_DIR" "$VAR"; chmod 0600 "$VAR/"*.port "$VAR/rpc.secret"
 now=$(date +%s); size=$(du -sk "$SRC" | awk '{print $1*1024}')
 abstract=$(python3 -B "$SRC/files/integrity.py" "$SRC")
 jq -n --arg mpk "$NAS_HOME/INFO" --arg v "$PLUGIN_VERSION" --arg a "$abstract" --argjson t "$now" --argjson s "$size" \
-'{plugin:"downloadcenter",name:"下载中心",id:19096,version:$v,tags:["tool"],timestamp:$t,desc:"直链、磁链、BT 与 Tracker 管理",developer:"Local",publisher:"Local",changelog:"qBittorrent 在线核心更新、Tracker 生效核对与 Openlist 界面优化",system:false,size:$s,type:"standard",forceupgrade:false,ext:{},hotplug:["net"],abstract:$a}' > "$HOME_DIR/INFO"
+'{plugin:"downloadcenter",name:"下载中心",id:19096,version:$v,tags:["tool"],timestamp:$t,desc:"直链、磁链、BT 与 Tracker 管理",developer:"Local",publisher:"Local",changelog:"只读运行锁减少空闲索引写入，系统服务接管保活与异常退出恢复",system:false,size:$s,type:"standard",forceupgrade:false,ext:{},hotplug:["net"],abstract:$a}' > "$HOME_DIR/INFO"
 rm -f "$WEB_LINK"; ln -s "$HOME_DIR/src/ui" "$WEB_LINK"
 cp "$PACKAGE/src/ui/icon.png" "$ICON" || nas_fail "PNG 图标安装失败"
 chmod 0644 "$ICON"
@@ -541,14 +541,6 @@ runuser -u "$USER_NAME" -- "$SRC/files/qbittorrent-nox" --version >/dev/null || 
 runuser -u "$USER_NAME" -- env PLUG_USER="$USER_NAME" PLUG_NAME=downloadcenter PLUG_SRC_DIR="$SRC" \
     PLUG_HOME_DIR="$HOME_DIR" PLUG_TMP_DIR="$TMP" PLUG_STATUS=unverified \
     /usr/bin/plugin.sh verify || nas_fail "系统完整性校验失败，未启动；请保留暂存目录用于排查。"
-CRON="/etc/cron.d/downloadcenter-$USER_NAME"
-cat > "$CRON" <<EOF
-SHELL=/bin/sh
-PATH=/usr/sbin:/usr/bin:/sbin:/bin
-MAILTO=""
-* * * * * $USER_NAME /usr/bin/python3 -B $SRC/files/service.py ensure $HOME_DIR >/dev/null 2>&1
-EOF
-chmod 0644 "$CRON"; systemctl reload crond.service >/dev/null 2>&1 || true
 if [ "$WAS_ENABLED" = true ]; then
     "$HOME_DIR/scripts/control" start; sleep 2
     "$HOME_DIR/scripts/control" status || nas_fail "已安装，但下载核心未启动，请查看 $HOME_DIR/tmp/runtime/service.log"
@@ -559,6 +551,9 @@ rm -f "$registry_backup"
 nas_log "下载中心 $PLUGIN_VERSION 已安装给 $USER_NAME；下载范围仅为该用户的 data 文件区。"
 nas_log "BT 入站端口 $(cat "$VAR/peer.port")（TCP/UDP）；RPC 仅监听本机，不要转发 RPC 端口。"
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture --user "$USER_NAME" --plugin "$PLUGIN_NAME" --package "$INSTALLER_DIR/$PLUGIN_NAME" || nas_fail "规范校验或恢复登记失败"
+# Dedicated systemd supervision replaces the legacy source-polling Cron.
+rm -f "/etc/cron.d/downloadcenter-$USER_NAME"
+systemctl reload crond.service >/dev/null 2>&1 || true
 NAS_INSTALL_SCRIPT
 }
 

@@ -2,6 +2,8 @@
 """Root-installed recovery coordinator. No HTTP, sudo or user command interface."""
 import argparse
 import contextlib
+import ctypes
+import errno
 import fcntl
 import hashlib
 import json
@@ -9,8 +11,10 @@ import os
 from pathlib import Path
 import pwd
 import re
+import select
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -23,7 +27,9 @@ PLUGINS = {'mihomo', 'dockermanager', 'taskcenter', 'nascenter', 'sshrecovery', 
 SERVERS = {'mihomo', 'quickshare', 'downloadcenter'}
 MANAGED = SERVERS | {'taskcenter'}
 UNIT = 'minas-plugin-recovery'
-VERSION = '1.2.0'
+VERSION = '1.3.0'
+WATCH_UNIT = UNIT + '-watch.service'
+RUNTIME = Path('/run/minas-plugin-recovery')
 
 
 def require(ok, message):
@@ -76,7 +82,8 @@ def save(path, value, owner=None):
 def protected(path, mode=0o700):
     plain(path).mkdir(parents=True, exist_ok=True)
     require(path.stat().st_uid == 0, 'root-owned directory required: ' + str(path))
-    path.chmod(mode)
+    if stat.S_IMODE(path.stat().st_mode) != mode:
+        path.chmod(mode)
 
 
 def identity(user, plugin):
@@ -159,7 +166,9 @@ def install_daemon(user, plugin):
         'WorkingDirectory=' + str(home) + '\nPIDFile=' + str(home / 'tmp/runtime' / pidfile) + '\n'
         'ExecStart=/bin/sh ' + str(home / 'scripts/control') + ' start\n'
         'ExecStop=/bin/sh ' + str(home / 'scripts/control') + ' stop\n'
-        'GuessMainPID=no\nRestart=no\nKillMode=control-group\nTimeoutStartSec=90\nTimeoutStopSec=90\nUMask=0077\n')
+        # Explicit systemctl stop (including user/lifecycle stops) suppresses
+        # Restart=. Unexpected failures recover without scanning plugin files.
+        'GuessMainPID=no\nRestart=on-failure\nRestartSec=5\nKillMode=control-group\nTimeoutStartSec=90\nTimeoutStopSec=90\nUMask=0077\n')
     target = Path('/etc/systemd/system') / unit
     if not target.exists() or target.read_text() != content:
         atomic(target, content.encode(), 0o644)
@@ -180,7 +189,9 @@ def install_daemon(user, plugin):
             if os.path.exists(name): os.unlink(name)
     marker = Path('/etc/minas-plugin-services')
     protected(marker, 0o755)
-    atomic(marker / (user + '-' + plugin), unit.encode(), 0o644)
+    marker_file = marker / (user + '-' + plugin)
+    if not marker_file.is_file() or marker_file.read_bytes() != unit.encode():
+        atomic(marker_file, unit.encode(), 0o644)
 
 
 def service_operation(user, plugin, operation):
@@ -237,7 +248,9 @@ def linked(path, target, owner):
     else:
         require(not path.exists(), 'path occupied: ' + str(path))
         path.symlink_to(target)
-    os.lchown(path, *owner)
+    metadata = path.lstat()
+    if (metadata.st_uid, metadata.st_gid) != owner:
+        os.lchown(path, *owner)
 
 
 def prepare_tmp(user, src, tmp, owner):
@@ -506,6 +519,13 @@ def verify(user, plugin, home, src):
 
 def install_units():
     require((BASE / 'recovery.py').is_file(), 'recovery program not installed')
+    expected_program = hashlib.sha256((BASE / 'recovery.py').read_bytes()).hexdigest()
+    try:
+        previous_watch = read(RUNTIME / 'watch-status.json')
+    except (OSError, ValueError):
+        previous_watch = {}
+    restart = (previous_watch.get('programSHA256') != expected_program and
+               call(['systemctl', 'is-active', '--quiet', WATCH_UNIT], check=False).returncode == 0)
     service = '''[Unit]
 Description=Restore local Xiaomi NAS plugins
 After=local-fs.target network.target
@@ -515,27 +535,40 @@ ExecStart=/usr/bin/python3 -B /data/.minas-plugin-recovery/recovery.py reconcile
 TimeoutStartSec=600
 UMask=0077
 '''
-    timer = '''[Unit]
-Description=Check local Xiaomi NAS plugin registration
-[Timer]
-OnBootSec=90
-OnUnitInactiveSec=30
-Persistent=true
-Unit=minas-plugin-recovery.service
+    watcher = '''[Unit]
+Description=Watch Xiaomi NAS plugin recovery events
+After=local-fs.target network.target
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -B /data/.minas-plugin-recovery/recovery.py watch
+Restart=on-failure
+RestartSec=15
+RuntimeDirectory=minas-plugin-recovery
+RuntimeDirectoryMode=0700
+UMask=0077
 [Install]
-WantedBy=timers.target
+WantedBy=multi-user.target
 '''
     root = Path('/etc/systemd/system')
-    for suffix, content in (('service', service), ('timer', timer)):
-        path = root / (UNIT + '.' + suffix)
+    for name, content in ((UNIT + '.service', service), (WATCH_UNIT, watcher)):
+        path = root / name
         if not path.exists() or path.read_text() != content:
             atomic(path, content.encode(), 0o644)
-    # Cron is independent of the systemd unit; both serialize on the same lock.
+    # Remove both old full-scan sources. Healthy Cron checks only systemd's
+    # in-memory state; it never starts Python or reads plugin source/state.
+    call(['systemctl', 'disable', '--now', UNIT + '.timer'], check=False)
+    plain(root / (UNIT + '.timer')).unlink(missing_ok=True)
     cron = ('SHELL=/bin/sh\nPATH=/usr/sbin:/usr/bin:/sbin:/bin\nMAILTO=""\n'
-            '* * * * * root /usr/bin/python3 -B /data/.minas-plugin-recovery/recovery.py bootstrap --quiet\n')
-    atomic(Path('/etc/cron.d') / UNIT, cron.encode(), 0o644)
+            '* * * * * root /usr/bin/systemctl is-active --quiet ' + WATCH_UNIT +
+            ' || /usr/bin/systemctl start ' + WATCH_UNIT +
+            ' || /usr/bin/python3 -B /data/.minas-plugin-recovery/recovery.py bootstrap --quiet\n')
+    cron_path = Path('/etc/cron.d') / UNIT
+    if not cron_path.is_file() or cron_path.read_bytes() != cron.encode():
+        atomic(cron_path, cron.encode(), 0o644)
     call(['systemctl', 'daemon-reload'])
-    call(['systemctl', 'enable', '--now', UNIT + '.timer'])
+    call(['systemctl', 'enable', '--now', WATCH_UNIT])
+    if restart:
+        call(['systemctl', 'restart', WATCH_UNIT])
     call(['systemctl', 'reload', 'crond.service'], check=False)
 
 
@@ -654,12 +687,12 @@ def restore_missing_source(src, backup, owner):
             atomic(path, expected.read_bytes(), stat.S_IMODE(expected.stat().st_mode), owner)
 
 
-def restore_record(directory, intents=None):
+def restore_record(directory, intents=None, check_source=True):
     with record_lock(directory):
-        return restore_locked_record(directory, intents)
+        return restore_locked_record(directory, intents, check_source)
 
 
-def restore_locked_record(directory, intents=None):
+def restore_locked_record(directory, intents=None, check_source=True):
     if (directory / 'removed').exists():
         return
     saved = load_generation(directory)
@@ -681,7 +714,7 @@ def restore_locked_record(directory, intents=None):
         data = read(registry)
         live = data.get(plugin)
         expected_info = read(saved / 'INFO')
-        source_ok = src.is_dir() and digest(src) == expected_info['abstract']
+        source_ok = src.is_dir() and (not check_source or digest(src) == expected_info['abstract'])
         complete = ((src / 'ui/config').is_file() and (home / 'INFO').is_file()
                     and all((home / 'scripts' / p.name).is_file() for p in ((saved / 'scripts') if (saved / 'scripts').is_dir() else (saved / 'payload/scripts')).iterdir())
                     and all((home / name).is_symlink() for name in ('src', 'tmp', 'etc', 'var')) and source_ok)
@@ -695,8 +728,6 @@ def restore_locked_record(directory, intents=None):
             require(read(home / 'INFO')['version'] == expected_info['version'], 'different installed version; capture it explicitly')
         if src.is_dir() and not source_ok:
             restore_missing_source(src, saved / 'src', owner)
-            require(digest(src) == expected_info['abstract'], 'source changed; refusing silent rollback')
-        if complete:
             require(digest(src) == expected_info['abstract'], 'source changed; refusing silent rollback')
         if repair:
             home.mkdir(parents=True, exist_ok=True)
@@ -731,7 +762,8 @@ def restore_locked_record(directory, intents=None):
         # A tmp symlink can survive while its target is removed. Initialize the
         # parent and check the target even when the rest of the install is intact.
         tmp = Path(record['tmp'])
-        prepare_tmp(user, src, tmp, owner)
+        if check_source or repair:
+            prepare_tmp(user, src, tmp, owner)
         linked(home / 'tmp', tmp, owner)
         if plugin in SERVERS:
             install_daemon(user, plugin)
@@ -756,7 +788,8 @@ def restore_locked_record(directory, intents=None):
             atomic(backup, registry.read_bytes())
             data[plugin] = entry
             save(registry, data)
-        verify(user, plugin, home, src)
+        if check_source or repair:
+            verify(user, plugin, home, src)
     # Do not hold the list lock while lifecycle hooks update the list themselves.
     restore_component(saved, user, plugin)
     if plugin in SERVERS and not record['running'] and record.get('service_intent_time') == record.get('intent_time'):
@@ -777,7 +810,7 @@ def restore_locked_record(directory, intents=None):
         print('已恢复：' + user + '/' + plugin, flush=True)
 
 
-def reconcile():
+def reconcile(requests=None):
     failures = 0
     records = BASE / 'records'
     if not records.is_dir():
@@ -786,12 +819,247 @@ def reconcile():
     for directory in sorted(records.iterdir()):
         if not directory.is_dir():
             continue
+        if requests is not None and directory.name not in requests:
+            continue
         try:
-            restore_record(directory, intents)
+            restore_record(directory, intents, True if requests is None else requests[directory.name])
         except Exception as error:
             failures += 1
             print(directory.name + ': ' + str(error), file=sys.stderr, flush=True)
     require(not failures, str(failures) + ' recovery record(s) need attention')
+
+
+class PluginEvents:
+    """Kernel notifications only. No periodic stat, scan, or cache access."""
+    CHANGE = 0x00000008 | 0x00000080 | 0x00000100 | 0x00000200 | 0x00000040
+    SELF = 0x00000400 | 0x00000800 | 0x00002000
+    OVERFLOW = 0x00004000
+    IGNORED = 0x00008000
+
+    def __init__(self):
+        self.lib = ctypes.CDLL(None, use_errno=True)
+        self.lib.inotify_init1.argtypes = [ctypes.c_int]
+        self.lib.inotify_add_watch.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
+        self.fd = self.lib.inotify_init1(os.O_NONBLOCK | os.O_CLOEXEC)
+        if self.fd < 0:
+            raise OSError(ctypes.get_errno(), 'inotify_init1')
+        self.subscriptions = {}
+        self.specs = {}
+
+    def close(self):
+        os.close(self.fd)
+
+    def add(self, path, target, kind, names=None):
+        # IN_ONLYDIR | IN_DONT_FOLLOW: never follow a user-created symlink.
+        mask = self.CHANGE | self.SELF | 0x01000000 | 0x02000000 | 0x20000000
+        wd = self.lib.inotify_add_watch(self.fd, os.fsencode(path), mask)
+        if wd < 0:
+            error = ctypes.get_errno()
+            if error in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP):
+                return
+            raise OSError(error, 'cannot watch ' + str(path))
+        item = (target, kind, frozenset(names) if names is not None else None)
+        if item not in self.subscriptions.setdefault(wd, []):
+            self.subscriptions[wd].append(item)
+
+    def configure(self):
+        records = BASE / 'records'
+        self.add(BASE, None, 'config', {'records'})
+        self.add(records, None, 'config')
+        for directory in sorted(records.iterdir()) if records.is_dir() else []:
+            if not re.fullmatch(r'u[0-9]+-[a-z0-9]+', directory.name):
+                continue
+            self.add(directory, None, 'config', {'current', 'removed'})
+            if (directory / 'removed').exists():
+                continue
+            record = read(load_generation(directory) / 'record.json')
+            user, plugin = record['user'], record['plugin']
+            require(directory.name == user + '-' + plugin, 'invalid watch record identity')
+            try:
+                home, _ = identity(user, plugin)
+            except KeyError:
+                continue
+            src = Path(record['src'])
+            require(re.fullmatch(r'/nas/pool[0-9]+/' + user + '/plugin/pluginsrc/' + plugin, str(src)),
+                    'invalid watch source path')
+            key = directory.name
+            self.specs[key] = record
+            self.add(directory, key, 'registry', {'service-intent.json'})
+            self.add(Path('/data/plugin'), key, 'registry', {user + '.list'})
+            self.add(Path('/home'), key, 'source', {user})
+            self.add(home.parent.parent, key, 'source', {'plugin'})
+            self.add(home.parent, key, 'source', {plugin})
+            self.add(home, key, 'source', {'src', 'tmp', 'etc', 'var', 'INFO', 'scripts'})
+            self.add(home / 'scripts', key, 'source')
+            self.add(src.parent, key, 'source', {plugin})
+            # Only source directories are recursive; never watch etc/var/tmp
+            # contents, download progress, logs, PID files or user documents.
+            if os.path.ismount(src.parents[3]):
+                plain(src)
+                for parent, dirs, _ in os.walk(src, followlinks=False):
+                    dirs[:] = [name for name in dirs if not (Path(parent) / name).is_symlink()]
+                    self.add(Path(parent), key, 'source')
+                self.add(Path(record['tmp']).parent, key, 'source', {plugin})
+            self.add(Path('/data/plugin/www'), key, 'registry', {user})
+            self.add(Path('/data/plugin/www') / user, key, 'registry', {plugin})
+            self.add(Path('/data/plugin/www/icon'), key, 'registry', {plugin + '.icon'})
+
+    def drain(self):
+        requests, rebuild = {}, False
+        while True:
+            try:
+                data = os.read(self.fd, 256 * 1024)
+            except BlockingIOError:
+                break
+            if not data:
+                break
+            offset = 0
+            while offset < len(data):
+                wd, mask, _, size = struct.unpack_from('iIII', data, offset)
+                name = os.fsdecode(data[offset + 16:offset + 16 + size].split(b'\0', 1)[0])
+                offset += 16 + size
+                if mask & self.OVERFLOW:
+                    requests.update({key: True for key in self.specs})
+                    rebuild = True
+                    continue
+                for target, kind, names in self.subscriptions.get(wd, []):
+                    if name and names is not None and name not in names:
+                        continue
+                    if kind == 'config':
+                        if names is None and name and not re.fullmatch(r'u[0-9]+-[a-z0-9]+', name):
+                            continue
+                        rebuild = True
+                        requests.update({key: True for key in self.specs})
+                    else:
+                        requests[target] = requests.get(target, False) or kind == 'source'
+                        rebuild = rebuild or kind == 'source'
+        return requests, rebuild
+
+
+def pool_mounts(content):
+    """Ignore container/private mount churn; only storage pool mounts matter."""
+    return frozenset(tuple(row.split()[:4]) for row in content.splitlines()
+                     if len(row.split()) >= 4 and re.fullmatch(r'/nas/pool[0-9]+', row.split()[1]))
+
+
+def native_operation_busy():
+    # Original plugincenter does not hold our installer lock. Wait for its
+    # command process to finish as well as for a quiet event interval.
+    for process in Path('/proc').iterdir():
+        if not process.name.isdigit():
+            continue
+        try:
+            if (process / 'comm').read_text().strip() == 'plugincenter':
+                return True
+        except OSError:
+            pass
+    return False
+
+
+def event_reconcile(requests):
+    if native_operation_busy():
+        return False
+    with open(plain(Path('/data/plugin/.local-plugin-installer.lock')), 'a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        reconcile(requests)
+    return True
+
+
+def watch():
+    protected(RUNTIME)
+    # One watcher per NAS even if somebody invokes the command manually.
+    with open(plain(RUNTIME / 'watch.lock'), 'a') as singleton:
+        fcntl.flock(singleton, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        events = PluginEvents()
+        events.configure()
+        with open('/proc/self/mounts') as mounts:
+            known_mounts = pool_mounts(mounts.read())
+            poll = select.poll()
+            poll.register(events.fd, select.POLLIN)
+            poll.register(mounts.fileno(), select.POLLPRI | select.POLLERR)
+            pending = {key: True for key in events.specs}
+            uptime = float(Path('/proc/uptime').read_text().split()[0])
+            ready_at = time.monotonic() + max(5, 90 - uptime)
+            deadline = ready_at if pending else None
+            first_event = time.monotonic()
+            rebuild, failures = False, 0
+            status = dict(version=VERSION, pid=os.getpid(), procPid=int(os.readlink('/proc/self')), checks=0, fullChecks=0,
+                          watches=len(events.subscriptions), lastReason='startup', lastError='',
+                          programSHA256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
+            save(RUNTIME / 'watch-status.json', status)
+            try:
+                while True:
+                    timeout = -1 if deadline is None else max(0, int((deadline - time.monotonic()) * 1000))
+                    for fd, _ in poll.poll(timeout):
+                        if fd == events.fd:
+                            incoming, changed = events.drain()
+                            if incoming or changed:
+                                if not pending:
+                                    first_event = time.monotonic()
+                                for key, deep in incoming.items():
+                                    pending[key] = pending.get(key, False) or deep
+                                rebuild = rebuild or changed
+                                deadline = max(ready_at, min(time.monotonic() + 5, first_event + 30))
+                                status['lastReason'] = 'filesystem'
+                        elif fd == mounts.fileno():
+                            mounts.seek(0)
+                            current = pool_mounts(mounts.read())
+                            if current != known_mounts:
+                                known_mounts = current
+                                pending.update({key: True for key in events.specs})
+                                rebuild = True
+                                deadline = max(ready_at, time.monotonic() + 5)
+                                status['lastReason'] = 'storage-mount'
+                    if deadline is None or time.monotonic() < deadline:
+                        continue
+                    if rebuild:
+                        # Arm new watches before repairing; events generated by
+                        # the repair are queued and checked on the next pass.
+                        previous_keys = set(events.specs)
+                        replacement = PluginEvents()
+                        try:
+                            replacement.configure()
+                        except Exception:
+                            replacement.close()
+                            raise
+                        poll.unregister(events.fd)
+                        events.close()
+                        events = replacement
+                        poll.register(events.fd, select.POLLIN)
+                        for key in events.specs:
+                            if key not in previous_keys:
+                                pending[key] = True
+                        rebuild = False
+                    # An unmounted pool waits for the next mount notification,
+                    # without repeatedly checking its missing files on disk.
+                    pending = {key: deep for key, deep in pending.items() if key in events.specs
+                               and os.path.ismount(Path(events.specs[key]['src']).parents[3])}
+                    try:
+                        if pending and not event_reconcile(pending):
+                            deadline = time.monotonic() + 5
+                            continue
+                        if pending:
+                            status['checks'] += 1
+                            status['fullChecks'] += sum(pending.values())
+                        status.update(lastError='', lastCheck=time.time(), watches=len(events.subscriptions))
+                        failures = 0
+                    except Exception as error:
+                        failures += 1
+                        status.update(lastError=str(error)[:500], lastCheck=time.time())
+                        print('事件恢复失败：' + str(error), file=sys.stderr, flush=True)
+                    save(RUNTIME / 'watch-status.json', status)
+                    # Bounded retries only after a real failure. Conflicting
+                    # source edits need a new event/manual check, not polling.
+                    if failures and failures < 3:
+                        deadline = time.monotonic() + 60 * failures
+                    else:
+                        pending = {}
+                        deadline = None
+            finally:
+                events.close()
 
 
 def forget(user, plugin):
@@ -813,7 +1081,7 @@ def forget(user, plugin):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('capture', 'normalize', 'reconcile', 'bootstrap', 'forget', 'status', 'service'))
+    parser.add_argument('action', choices=('capture', 'normalize', 'reconcile', 'bootstrap', 'forget', 'status', 'service', 'watch'))
     parser.add_argument('--user')
     parser.add_argument('--plugin', choices=sorted(PLUGINS))
     parser.add_argument('--package', '--payload', dest='payload', type=Path)
@@ -831,7 +1099,9 @@ def main():
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 return
-        if args.action == 'service':
+        if args.action == 'watch':
+            watch()
+        elif args.action == 'service':
             require(args.user and args.plugin and args.operation, 'user/plugin/operation required')
             sys.exit(service_operation(args.user, args.plugin, args.operation))
         elif args.action in ('capture', 'normalize'):
