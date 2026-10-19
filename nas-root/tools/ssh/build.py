@@ -20,12 +20,22 @@ def build_ssh_entrypoint():
     embedded = ('write_repair_sources() {\n'
                 '    cat > "$STAGE/restore-ssh.sh" <<\'' + marker + '\'\n' +
                 worker + marker + '\n}\n')
-    for name,source in [('xiaomi-storage-open-ssh-wsl.sh','open-ssh-client.sh'),
+    bootstrap = (HERE / 'src/first-ssh-nas.sh').read_text(encoding='utf-8').rstrip() + '\n'
+    bootstrap_marker = 'MINAS_FIRST_SSH_SOURCE'
+    if bootstrap_marker in bootstrap.splitlines():
+        raise ValueError('Bootstrap source conflicts with heredoc delimiter')
+    for name,source in [('xiaomi-storage-open-ssh-wsl-1.0.9.462.sh','open-ssh-client.sh'),
                         ('install-ssh-autostart-fix.sh','install-ssh-client.sh')]:
         client=(HERE/'src'/source).read_text(encoding='utf-8')
-        start=client.index('write_repair_sources() {')
+        function = 'write_bootstrap_sources' if source == 'open-ssh-client.sh' else 'write_repair_sources'
+        start=client.index(function + '() {')
         end=client.index('\n}\n',start)+3
-        standalone=client[:start]+embedded+'\n'+client[end:]
+        selected = embedded
+        if source == 'open-ssh-client.sh':
+            selected = ('write_bootstrap_sources() {\n'
+                        '    cat > "$STAGE/first-ssh-nas.sh" <<\'' + bootstrap_marker + '\'\n' +
+                        bootstrap + bootstrap_marker + '\n}\n')
+        standalone=client[:start]+selected+'\n'+client[end:]
         if name=='install-ssh-autostart-fix.sh':
             standalone=standalone.replace('then main "$@"; fi','then main --install-boot-only "$@"; fi')
         (ROOT/name).write_text(standalone,encoding='utf-8',newline='\n')

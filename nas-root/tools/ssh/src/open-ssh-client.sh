@@ -1,265 +1,314 @@
-#!/bin/bash
-# Based on Scruel's minas-enable-ssh_wsl.sh (Enhanced, 2026.08):
-# https://github.com/scruel/xiaomi-storage-minas-tool/blob/main/minas-enable-ssh_wsl.sh
-# Compatibility patch 2.1.2: original certificate/WebDAV bootstrap first,
-# mi-shell support, then the exact same boot worker as the plugin/installer.
-
-echo "################################################"
-echo "#   __  __    ___    _   _      _      ____    #"
-echo "#  |  \/  |  |_ _|  | \ | |    / \    / ___|   #"
-echo "#  | |\/| |   | |   |  \| |   / _ \   \___ \   #"
-echo "#  | |  | |   | |   | |\  |  / ___ \   ___) |  #"
-echo "#  |_|  |_|  |___|  |_| \_| /_/   \_\ \____/   #"
-echo "################################################"
-echo "小米智能存储开启 SSH    原作 @Scruel / 兼容补丁 2.1.2"
-printf '%s\n' '' \
-    '首次使用请先在 WSL Ubuntu 中安装依赖（不是在 NAS 上执行）：' \
-    '  sudo apt update' \
-    '  sudo apt install openssh-client curl jq openssl coreutils dnsutils iproute2' \
-    '依赖已安装可忽略此提示；本脚本不会自动安装。' ''
-
-VERBOSE=0
-NAS_IP=
+#!/usr/bin/env bash
+# SSH 2.2.1; authenticated UCI entry researched by lvmaple/minas_plugin.
+set -Eeuo pipefail
+umask 077
+fail() { printf '失败：%s\n' "$*" >&2; exit 1; }
+verbose() { if [[ $VERBOSE == 1 ]]; then printf '[诊断] %s\n' "$*" >&2; fi; }
+usage() {
+    cat <<'HELP'
+小米智能存储开启 SSH 2.2.1（1.0.9.462 新入口，WSL / Linux）
+用法：bash xiaomi-storage-open-ssh-wsl-1.0.9.462.sh [NAS IPv4] [--identity 私钥] [--cert-dir 证书目录] [-v]
+客户端证书 → 临时 SMB /etc 共享 → 一次性 Cron → Bash 映射 → 验证 root SSH。
+验证成功后询问是否调用同目录 install-ssh-autostart-fix.sh；默认不安装。
+SSH 私钥存在则复用，不存在则生成 Ed25519 密钥；小米客户端 TLS 证书须已有。
+-v 显示阶段和验证结果，不输出密码、私钥或网络认证调试。
+首次使用在 WSL Ubuntu 安装依赖（不是在 NAS 上执行）：
+  sudo apt update
+  sudo apt install openssh-client curl jq openssl coreutils smbclient
+上游及本改写均未在纯原厂设备完成首次开启端到端验收。
+HELP
+}
+ipv4() {
+    local part; local -a parts
+    [[ $1 =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+    IFS=. read -r -a parts <<< "$1"
+    for part in "${parts[@]}"; do
+        [[ $part == 0 || $part != 0* ]] && ((10#$part <= 255)) || return 1
+    done
+}
+NAS_IP= CERT_HOME= VERBOSE=0
 IDENTITY=$HOME/.ssh/id_ed25519
-CERT_HOME=
-while [ $# -gt 0 ]; do
-    case "$1" in
-        -v) VERBOSE=1; shift ;;
+while (($#)); do
+    case $1 in
         --identity|--cert-dir)
-            [ $# -ge 2 ] && [ -n "$2" ] || { echo "$1 缺少参数" >&2; exit 1; }
-            if [ "$1" = --identity ]; then IDENTITY=$2; else CERT_HOME=$2; fi
+            (($# >= 2)) && [[ -n $2 ]] || fail "$1 缺少参数"
+            if [[ $1 == --identity ]]; then IDENTITY=$2; else CERT_HOME=$2; fi
             shift 2 ;;
-        -h|--help)
-            echo '2.1.2 用法：bash xiaomi-storage-open-ssh-wsl.sh [NAS IPv4] [-v] [--identity 私钥] [--cert-dir 证书目录]'
-            echo '未开启 SSH：客户端证书 → WebDAV 上传/触发 → 验证 SSH → 安装同源开机修复。'
-            exit 0 ;;
-        -*) echo "不支持的选项：$1；已有 SSH 请使用 install-ssh-autostart-fix.sh。" >&2; exit 1 ;;
-        *) [ -z "$NAS_IP" ] || { echo '只能指定一个 NAS IP' >&2; exit 1; }; NAS_IP=$1; shift ;;
+        -v) VERBOSE=1; shift ;;
+        -h|--help) usage; exit 0 ;;
+        -*) fail "未知选项：$1" ;;
+        *) [[ -z $NAS_IP ]] || fail '只能指定一个 NAS IP'; NAS_IP=$1; shift ;;
     esac
 done
-umask 077
-
-# ---------- 清理临时文件 ----------
-STAGE=$(mktemp -d /tmp/minas-enable-ssh.XXXXXXXX) || exit 1
-UPLOAD_PATH=
-cleanup() {
-    if [ -n "$UPLOAD_PATH" ] && [ -f "$STAGE/webdav.conf" ]; then
-        curl -s --connect-timeout 5 --max-time 10 "${CERT_ARGS[@]}" --config "$STAGE/webdav.conf" \
-            --resolve "$CN:5000:$NAS_IP" -X DELETE "https://$CN:5000$UPLOAD_PATH" -o /dev/null || true
+usage
+for tool in curl jq openssl ssh ssh-keygen smbclient timeout mktemp cmp; do
+    command -v "$tool" >/dev/null || fail "命令 '$tool' 未找到，请按上面的命令安装依赖"
+done
+[[ -n $NAS_IP ]] || read -r -p 'NAS IPv4 地址：' NAS_IP || fail '未输入 NAS IPv4 地址'
+ipv4 "$NAS_IP" || fail 'NAS IPv4 地址无效'
+[[ $IDENTITY == /* ]] || IDENTITY=$PWD/$IDENTITY
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+STAGE=$(mktemp -d /tmp/minas-first-ssh.XXXXXXXX)
+SMB_READY=0 SHARE_ATTEMPTED=0 SHARE_CONFIRMED=0 DIRECTORY_CREATED=0 CLEANED=0
+SMB_DISARMED=0 CRON_ATTEMPTED=0 WORKER_SETTLED=0 DIRECTORY_UNCERTAIN=0
+WDV_PATH= SHARE_ID= NAS_USER= CN= REMOTE= JOB=
+CERT_ARGS=()
+SSH_OPTIONS=(-i "$IDENTITY" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new
+    -o ConnectTimeout=5 -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
+api() {
+    # Bodies and credentials stay off process arguments and error messages.
+    curl --silent --show-error --fail --noproxy '*' --connect-timeout 5 --max-time 45 \
+        "${CERT_ARGS[@]}" --resolve "$CN:443:$NAS_IP" -H 'Content-Type: application/json' \
+        --data-binary @- "https://$CN/cgi-bin/luci/$1"
+}
+accounts() {
+    printf '{}' | api netshare/get_samba_account > "$STAGE/accounts.json" || return 1
+    jq -e '(.code == null or .code == 0) and (.data.account|type == "array") and
+        all(.data.account[]; ((.id|tostring) == "1" or (.id|tostring) == "2") and
+            (.username|type == "string") and (.share_dir|type == "array")) and
+        ([.data.account[].id|tostring] | length == (unique|length))' "$STAGE/accounts.json" >/dev/null
+}
+dav() {
+    curl --silent --show-error --noproxy '*' --connect-timeout 5 --max-time 20 \
+        "${CERT_ARGS[@]}" --config "$STAGE/webdav.conf" --resolve "$CN:5000:$NAS_IP" "$@"
+}
+smb() {
+    timeout 25 smbclient "//$NAS_IP/etc-${NAS_USER#u}" -A "$STAGE/smb.auth" \
+        --option='client min protocol=SMB2' -c "$1" > "$STAGE/smb.log" 2>&1
+}
+remove_smb_file() {
+    smb "del $1" || true
+    if smb "allinfo $1"; then return 1; fi
+    # A transport/authentication failure is not proof that the file is absent.
+    grep -Eq 'NT_STATUS_(OBJECT_NAME_NOT_FOUND|OBJECT_PATH_NOT_FOUND|NO_SUCH_FILE)' "$STAGE/smb.log"
+}
+read_receipt() {
+    RECEIPT=
+    smb "get $REMOTE.status $STAGE/receipt" || return 1
+    [[ -f $STAGE/receipt ]] || return 1
+    RECEIPT=$(cat "$STAGE/receipt")
+    case $RECEIPT in
+        "$TOKEN:ready"|"$TOKEN:failed") WORKER_SETTLED=1 ;;
+        *) return 1 ;;
+    esac
+}
+cleanup_remote() {
+    local ok=1 code quiesce_deadline
+    if [[ $SMB_READY == 1 && $SMB_DISARMED != 1 ]]; then
+        remove_smb_file "cron.d/$JOB" || ok=0
+        remove_smb_file "cron.d/.$JOB" || ok=0
+        remove_smb_file "$REMOTE.sh" || ok=0
+        # Keep the authenticated recovery channel until disarming is confirmed.
+        [[ $ok == 1 ]] || return 1
+        if [[ $CRON_ATTEMPTED == 1 && $WORKER_SETTLED != 1 ]]; then
+            # Removing Cron does not stop a worker that has already started.
+            # Its timeout is 50 seconds, followed by a 5-second kill grace.
+            echo '任务已撤销，等待可能仍在执行的任务退出后清理回执...'
+            quiesce_deadline=$((SECONDS + 60))
+            while ((SECONDS < quiesce_deadline)); do
+                read_receipt && break
+                sleep 2
+            done
+        fi
+        remove_smb_file "$REMOTE.status" || return 1
+        SMB_DISARMED=1
     fi
-    case "$STAGE" in /tmp/minas-enable-ssh.*) rm -rf -- "$STAGE" ;; esac
+    if [[ $SHARE_ATTEMPTED == 1 ]]; then
+        if accounts; then
+            if jq -e --arg id "$SHARE_ID" --arg user "$NAS_USER" --rawfile password "$STAGE/smb.password" \
+                '.data.account[] | select((.id|tostring)==$id and .username==$user and .password==$password)' "$STAGE/accounts.json" >/dev/null; then
+                if jq -n --arg id "$SHARE_ID" '{id:$id}' | api netshare/del_samba_account > "$STAGE/delete.json"; then
+                    code=$(jq -r '.code // -1' "$STAGE/delete.json")
+                    [[ $code == 0 ]] || ok=0
+                else ok=0; fi
+            elif [[ $SHARE_CONFIRMED != 1 ]]; then
+                # An interrupted add can leave a UCI share without an account.
+                ok=0
+            fi
+            accounts && jq -e --arg id "$SHARE_ID" \
+                'all(.data.account[]; (.id|tostring)!=$id)' "$STAGE/accounts.json" >/dev/null || ok=0
+        else ok=0; fi
+    fi
+    # Preserve the directory and recovery channel when account removal is uncertain.
+    [[ $ok == 1 ]] || return 1
+    if [[ $DIRECTORY_CREATED == 1 ]]; then
+        code=$(dav -X DELETE -o /dev/null -w '%{http_code}' "https://$CN:5000$WDV_PATH") || code=000
+        case $code in 200|204|404) DIRECTORY_CREATED=0 ;; *) ok=0 ;; esac
+    fi
+    [[ $DIRECTORY_UNCERTAIN == 0 ]] || ok=0
+    [[ $ok == 1 ]] && CLEANED=1
+    [[ $ok == 1 ]]
+}
+cleanup() {
+    local result=$?
+    trap - EXIT INT TERM HUP
+    if [[ $CLEANED != 1 ]] && ! cleanup_remote; then
+        printf '临时状态未确认清理完成。恢复材料保留在 %s（含临时凭据，请勿公开）。\n' "$STAGE" >&2
+        printf '请按其中 recovery.txt 撤销一次性任务和本次共享；本次未报告完整成功。\n' >&2
+        result=1
+    else
+        rm -rf -- "$STAGE"
+    fi
+    exit "$result"
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
-check_commands() {
-    for cmd in openssl curl ssh ssh-keygen jq timeout; do
-        command -v "$cmd" >/dev/null 2>&1 || { echo "命令 '$cmd' 未找到，请安装后再试。" >&2; exit 1; }
-    done
-}
-check_commands
+TOKEN=$(openssl rand -hex 8)
+[[ $TOKEN =~ ^[0-9a-f]{16}$ ]] || fail '无法生成事务编号'
+REMOTE=.minas-ssh-$TOKEN JOB=minas-first-ssh-$TOKEN
 
-# ---------- 获取 NAS IP ----------
-valid_ip() {
-    local part; local -a parts
-    [[ $1 =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
-    IFS=. read -r -a parts <<< "$1"
-    for part in "${parts[@]}"; do ((10#$part <= 255)) || return 1; done
-}
-read_nas_ip() {
-    while true; do
-        read -r -p '请输入小米智能存储的内网 IP 地址: ' NAS_IP || return 1
-        if valid_ip "$NAS_IP"; then printf '%s\n' "$NAS_IP"; return; fi
-        echo 'IP 地址无效，请重新输入。' >&2
-    done
-}
-if [[ -z "$NAS_IP" ]]; then
-    echo "尝试自动获取小米智能存储的内网 IP..."
-    if command -v dig >/dev/null && command -v ip >/dev/null; then
-        PREFIX=$(ip -4 addr show | grep -v 127.0.0 | grep inet | head -1 | awk '{print $2}' | cut -d/ -f1 | cut -d. -f1-3)
-        if valid_ip "$PREFIX.1"; then
-            for i in {1..254}; do
-                name=$(dig +time=1 +tries=1 -x "$PREFIX.$i" +short 2>/dev/null)
-                [[ "$name" =~ minas ]] && { NAS_IP="$PREFIX.$i"; break; }
-            done
-        fi
-    fi
-    if [[ -z "$NAS_IP" ]]; then
-        echo "无法自动找到设备，请手动输入。" >&2
-        NAS_IP=$(read_nas_ip) || exit 1
-    fi
+if [[ -z $CERT_HOME ]] && command -v cmd.exe >/dev/null && command -v wslpath >/dev/null; then
+    WIN_LOCAL=$(cmd.exe /d /c 'chcp 65001 >nul & echo %LOCALAPPDATA%' 2>/dev/null | tr -d '\r') || WIN_LOCAL=
+    [[ -z $WIN_LOCAL ]] || CERT_HOME=$(wslpath "$WIN_LOCAL")/minasCert
 fi
-valid_ip "$NAS_IP" || { echo 'NAS IP 无效' >&2; exit 1; }
-echo "小米智能存储 IP: $NAS_IP"
-
-# ---------- 获取 CN (证书通用名) ----------
-echo "正在从 NAS 获取证书 CN..."
-CN=$(timeout 15 openssl s_client -connect "$NAS_IP:443" -servername x </dev/null 2>/dev/null |
-    openssl x509 -noout -subject -nameopt RFC2253 | sed -n 's/.*CN *= *\([^,]*\).*/\1/p')
-[[ "$CN" =~ ^[A-Za-z0-9.-]+$ ]] || { echo '无法提取有效证书 CN，请检查设备状态。' >&2; exit 1; }
-echo "CN: $CN"
-
-# ---------- 准备证书文件 ----------
-check_cert_files() { [[ -f "$CA_FILE" && -f "$CERT_FILE" && -f "$KEY_FILE" ]]; }
-prep_certfiles() {
-    local given=$CERT_HOME file; local -a certs
-    TRY_CNT=0
-    while true; do
-        if [[ -n "$given" ]]; then
-            CERT_HOME=$given
-        elif command -v cmd.exe >/dev/null && command -v wslpath >/dev/null && [ $TRY_CNT -lt 3 ]; then
-            LOCALAPPDATA=$(wslpath "$(cmd.exe /d /c 'chcp 65001 >nul & echo %LOCALAPPDATA%' 2>/dev/null | tr -d '\r')" 2>/dev/null)
-            CERT_HOME="$LOCALAPPDATA/minasCert"
-        else
-            CERT_HOME=/tmp/minascert
-            mkdir -p "$CERT_HOME"
-        fi
-        CA_FILE="$CERT_HOME/ca_chain.pem"
-        certs=()
-        for file in "$CERT_HOME/"*_cert.pem; do [[ ! -f "$file" ]] || certs+=("$file"); done
-        [[ ${#certs[@]} -le 1 ]] || { echo '证书目录有多对证书，请用 --cert-dir 指定当前登录账户的一对证书。' >&2; exit 1; }
-        CERT_FILE=${certs[0]:-}
-        KEY_FILE=${CERT_FILE%_cert.pem}_private_key.pem
-        if check_cert_files; then echo "证书文件已就绪，目录：$CERT_HOME"; break; fi
-        echo "证书文件缺失，请登录小米客户端或将证书放到 $CERT_HOME，再按回车继续。" >&2
-        read -r || exit 1
-        TRY_CNT=$((TRY_CNT + 1))
-    done
-}
-prep_certfiles
+CERT_HOME=${CERT_HOME:-$HOME/.local/share/minasCert}
+certs=()
+for file in "$CERT_HOME/"*_cert.pem; do [[ ! -f $file ]] || certs+=("$file"); done
+((${#certs[@]} == 1)) || fail '证书目录须只有当前账户的一对证书；请用 --cert-dir 指定'
+CA_FILE=$CERT_HOME/ca_chain.pem CERT_FILE=${certs[0]}
+KEY_FILE=${CERT_FILE%_cert.pem}_private_key.pem
+[[ -f $CA_FILE && -f $KEY_FILE ]] || fail '缺少 ca_chain.pem 或配对的 _private_key.pem'
 CERT_ARGS=(--cacert "$CA_FILE" --cert "$CERT_FILE" --key "$KEY_FILE")
-
-# ---------- 获取 WebDAV 凭证 ----------
-echo "获取 WebDAV 凭证..."
-RESP=$(curl -fsS --connect-timeout 5 --max-time 30 "${CERT_ARGS[@]}" --resolve "$CN:443:$NAS_IP" \
-    -X POST -H "Content-Type: application/json" -d '{}' "https://$CN/cgi-bin/luci/filemgr/get_pool_info") || exit 1
-ACCOUNT=$(printf '%s' "$RESP" | jq -ce '[..|objects|select((.username|type)=="string" and (.password|type)=="string")][0] // error("missing account")') || { echo '无法解析 WebDAV 凭证。' >&2; exit 1; }
-WDV_USER=$(printf '%s' "$ACCOUNT" | jq -r .username)
-WDV_PWD=$(printf '%s' "$ACCOUNT" | jq -r .password)
-[[ "$WDV_USER" =~ ^u[0-9]+$ && -n "$WDV_PWD" ]] || { echo 'WebDAV 账户格式无效。' >&2; exit 1; }
-echo "WebDAV 用户凭证解析成功: $WDV_USER"
-# Passwords stay off stdout and curl argv, including verbose mode.
-printf '%s\0%s' "$WDV_USER" "$WDV_PWD" | jq -Rrs 'split("\u0000")|"user = "+((.[0]+":"+.[1])|@json)' > "$STAGE/webdav.conf"
-unset RESP ACCOUNT WDV_PWD
-
-# ---------- 生成 SSH 密钥 ----------
-mkdir -p "$(dirname "$IDENTITY")"
-if [[ -f "$IDENTITY" ]]; then
-    echo '密钥文件已存在，使用原私钥对应的公钥。'
-elif [[ -e "$IDENTITY.pub" ]]; then
-    echo '仅有公钥而没有对应私钥，已停止以免覆盖。请用 --identity 指定现有私钥。' >&2; exit 1
+verbose '已选择已有的小米客户端 TLS 证书，开始认证 NAS'
+CN=$(timeout 12 openssl s_client -connect "$NAS_IP:443" -servername x </dev/null 2>/dev/null |
+    openssl x509 -noout -subject -nameopt RFC2253 | sed -n 's/.*CN *= *\([^,]*\).*/\1/p') || fail '无法读取 NAS 证书'
+[[ $CN =~ ^[A-Za-z0-9.-]+$ ]] || fail 'NAS 证书 CN 无效'
+printf '{"selector":["webDAV","internal_pool"]}' | api filemgr/get_pool_info > "$STAGE/pool.json" || fail '证书认证或 WebDAV 凭据获取失败'
+jq -e '.code == 0 and (.data.webDAV.username|type == "string") and
+    (.data.webDAV.password|type == "string" and length>0)' "$STAGE/pool.json" >/dev/null || fail 'WebDAV 响应缺少成功码或有效凭据'
+NAS_USER=$(jq -r '.data.webDAV.username' "$STAGE/pool.json")
+[[ $NAS_USER =~ ^u[0-9]+$ ]] || fail 'WebDAV 用户格式无效'
+DAV_DIR=$(jq -er '.data.internal_pool | if type=="array" and length==1 then .[0].data_dir else error("unsupported pools") end' "$STAGE/pool.json") || fail '无法确认单池目录布局，未修改共享'
+[[ $DAV_DIR == /pool0/data ]] || fail '当前仅支持 /pool0/data 单池布局，未修改共享'
+jq -r '"user = "+((.data.webDAV.username+":"+.data.webDAV.password)|@json)' "$STAGE/pool.json" > "$STAGE/webdav.conf"
+rm -f "$STAGE/pool.json"
+mkdir -p -- "$(dirname -- "$IDENTITY")"
+if [[ ! -e $IDENTITY ]]; then
+    [[ ! -L $IDENTITY ]] || fail '私钥路径是失效符号链接，请用 --identity 指定有效路径'
+    [[ ! -e $IDENTITY.pub && ! -L $IDENTITY.pub ]] || fail '仅有公钥，缺少私钥；请用 --identity 指定现有私钥'
+    printf '生成新的 SSH 登录密钥：%s\n' "$IDENTITY"
+    ssh-keygen -q -t ed25519 -N '' -C '' -f "$IDENTITY" </dev/null
 else
-    echo '生成 SSH 密钥对 (ed25519)...'
-    ssh-keygen -q -t ed25519 -N '' -f "$IDENTITY" -C '' </dev/null || exit 1
+    [[ -f $IDENTITY ]] || fail 'SSH 私钥路径不是普通文件'
+    printf '复用已有 SSH 登录私钥：%s\n' "$IDENTITY"
 fi
-ssh-keygen -y -f "$IDENTITY" | awk '{print $1 " " $2}' > "$STAGE/public.key"
-ssh-keygen -lf "$STAGE/public.key" >/dev/null || { echo '公钥校验失败' >&2; exit 1; }
+ssh-keygen -y -f "$IDENTITY" > "$STAGE/public.raw" || fail '无法从私钥读取公钥'
+awk '{print $1 " " $2}' "$STAGE/public.raw" > "$STAGE/public.key"
+ssh-keygen -lf "$STAGE/public.key" >/dev/null || fail '公钥校验失败'
+verbose "SSH 公钥指纹：$(ssh-keygen -lf "$STAGE/public.key")"
 PUB_KEY=$(cat "$STAGE/public.key")
-
-# ---------- 准备 enable-ssh.sh 脚本 ----------
-REMOTE_NAME=enable-ssh-${STAGE##*.}.sh
-REMOTE_FILE=/nas/pool0/$WDV_USER/data/$REMOTE_NAME
-cat > "$STAGE/enable-ssh.sh" << EOF
-#!/bin/sh
-set -eu
-umask 077
-[ ! -f /etc/passwd.bak ] && cp /etc/passwd /etc/passwd.bak || true
-mkdir -p /home/rootx/.ssh
-touch /home/rootx/.profile
-[ -e /home/rootx/models ] || ln -s /firmware/models /home/rootx/models
-# Retain old firmware login authorization when moving the root home.
-if grep -q '^root:[^:]*:0:0:[^:]*:/root:' /etc/passwd && [ -f /root/.ssh/authorized_keys ]; then
-    merged=\$(mktemp /tmp/minas-auth-merge.XXXXXXXX)
-    { cat /home/rootx/.ssh/authorized_keys 2>/dev/null || true; printf '\n'; cat /root/.ssh/authorized_keys; } | awk 'NF && !seen[\$0]++' > "\$merged"
-    cat "\$merged" > /home/rootx/.ssh/authorized_keys; rm -f "\$merged"
-fi
-sed -i '/^root:/s|:/root:|:/home/rootx:|' /etc/passwd
-DOCKER_CMD='export PATH="\$PATH:/data/docker"'
-if ! grep -Fqx "\$DOCKER_CMD" /home/rootx/.profile; then printf '%s\n' "\$DOCKER_CMD" >> /home/rootx/.profile; fi
-# Keep existing login authorization instead of replacing it.
-grep -Fqx '$PUB_KEY' /home/rootx/.ssh/authorized_keys 2>/dev/null || printf '\n%s\n' '$PUB_KEY' >> /home/rootx/.ssh/authorized_keys
-chmod 700 /home/rootx/.ssh
-chmod 600 /home/rootx/.ssh/authorized_keys
-echo 'DROPBEAR_EXTRA_ARGS=" -s"' > /etc/default/dropbear
-usermod -s /bin/sh root
-
-# New firmware ignores root's shell and starts mi-shell. Scope the Bash bind
-# to Dropbear services, preserving the vendor binary and existing custom config.
-if [ -e /usr/sbin/mi-shell ]; then
-    normal=/usr/bin/bash.bash
-    [ -x "\$normal" ] || normal=/bin/bash
-    [ -x "\$normal" ] || { echo '新固件缺少可用 Bash，未报告成功' >&2; exit 1; }
-    normal=\$(readlink -f "\$normal"); limited=\$(readlink -f /usr/sbin/mi-shell)
-    case "\$normal:\$limited" in *[!a-zA-Z0-9_./:-]*) exit 1 ;; esac
-    mkdir -p /etc/systemd/system/dropbear@.service.d
-    conf=/etc/systemd/system/dropbear@.service.d/90-normal-shell.conf
-    candidate=\$(mktemp /tmp/minas-shell-conf.XXXXXXXX)
-    printf '[Service]\nBindReadOnlyPaths=%s:%s\n' "\$normal" "\$limited" > "\$candidate"
-    if [ -e "\$conf" ] && ! cmp -s "\$candidate" "\$conf"; then rm -f "\$candidate"; echo '已有不同的 SSH shell 配置，未覆盖' >&2; exit 1; fi
-    cp "\$candidate" "\$conf"; chmod 644 "\$conf"; rm -f "\$candidate"
-    systemctl daemon-reload
-fi
-systemctl enable dropbear.socket
-systemctl reset-failed dropbear.socket || true
-systemctl start dropbear.socket
-# Do not write RPMB: persistence uses the shared boot-repair worker below.
-rm -f '$REMOTE_FILE'
+[[ $PUB_KEY =~ ^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521))\ [A-Za-z0-9+/=]+$ ]] || fail '不支持的公钥类型'
+accounts || fail '无法确认已有 SMB 账户，未修改共享'
+cp "$STAGE/accounts.json" "$STAGE/accounts.before.json"
+if jq -e '.data.account[] | select((.id|tostring)=="1")' "$STAGE/accounts.json" >/dev/null; then SHARE_ID=2; else SHARE_ID=1; fi
+jq -e --arg id "$SHARE_ID" --arg user "$NAS_USER" \
+    'all(.data.account[]; (.id|tostring)!=$id and (.username|ascii_downcase)!=($user|ascii_downcase))' "$STAGE/accounts.json" >/dev/null ||
+    fail '没有安全的空闲 SMB 槽位或同名账户已存在；请先在客户端自行调整，本脚本不会覆盖'
+SECTION=${NAS_USER}_$SHARE_ID
+verbose "已确认空闲 SMB 槽位 $SHARE_ID"
+SMB_PASSWORD=$(openssl rand -hex 20)
+printf 'username = %s\npassword = %s\n' "$NAS_USER" "$SMB_PASSWORD" > "$STAGE/smb.auth"
+PREFIX=minasssh${TOKEN}000000
+printf -v WEIRD '%s\n"\nset sambashare.%s.user_force=root\nset sambashare.%s.create_mask=0644\nset sambashare.%s.path=etc\nset sambashare.%s.comment=' \
+    "$PREFIX" "$SECTION" "$SECTION" "$SECTION" "$SECTION"
+ENCODED=$(printf '%s' "$WEIRD" | jq -sRr @uri)
+WDV_PATH=/pool0/data/$ENCODED/
+REAL_DIR=/home/$NAS_USER/pool0/data/$WEIRD
+cat > "$STAGE/recovery.txt" <<EOF
+NAS: $NAS_IP; 本次 SMB 槽位: $SHARE_ID; 账户: $NAS_USER
+若不能自动清理，在已有 root 终端执行：
+rm -f /etc/cron.d/$JOB /etc/cron.d/.$JOB /etc/$REMOTE.sh /etc/$REMOTE.status
+撤销任务与脚本后至少等待 60 秒，再次删除 /etc/$REMOTE.status，避免仍在执行的任务重建回执。
+仅撤销本次创建的 $SECTION（不要删除其他共享或模糊删除 passwd/shadow）：
+nas call smb_mgr.sh del_samba_account $NAS_USER $SHARE_ID
+nas call smb_mgr.sh restart
+在客户端删除本次以 $PREFIX 开头的临时目录；保留其他目录和原有 SSH 公钥。
+本目录 smb.auth 含本次临时 SMB 密码。确认清理后删除本目录。
+没有 root SSH 时，用 smbclient //$NAS_IP/etc-${NAS_USER#u} -A "$STAGE/smb.auth"
+先删除 cron.d/$JOB、cron.d/.$JOB、$REMOTE.sh、$REMOTE.status，再从客户端移除本次 SMB 账户。
+若添加中断导致没有 sambauser 记录，请在 root 终端核对本次 $SECTION 后仅删除该段：
+uci -q delete sambashare.$SECTION; uci commit sambashare
 EOF
-sed -i 's/\r$//' "$STAGE/enable-ssh.sh"
-
-# ---------- 上传 enable-ssh.sh 到 NAS ----------
-echo '上传 enable-ssh.sh 到 NAS ...'
-UPLOAD_PATH=/pool0/data/$REMOTE_NAME
-HTTP_CODE=$(curl -sS --connect-timeout 5 --max-time 30 -w '%{http_code}' -o /dev/null \
-    --config "$STAGE/webdav.conf" "${CERT_ARGS[@]}" --resolve "$CN:5000:$NAS_IP" \
-    -T "$STAGE/enable-ssh.sh" "https://$CN:5000$UPLOAD_PATH") || exit 1
-case "$HTTP_CODE" in 200|201|204) ;; *) echo "上传脚本失败，HTTP $HTTP_CODE" >&2; exit 1 ;; esac
-echo "上传脚本成功 (HTTP $HTTP_CODE)"
-
-# ---------- 触发执行 enable-ssh.sh ----------
-echo '请求执行 enable-ssh.sh 脚本...'
-ESCAPED=$(printf '%s' "$REMOTE_FILE" | od -vAn -to1 | tr -s '[:space:]' '\n' | sed '/^$/d;s/^/\\/' | tr -d '\n')
-TRIGGER=$(jq -nr --arg command "\";sh \$(printf '$ESCAPED');\"" '$command|@uri')
-P="/pool0/video/__X2${TRIGGER}__.ts"
-curl -sS -g --connect-timeout 5 --max-time 30 --config "$STAGE/webdav.conf" "${CERT_ARGS[@]}" --resolve "$CN:5000:$NAS_IP" "https://$CN:5000$P" -o /dev/null || true
-sleep 3
-
-# ---------- 测试 SSH 连接 ----------
-echo '测试 SSH 连接与真实 root 命令...'
-SSH_OPTIONS=(-i "$IDENTITY" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
-READY=0
-for ((i=0; i<10; i++)); do
-    RESULT=$(ssh "${SSH_OPTIONS[@]}" "root@$NAS_IP" 'printf "__MINAS_ROOT_COMMAND_OK__\n"; id -u' 2>/dev/null) || RESULT=
-    if [[ ${RESULT//$'\r'/} == $'__MINAS_ROOT_COMMAND_OK__\n0' ]]; then READY=1; break; fi
+write_bootstrap_sources() {
+    cp "$(dirname -- "${BASH_SOURCE[0]}")/first-ssh-nas.sh" "$STAGE/first-ssh-nas.sh"
+}
+write_bootstrap_sources
+{
+    printf '#!/bin/sh\nTOKEN=%s\nJOB=%s\nREMOTE=%s\n' "$TOKEN" "$JOB" "$REMOTE"
+    printf "PUB_KEY='%s'\n" "$PUB_KEY"
+    cat "$STAGE/first-ssh-nas.sh"
+} > "$STAGE/payload.sh"
+printf 'SHELL=/bin/sh\nPATH=/usr/sbin:/usr/bin:/sbin:/bin\n* * * * * root /usr/bin/timeout -k 5 50 /bin/sh /etc/%s.sh\n' "$REMOTE" > "$STAGE/cron"
+echo '创建本次临时共享，保留已有 SMB 账户...'
+DIRECTORY_UNCERTAIN=1
+CODE=$(dav -X MKCOL -o /dev/null -w '%{http_code}' "https://$CN:5000$WDV_PATH") || fail '创建临时目录请求失败；结果不明，保留恢复材料供核对'
+DIRECTORY_UNCERTAIN=0
+[[ $CODE == 201 ]] || fail "创建临时目录失败，HTTP $CODE（未复用已有目录）"
+DIRECTORY_CREATED=1
+accounts || fail '无法再次核对 SMB 槽位'
+[[ $(jq -cS '.data.account' "$STAGE/accounts.before.json") == "$(jq -cS '.data.account' "$STAGE/accounts.json")" ]] || fail 'SMB 配置已变化，请稍后重试'
+SHARE_ATTEMPTED=1
+printf '%s' "$SMB_PASSWORD" > "$STAGE/smb.password"
+jq -n --arg user "$NAS_USER" --rawfile password "$STAGE/smb.password" --arg dir "$REAL_DIR" \
+    '{username:$user,password:$password,share_dir:[$dir]}' | api netshare/add_samba_account > "$STAGE/add.json" || fail '添加共享请求失败，开始核对清理'
+CODE=$(jq -r '.code // -1' "$STAGE/add.json")
+case $CODE in 0|2502) ;; *) fail "添加共享失败，业务码 $CODE" ;; esac
+accounts || fail '无法核对新建 SMB 账户'
+jq -e --arg id "$SHARE_ID" --arg user "$NAS_USER" --arg dir "$REAL_DIR" --rawfile password "$STAGE/smb.password" \
+    'any(.data.account[]; (.id|tostring)==$id and .username==$user and .password==$password and .share_dir==[$dir])' "$STAGE/accounts.json" >/dev/null || fail '新建共享与本次事务不匹配'
+SHARE_CONFIRMED=1
+jq -n --arg id "$SHARE_ID" --arg user "$NAS_USER" --rawfile password "$STAGE/smb.password" \
+    '{id:$id,username:$user,password:$password,share_dir:["/etc"]}' | api netshare/set_samba_account > "$STAGE/set.json" || fail '修复临时共享路径失败'
+jq -e '.code == 0' "$STAGE/set.json" >/dev/null || fail '修复共享未返回明确成功码'
+unset SMB_PASSWORD
+for ((i=0; i<5; i++)); do
+    if smb 'ls'; then SMB_READY=1; break; fi
     sleep 2
 done
-if [[ $READY != 1 ]]; then
-    echo 'SSH 未通过验证。固件可能封堵了上游证书触发入口；HTTP 成功不代表已执行，未安装开机修复。' >&2
-    echo '请使用预先安装的 SSH 恢复插件或已有管理入口；本脚本不会自动切换其他引导方式。' >&2
-    exit 1
-fi
-
-# ---------- 开启成功后，复用插件/独立安装器的开机修复 ----------
-write_repair_sources() {
-    # build.py embeds the same worker as install-ssh-autostart-fix.sh.
-    cp "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/restore-ssh.sh" "$STAGE/restore-ssh.sh"
-}
-write_repair_sources || exit 1
-echo 'SSH 已开启，正在安装同源开机修复...'
-{
-    printf '#!/bin/sh\nset -eu\numask 077\nstage=$(mktemp -d /tmp/minas-boot-install.XXXXXXXX)\n'
-    printf 'trap '\''rm -rf -- "$stage"'\'' EXIT\n'
-    printf 'cat > "$stage/restore-ssh.sh" <<'\''MINAS_REMOTE_WORKER'\''\n'
-    cat "$STAGE/restore-ssh.sh"
-    printf 'MINAS_REMOTE_WORKER\n'
-    printf '/bin/sh "$stage/restore-ssh.sh" --install-boot-only --worker "$stage/restore-ssh.sh"\n'
-} > "$STAGE/install-boot.sh"
-if ! ssh "${SSH_OPTIONS[@]}" "root@$NAS_IP" /bin/sh -s < "$STAGE/install-boot.sh"; then
-    echo 'SSH 已开启，但开机修复安装失败。请稍后运行独立安装脚本，或使用插件安装开机修复。' >&2; exit 1
-fi
-AUDIT='test -s /data/ssh-autostart-fix/restore-ssh.sh && test -s /data/ssh-autostart-fix/login-authorized-keys && grep -Fq "@reboot root /bin/sh /data/ssh-autostart-fix/restore-ssh.sh" /etc/cron.d/keep-ssh && systemctl is-active --quiet dropbear.socket && systemctl show minas.boot_check.service -p DropInPaths --value | grep -Fq /etc/systemd/system/minas.boot_check.service.d/90-keep-ssh.conf'
-if ! ssh "${SSH_OPTIONS[@]}" "root@$NAS_IP" "$AUDIT"; then
-    echo 'SSH 已开启，但开机修复未通过验证，不能保证重启后仍可用。' >&2; exit 1
-fi
-echo 'SSH 连接成功，开机修复已安装！请保留电脑上的登录私钥。'
-printf 'SSH 登录命令：ssh -i "%s" root@%s\n' "$IDENTITY" "$NAS_IP"
+[[ $SMB_READY == 1 ]] || fail 'SMB /etc 共享不可用'
+smb "put $STAGE/payload.sh $REMOTE.sh; get $REMOTE.sh $STAGE/payload.verify" &&
+    cmp -s "$STAGE/payload.sh" "$STAGE/payload.verify" || fail '上传脚本或回读校验失败'
+smb "put $STAGE/cron cron.d/.$JOB; get cron.d/.$JOB $STAGE/cron.verify" &&
+    cmp -s "$STAGE/cron" "$STAGE/cron.verify" || fail '上传一次性任务或回读校验失败'
+CRON_ATTEMPTED=1
+smb "rename cron.d/.$JOB cron.d/$JOB" || fail '一次性任务激活失败'
+verbose '载荷与 Cron 回读一致，一次性任务已激活'
+echo '等待一次性任务执行并验证本次 root SSH...'
+READY=0
+DEADLINE=$((SECONDS + 130))
+while ((SECONDS < DEADLINE)); do
+    if read_receipt && [[ $RECEIPT == "$TOKEN:failed" ]]; then
+        fail 'NAS 一次性任务返回失败回执；未安装开机修复'
+    fi
+    RESULT=$(timeout 7 ssh "${SSH_OPTIONS[@]}" "root@$NAS_IP" \
+        "test \"\$(cat /etc/$REMOTE.status 2>/dev/null)\" = '$TOKEN:ready' && printf '__MINAS_${TOKEN}__\\n' && id -u" 2>"$STAGE/ssh.log") || RESULT=
+    if [[ ${RESULT//$'\r'/} == "__MINAS_${TOKEN}__"$'\n0' ]]; then
+        READY=1 WORKER_SETTLED=1
+        verbose '本次任务回执、SSH 命令标记与 UID 0 均已验证'
+        break
+    fi
+    if grep -Eq 'REMOTE HOST IDENTIFICATION HAS CHANGED|Host key verification failed' "$STAGE/ssh.log"; then
+        fail 'SSH 主机密钥校验失败，请先核实设备身份及 known_hosts；脚本不会自动删除已有主机记录'
+    fi
+    sleep 2
+done
+[[ $READY == 1 ]] || fail 'SSH 未通过本次执行回执和 UID 0 验证；未安装开机修复'
+cleanup_remote || fail 'SSH 已验证，但临时任务/共享未确认清理完成'
+echo 'SSH 已验证成功；本次临时共享和任务已清理。请保留登录私钥。'
+printf 'SSH 登录命令：ssh -i %q root@%s\n' "$IDENTITY" "$NAS_IP"
+ANSWER=
+read -r -p '是否安装开机 SSH 修复？[y/N] ' ANSWER || ANSWER=
+case $ANSWER in
+    y|Y|yes|YES|是)
+        INSTALLER=$SCRIPT_DIR/install-ssh-autostart-fix.sh
+        if [[ -f $INSTALLER ]] && bash "$INSTALLER" "$NAS_IP" --identity "$IDENTITY"; then
+            echo '开机 SSH 修复已安装并通过安装器验证。'
+        else
+            echo 'SSH 已可用，但开机 SSH 修复调用失败，不能保证重启后仍可用。' >&2
+            printf '请将仓库 nas-root/install-ssh-autostart-fix.sh 放到开启脚本同一目录：%s\n' "$SCRIPT_DIR" >&2
+            printf '保留文件名 install-ssh-autostart-fix.sh，用 LF 换行；然后在 WSL / Linux 重试：\nbash %q %q --identity %q\n' "$INSTALLER" "$NAS_IP" "$IDENTITY" >&2
+            exit 1
+        fi ;;
+    *) echo '已跳过开机 SSH 修复；本次 SSH 可用性已验证，重启后的恢复未安装。' ;;
+esac
