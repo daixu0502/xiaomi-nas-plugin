@@ -6,7 +6,7 @@ import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from openlist_gateway import lan_config
+from openlist_gateway import lan_config, client_allowed
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -14,7 +14,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def allowed(self):
         peer = ipaddress.ip_address(self.client_address[0])
-        return (any(peer in n for n in self.server.networks)
+        return (client_allowed(peer, self.server.networks)
                 and self.headers.get('Host', '').split(':')[0] == self.server.server_address[0]
                 and self.path == '/jsonrpc')
 

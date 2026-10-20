@@ -21,6 +21,51 @@ from qb_client import QB, added_ok
 from download_lib import DownloadError, valid_url
 
 
+_DOCKER_NETWORKS = ()
+_DOCKER_NETWORKS_AT = None
+_PRIVATE_NETWORKS = tuple(ipaddress.IPv4Network(v) for v in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'))
+
+
+def _parse_docker_networks(routes, is_bridge):
+    networks = set()
+    for row in routes.splitlines()[1:]:
+        fields = row.split()
+        if len(fields) < 8 or not re.fullmatch(r'docker[0-9]+|br-[A-Za-z0-9_.-]+', fields[0]):
+            continue
+        try:
+            # Trust only live, directly connected Linux bridges, never a
+            # default route or a subnet claimed by a caller's request.
+            if not int(fields[3], 16) & 1 or int(fields[2], 16) or not int(fields[7], 16) or not is_bridge(fields[0]):
+                continue
+            address = ipaddress.IPv4Address(int(fields[1], 16).to_bytes(4, 'little'))
+            mask = ipaddress.IPv4Address(int(fields[7], 16).to_bytes(4, 'little'))
+            network = ipaddress.IPv4Network(str(address) + '/' + str(mask), strict=False)
+            if any(network.subnet_of(block) for block in _PRIVATE_NETWORKS):
+                networks.add(network)
+        except (ValueError, OverflowError, OSError):
+            continue
+    return tuple(sorted(networks, key=lambda n: (int(n.network_address), n.prefixlen)))
+
+
+def _docker_networks():
+    global _DOCKER_NETWORKS, _DOCKER_NETWORKS_AT
+    now = time.monotonic()
+    if _DOCKER_NETWORKS_AT is None or now - _DOCKER_NETWORKS_AT >= 2:
+        try:
+            networks = _parse_docker_networks(Path('/proc/net/route').read_text(),
+                                             lambda name: (Path('/sys/class/net') / name / 'bridge').is_dir())
+        except OSError:
+            networks = ()
+        _DOCKER_NETWORKS, _DOCKER_NETWORKS_AT = networks, now
+    return _DOCKER_NETWORKS
+
+
+def client_allowed(peer, networks, docker=True):
+    if any(peer in network for network in networks):
+        return True
+    return docker and peer.version == 4 and any(peer in network for network in _docker_networks())
+
+
 def lan_config(m, filename='openlist-lan.json'):
     path = m.var / filename
     if not path.exists():
@@ -64,7 +109,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self.connection.settimeout(5)
             peer = ipaddress.ip_address(self.client_address[0])
-            if not any(peer in network for network in self.server.allowed_networks):
+            if not client_allowed(peer, self.server.allowed_networks, docker=self.server.server_address[0] != '127.0.0.1'):
                 return self.respond('Forbidden', 403)
             host = self.headers.get('Host', '').split(':')[0]
             if host not in self.server.allowed_hosts: return self.respond('Forbidden', 403)
