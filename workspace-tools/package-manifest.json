@@ -18,9 +18,9 @@
     "files": 29
   },
   "nascenter": {
-    "version": "1.1.35",
-    "file": "dist/nascenter-v1.1.35.tar.gz",
-    "sha256": "884e98d252d16005327710df50dfa95c4b5938f7341c9d145cb7466e4b22d620",
+    "version": "1.1.36",
+    "file": "dist/nascenter-v1.1.36.tar.gz",
+    "sha256": "2edd933f7697f872510cf3de89e4652c7cca8b98f46c9d1a736bf009540a1692",
     "files": 31
   },
   "sshrecovery": {

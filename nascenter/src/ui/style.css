@@ -52,6 +52,8 @@
 [data-minas-plugin="nascenter"] .danger-button{border: 1px solid rgba(206, 77, 86, 0.28); color: var(--red); background: rgba(206, 77, 86, 0.1);}
 [data-minas-plugin="nascenter"] .disk-card{padding: 17px; border: 1px solid rgba(255, 255, 255, 0.84); border-radius: 19px; background: var(--surface); box-shadow: var(--shadow);}
 [data-minas-plugin="nascenter"] .disk-head{display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;}
+[data-minas-plugin="nascenter"] .disk-head > div{flex: 1; min-width: 0; overflow-wrap: anywhere;}
+[data-minas-plugin="nascenter"] .disk-head > .badge{flex: 0 0 auto; white-space: nowrap;}
 [data-minas-plugin="nascenter"] .disk-head h3{overflow-wrap: anywhere;}
 [data-minas-plugin="nascenter"] .disk-head p{margin-top: 4px;}
 [data-minas-plugin="nascenter"] .badge{padding: 5px 9px; border-radius: 999px; color: var(--green); background: rgba(21, 150, 109, 0.12); font-size:13px; font-weight: 800;}
