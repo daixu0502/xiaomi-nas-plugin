@@ -130,7 +130,7 @@ var document = window.XiaomiPluginClient.document;
     try {
       const packet = await api('status',{includeSettings:!snapshot||fresh||page==='settings'||page==='trackers'});
       snapshot = {...packet,settings:packet.settings||snapshot?.settings}; const s = snapshot;
-      $('health').textContent = s.running ? '服务运行中' : '服务未运行'; $('health').className = 'badge ' + (s.running ? 'enabled' : 'failed');
+      $('health').textContent = s.running ? '运行中' : '已停止'; $('health').className = 'badge ' + (s.running ? 'enabled' : 'failed');
       $('qbEngineVersion').textContent = 'qBittorrent ' + (s.engines?.qbittorrent?.version || '未连接') + ' · BT／磁链';
       $('ariaEngineVersion').textContent = 'aria2 ' + (s.engineVersion || '未连接') + ' · 直链';
       $('version').textContent = '插件版本 ' + s.version; $('down').textContent = bytes(s.stats.downloadSpeed) + '/s'; $('up').textContent = bytes(s.stats.uploadSpeed) + '/s'; $('count').textContent = s.tasks.filter(t => live.includes(t.status)).length; $('free').textContent = bytes(s.free);

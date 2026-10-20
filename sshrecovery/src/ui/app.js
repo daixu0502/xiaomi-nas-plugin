@@ -28,7 +28,7 @@ function showError(message,target='error'){
  if(target==='keyError'){byId(byId('keyFile').files.length?'keyFile':'keyText').setAttribute('aria-invalid','true');box.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'});try{box.focus({preventScroll:true})}catch{box.focus()}}
 }
 function render(s){
- state=s;byId('sshState').className='status-pill '+(s.sshActive?'online':'offline');byId('sshState').textContent=s.sshActive?'已开启':'未开启';byId('port').textContent=s.port;
+ state=s;byId('sshState').className='status-pill '+(s.sshActive?'online':'offline');byId('sshState').textContent=s.sshActive?'运行中':'已停止';byId('port').textContent=s.port;
  byId('hostState').textContent=(s.hostKeyValid??s.hostKey)?'可用':s.hostBackup?'可恢复':s.hostKey?'待修复':'缺失';byId('keyState').textContent=s.keySaved?'已保存':'未配置';
  const a=s.loginAuthorization,reasons={home_missing:'目录缺失',ssh_missing:'目录缺失',authorization_missing:'未写入',saved_key_not_installed:'公钥未安装',no_saved_key:'未配置校验',permissions_or_content:'权限或内容异常',ready:'已就绪'};
  byId('authorizationState').textContent=a?(reasons[a.reason]||'待检查'):'待检查';

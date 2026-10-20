@@ -158,7 +158,7 @@ var document = window.XiaomiPluginClient.document;
   function list(id,items,renderer,empty) { $(id).replaceChildren(...(items.length?items.map(renderer):[node('div','empty',empty)])); }
   function render() {
     const heartbeat=data.lastTick&&data.serverTime-data.lastTick<180;
-    $('health').textContent=!data.scheduler?'调度已停用':heartbeat?'调度正常':'等待调度心跳'; $('health').className='badge '+(!data.scheduler?'stopped':heartbeat?'enabled':'warning');
+    $('health').textContent=!data.scheduler?'已停止':heartbeat?'运行中':'等待中'; $('health').className='badge '+(!data.scheduler?'stopped':heartbeat?'enabled':'warning');
     $('schedulerToggle').textContent=data.scheduler?'停止调度服务':'启动调度服务';
     $('schedulerToggle').disabled=!!data.runs.some(r=>r.state==='running');
     $('schedulerToggle').className=data.scheduler?'secondary':'primary';

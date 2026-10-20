@@ -395,6 +395,7 @@ var document = window.XiaomiPluginClient.document;
       return data;
     }).catch(function (error) {
       setStatus(false);
+      byId('statusPill').innerHTML = '<span></span>连接失败';
       byId('versionText').textContent = error.message;
       if (showMessage) toast(error.message, true);
     });

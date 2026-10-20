@@ -149,7 +149,7 @@ var document = window.XiaomiPluginClient.document;
         return;
       }
       byId('engineBadge').className = 'status-pill running';
-      byId('engineBadge').innerHTML = '<i></i>运行正常';
+      byId('engineBadge').innerHTML = '<i></i>运行中';
       byId('engineSubtitle').textContent = (data.name || '小米智能存储') + ' · Docker ' + (data.serverVersion || '未知版本');
       byId('runningMetric').textContent = data.running;
       byId('stoppedMetric').textContent = data.stopped;
