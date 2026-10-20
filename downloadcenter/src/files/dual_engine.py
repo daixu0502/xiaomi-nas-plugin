@@ -403,29 +403,45 @@ class DualManager(Manager):
         except DownloadError: result['applied'] = False
         return result
 
-    def apply_qb_trackers(self, row):
-        trackers = self.settings()['trackers']
+    def apply_qb_trackers(self, row, trackers=None):
+        if trackers is None: trackers = self.settings()['trackers']
         if not trackers: return 'empty'
-        props = self.qb.request('torrents/properties?hash=' + row['gid'])
-        if props.get('is_private') or props.get('private'): return 'private'
-        if not self.qb.files(row['gid']): return 'metadata'
-        self.qb.request('torrents/addTrackers', {'hash': row['gid'], 'urls': '\n'.join(trackers)})
+        ident = row.get('gid') or row['hash']
+        if row.get('isPrivate'): return 'private'
+        props = self.qb.request('torrents/properties?hash=' + ident)
+        if props.get('is_private') or props.get('private') or props.get('isPrivate'): return 'private'
+        if not self.qb.files(ident): return 'metadata'
+        existing = {t['url'] for t in self.qb.request('torrents/trackers?hash=' + ident) if t.get('tier', -1) >= 0}
+        missing = [url for url in dict.fromkeys(trackers) if url not in existing]
+        if not missing: return 'unchanged'
+        self.qb.request('torrents/addTrackers', {'hash': ident, 'urls': '\n'.join(missing)})
         return 'applied'
 
     def apply_trackers(self):
-        # aria2 only owns retained legacy jobs. External Openlist jobs are untouched.
+        # Keep aria2 ownership rules; qB's configured list applies to all its
+        # non-private torrents, regardless of which client added them.
         result = super().apply_trackers()
-        result.update(qbTasks=0, qbApplied=0, qbPrivate=0, qbMetadata=0, qbFailed=0, qbNoTrackers=0)
-        for row in self.rows():
-            if self.is_qb(row):
-                result['qbTasks'] += 1
-                try:
-                    outcome = self.apply_qb_trackers(row)
-                    result[{'applied':'qbApplied', 'private':'qbPrivate', 'metadata':'qbMetadata', 'empty':'qbNoTrackers'}[outcome]] += 1
-                    if outcome == 'applied': result['applied'] += 1
-                except DownloadError:
-                    result['qbFailed'] += 1
-                    result['failed'].append(json.loads(row['snapshot'])['name'])
+        result.update(qbTasks=0, qbApplied=0, qbUnchanged=0, qbPrivate=0, qbMetadata=0, qbFailed=0, qbNoTrackers=0, nativeEnabled=False)
+        trackers = self.settings()['trackers']
+        try:
+            # Native qB handles every new .torrent/magnet, including Openlist,
+            # without task polling or requiring a download-center database row.
+            self.qb.request('app/setPreferences', {'json': json.dumps(self.qb.tracker_preferences())})
+            result['nativeEnabled'] = bool(trackers)
+            tasks = self.qb.torrents()
+        except DownloadError:
+            result['deferred'] = True
+            atomic_json(self.runtime / 'tracker-apply.json', dict(result, time=time.time()))
+            return result
+        for row in tasks:
+            result['qbTasks'] += 1
+            try:
+                outcome = self.apply_qb_trackers(row, trackers)
+                result[{'applied':'qbApplied', 'unchanged':'qbUnchanged', 'private':'qbPrivate', 'metadata':'qbMetadata', 'empty':'qbNoTrackers'}[outcome]] += 1
+                if outcome == 'applied': result['applied'] += 1
+            except DownloadError:
+                result['qbFailed'] += 1
+                result['failed'].append(row.get('name', row['hash']))
         atomic_json(self.runtime / 'tracker-apply.json', dict(result, time=time.time()))
         return result
 
@@ -439,7 +455,7 @@ class DualManager(Manager):
             props = self.qb.request('torrents/properties?hash=' + task['hash'])
             trackers = [t for t in self.qb.request('torrents/trackers?hash=' + task['hash']) if t.get('tier', -1) >= 0]
             actual = {t['url'] for t in trackers}
-            rows.append({'name': task['name'], 'owned': task['hash'] in own, 'private': bool(props.get('private', props.get('is_private'))),
+            rows.append({'name': task['name'], 'owned': task['hash'] in own, 'private': bool(task.get('isPrivate') or props.get('private') or props.get('is_private') or props.get('isPrivate')),
                          'matched': len(configured & actual), 'total': len(actual),
                          'working': sum(t.get('status') == 2 for t in trackers), 'failed': sum(t.get('status') == 4 for t in trackers)})
         return {'configured': len(configured), 'tasks': len(tasks), 'checked': len(rows), 'rows': rows,

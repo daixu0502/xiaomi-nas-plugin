@@ -162,6 +162,7 @@ var document = window.XiaomiPluginClient.document;
       if (!settingsLoaded) { fillSettings(); settingsLoaded = true; }
       if (!btLoaded) { fillBt(); btLoaded = true; }
       const bt = s.bt || {};
+      $('qbPortSummary').textContent = 'qB BT 入站端口：' + (bt.peerPort || '未分配') + '（TCP / UDP），UPnP / NAT-PMP 申请映射的是此端口；上方 Openlist 地址是管理接口。';
       $('btPort').textContent = 'BT 入站端口：' + (bt.peerPort || '未分配') + '（TCP / UDP）。有公网 IP 时需在路由器转发此端口，不要转发 RPC 管理端口。';
       $('btIpv6Hint').textContent = bt.ipv6Detected ? '检测到系统 IPv6 接口信息；是否拥有可用公网 IPv6 及防火墙放行仍需确认。' : '尚未检测到系统 IPv6 接口信息，开启开关不代表网络已支持 IPv6。';
       $('btApplyStatus').textContent = bt.restartRequired ? '已保存的 BT 参数尚未生效；下次启动应用，或点击下方按钮重启下载核心。' : (s.running ? '保存的 BT 参数与本次核心启动配置一致。' : '下次启动下载核心时应用已保存参数。');
@@ -189,7 +190,7 @@ var document = window.XiaomiPluginClient.document;
       }
       if (core.state === 'installing' || qb.state === 'installing') { for (const id of ['serviceStart', 'serviceStop', 'btRestart']) $(id).disabled = true; }
       const applied = s.trackerApply;
-      $('trackerApplyStatus').textContent = applied?.time ? '最近应用：qB 已追加 ' + (applied.qbApplied || 0) + ' 个任务，私有种子跳过 ' + (applied.qbPrivate || 0) + ' 个，等待元数据 ' + (applied.qbMetadata || 0) + ' 个，失败 ' + (applied.qbFailed || 0) + ' 个。追加成功不代表 Tracker 已连通。' : '';
+      $('trackerApplyStatus').textContent = applied?.time ? 'qB 新任务自动追加：' + (applied.nativeEnabled ? '已启用（含 Openlist）' : applied.deferred ? '等待核心启动后应用' : '未启用') + '。现有任务：已补充 ' + (applied.qbApplied || 0) + ' 个，已包含列表 ' + (applied.qbUnchanged || 0) + ' 个，私有种子跳过 ' + (applied.qbPrivate || 0) + ' 个，等待元数据 ' + (applied.qbMetadata || 0) + ' 个，失败 ' + (applied.qbFailed || 0) + ' 个。追加成功不代表 Tracker 已连通。' : '';
       $('trackerResults').replaceChildren();
       (s.trackerStatus.sources || []).forEach(source => {
         const row = text('article', '', 'tracker-result');

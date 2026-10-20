@@ -183,7 +183,11 @@ class QB:
                 'max_seeding_time_enabled': True, 'max_seeding_time': s['seedMinutes'],
                 'max_ratio_act': 0, 'preallocate_all': False, 'incomplete_files_ext': False,
                 'temp_path_enabled': False, 'auto_tmm_enabled': False, 'save_resume_data_interval': 15,
-                'add_trackers_enabled': False, 'add_trackers': '', 'web_ui_upnp': False}
+                **self.tracker_preferences(s), 'web_ui_upnp': False}
+
+    def tracker_preferences(self, settings=None):
+        trackers = (settings or self.m.settings())['trackers']
+        return {'add_trackers_enabled': bool(trackers), 'add_trackers': '\n'.join(trackers)}
 
     def apply_preferences(self):
         self.request('app/setPreferences', {'json': json.dumps(self.preferences())})

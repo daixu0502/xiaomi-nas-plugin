@@ -37,6 +37,14 @@ def live(m):
         return 0
 
 
+def apply_saved_trackers(m):
+    try:
+        with m.locked():
+            m.apply_trackers()
+    except DownloadError:
+        print('Saved Tracker list will be retried when settings are applied', flush=True)
+
+
 def tracker_error(exc):
     if isinstance(exc, HTTPError):
         reason = {403: "服务器拒绝访问", 404: "订阅地址不存在", 429: "请求过于频繁",
@@ -227,7 +235,9 @@ def _serve_locked(m):
         gateway = start_gateway(m)
         from lan_rpc import Listener
         aria_lan = Listener(m)
-        last_save, last_auto, tracker_worker = 0, time.time(), None
+        last_save, last_auto = 0, time.time()
+        tracker_worker = threading.Thread(target=apply_saved_trackers, args=(manager(m.home),), daemon=True)
+        tracker_worker.start()
         while not stopping[0] and child.poll() is None and qb_child.poll() is None:
             m.ready()  # Pool lost: stop instead of writing into an empty mountpoint.
             with m.locked():
