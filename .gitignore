@@ -1,49 +1,89 @@
-# Local artifacts and dependencies. Keep this project a single source repository.
-**/.git/
+# Repository policy lives only in these two root files.
+**/.gitignore
+**/.gitattributes
+!/.gitignore
+!/.gitattributes
+.git/
+
+# Local distribution, maintenance workspace and generated package catalog.
 /dist/
-**/dist/
-**/.cache/
-**/.test-cache/
-**/.pytest_cache/
-**/__pycache__/
-**/.tools/
-**/.deps/
-**/node_modules/
-**/offline/
-**/local/
-**/screenshots/
-**/artifacts/
+/local/
+/workspace-tools/
+/package-manifest.json
+
+# Tools, tests and generated artifacts at any depth stay local.
+tools/
+tests/
+__tests__/
+test_*
+test-*
+*_test.*
+*.test.*
+*.spec.*
+dist/
+releases/
+local/
+offline/
+artifacts/
+screenshots/
+output/
+coverage/
+htmlcov/
+.coverage
+.coverage.*
+
+# Dependencies, build output and caches.
+node_modules/
+.tools/
+.deps/
+.build/
+build/
+target/
+.venv/
+venv/
+.cache/
+.test-cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+__pycache__/
 *.py[cod]
-*.tmp
-*.tgz
+*.egg-info/
+
+# Downloaded runtime engines; installed from verified upstream packages.
+/*/src/files/mihomo
+/downloadcenter/src/files/aria2c
+/downloadcenter/src/files/qbittorrent-nox
+
+# Archives, temporary files and runtime state.
 *.tar
 *.tar.gz
+*.tgz
 *.zip
+*.7z
 *.log
+*.tmp
+*.temp
+*.pid
+*.sock
+*.swp
+*.swo
+*~
+**/etc/var/
 
-# Test code stays local; Markdown remains publishable.
-**/tests/**
-!**/tests/**/
-!**/tests/**/*.md
-**/__tests__/**
-!**/__tests__/**/
-!**/__tests__/**/*.md
-**/test_*.py
-**/*_test.go
-**/*.test.*
-**/*.spec.*
-
-# Real credentials and generated runtime data.
-*.pem
-*.key
-**/id_rsa
-**/id_ed25519
+# Real credentials and local environment files.
 .env
 .env.*
 !.env.example
+*.key
+*.pem
+*.pub
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
 
-# Device-specific diagnostics and container recreation records stay local.
-/nas-root/tools/bridge-net-network/create-containers.sh
-/nas-root/tools/bridge-net-network/CONTAINERS.md
-/downloadcenter/tools/diagnose-qb-tasks.py
-
+# Operating-system metadata.
+.DS_Store
+Thumbs.db
+desktop.ini

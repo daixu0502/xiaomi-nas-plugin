@@ -1,15 +1,50 @@
-* text=auto
+# NAS / Linux sources use LF on every platform.
+* text=auto eol=lf
+/.gitignore text eol=lf
+/.gitattributes text eol=lf
 *.sh text eol=lf
 *.cgi text eol=lf
 *.py text eol=lf
 *.js text eol=lf
 *.cjs text eol=lf
+*.mjs text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.svg text eol=lf
 *.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
 *.md text eol=lf
+*.conf text eol=lf
 **/INFO text eol=lf
 **/scripts/control text eol=lf
 **/scripts/hotplug text eol=lf
 **/ui/config text eol=lf
-*.png -text
-*.gz -text
-*.zip -text
+**/minas-helper text eol=lf
+**/*-helper text eol=lf
+**/mihomo-docker-proxy text eol=lf
+
+# Windows command scripts require CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets must never undergo newline conversion or text merging.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.gz binary
+*.tgz binary
+*.tar binary
+*.zip binary
+*.7z binary
+*.exe binary
+*.dll binary
+*.so binary
+*.bin binary
