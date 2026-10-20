@@ -1,4 +1,7 @@
 /* Plugin-specific components. Shared chrome/theme live in palette.css. */
+[data-minas-plugin="taskcenter"] .plugin-status.scheduler-status{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px 16px;}
+[data-minas-plugin="taskcenter"] .scheduler-status .status-copy{display:grid;gap:6px;min-width:0;}
+[data-minas-plugin="taskcenter"] #schedulerToggle{justify-self:end;max-width:min(44vw,170px);white-space:normal;}
 [data-minas-plugin="taskcenter"] .field-box{display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 15px; min-width: 0px;}
 [data-minas-plugin="taskcenter"] .form-body textarea{font-style: inherit; font-variant: inherit; font-weight: inherit; font-stretch: inherit; line-height: inherit; font-family: inherit; font-optical-sizing: inherit; font-size-adjust: inherit; font-kerning: inherit; font-feature-settings: inherit; font-variation-settings: inherit; font-language-override: inherit; width: 100%; min-width: 0px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); color: var(--text); resize: vertical; font-size: 16px;}
 [data-minas-plugin="taskcenter"] .form-body fieldset{min-width: 0px; margin: 0px; padding: 12px; border: 1px solid var(--line); border-radius: 12px;}

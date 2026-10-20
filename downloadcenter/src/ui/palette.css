@@ -143,3 +143,14 @@
 [data-minas-plugin="downloadcenter"] :is(.note,.notice,.field-note,.security-note,.warning-note,.privacy-note,.form-feedback,.status-description,.core-status){font-size:14px;line-height:1.7;}
 [data-minas-plugin="downloadcenter"] :is(.toast,.confirm-message,.dialog>p,.modal-body>p){font-family:var(--font-ui);font-size:15px;line-height:1.7;}
 [data-minas-plugin="downloadcenter"] :is(input,textarea,select):disabled{color:var(--disabled-text);opacity:1;-webkit-text-fill-color:var(--disabled-text);}
+
+/* Shared service status: match Mihomo's pill and indicator across plugins. */
+[data-minas-plugin="downloadcenter"]{--status-online:#147968;--status-online-bg:#e3f3ee;--status-online-border:rgba(13,141,131,.28);--status-online-ring:rgba(13,141,131,.13);}
+@media(prefers-color-scheme:dark){[data-minas-plugin="downloadcenter"]:not(.desktop-client){--status-online:#86d7c4;--status-online-bg:#263c37;--status-online-border:rgba(134,215,196,.4);--status-online-ring:rgba(134,215,196,.15);}}
+[data-minas-plugin="downloadcenter"] :is(.plugin-status .status-main>.status-pill,.plugin-status .status-main>.badge,.ssh-overview .status-pill){display:inline-flex;align-items:center;align-self:flex-start;justify-content:flex-start;flex:0 0 auto;gap:7px;width:max-content;max-width:100%;padding:4px 9px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--muted);font-size:13px;font-weight:600;line-height:1.5;white-space:nowrap;}
+[data-minas-plugin="downloadcenter"] :is(.plugin-status .status-main>.status-pill,.plugin-status .status-main>.badge,.ssh-overview .status-pill)::before{content:"";display:block;flex:0 0 7px;width:7px;height:7px;border-radius:50%;background:currentColor;}
+[data-minas-plugin="downloadcenter"] :is(.plugin-status .status-main>.status-pill,.plugin-status .status-main>.badge,.ssh-overview .status-pill)>:is(i,span){display:none;}
+[data-minas-plugin="downloadcenter"] :is(.plugin-status .status-main>.status-pill,.plugin-status .status-main>.badge,.ssh-overview .status-pill):is(.online,.running,.ok,.healthy,.enabled){background:var(--status-online-bg);border-color:var(--status-online-border);color:var(--status-online);}
+[data-minas-plugin="downloadcenter"] :is(.plugin-status .status-main>.status-pill,.plugin-status .status-main>.badge,.ssh-overview .status-pill):is(.online,.running,.ok,.healthy,.enabled)::before{box-shadow:0 0 0 4px var(--status-online-ring);}
+[data-minas-plugin="downloadcenter"] :is(.plugin-status .status-main>.status-pill,.plugin-status .status-main>.badge,.ssh-overview .status-pill):is(.stopped,.paused,.warning){background:var(--warning-soft);border-color:currentColor;color:var(--amber);}
+[data-minas-plugin="downloadcenter"] :is(.plugin-status .status-main>.status-pill,.plugin-status .status-main>.badge,.ssh-overview .status-pill):is(.offline,.failed,.error){background:var(--danger-soft);border-color:currentColor;color:var(--red);}

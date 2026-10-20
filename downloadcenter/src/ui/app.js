@@ -203,7 +203,7 @@ var document = window.XiaomiPluginClient.document;
       if (s.trackerStatus.time > lastTrackerTime && ['done', 'partial', 'error'].includes(s.trackerStatus.state)) { if (lastTrackerTime) toast(s.trackerStatus.message, s.trackerStatus.state !== 'done'); lastTrackerTime = s.trackerStatus.time; }
       // Do not replace buttons underneath an ongoing confirmation/operation.
       if (!dialogs().length && !document.querySelector('.task-card [aria-busy=true]')) renderTasks();
-    } catch (e) { $('health').textContent = '连接失败'; $('errorBanner').hidden = false; $('errorBanner').textContent = e.message; }
+    } catch (e) { $('health').className = 'badge failed'; $('health').textContent = '连接失败'; $('errorBanner').hidden = false; $('errorBanner').textContent = e.message; }
   }
   $('refresh').onclick = () => busy($('refresh'), refresh);
   $('coreCheck').onclick = () => busy($('coreCheck'), async () => { await api('core_check', { proxy: $('coreProxy').checked }); await refresh(); });

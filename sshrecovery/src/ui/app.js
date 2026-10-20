@@ -28,7 +28,7 @@ function showError(message,target='error'){
  if(target==='keyError'){byId(byId('keyFile').files.length?'keyFile':'keyText').setAttribute('aria-invalid','true');box.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'});try{box.focus({preventScroll:true})}catch{box.focus()}}
 }
 function render(s){
- state=s;byId('sshState').textContent=s.sshActive?'已开启':'未开启';byId('port').textContent=s.port;
+ state=s;byId('sshState').className='status-pill '+(s.sshActive?'online':'offline');byId('sshState').textContent=s.sshActive?'已开启':'未开启';byId('port').textContent=s.port;
  byId('hostState').textContent=(s.hostKeyValid??s.hostKey)?'可用':s.hostBackup?'可恢复':s.hostKey?'待修复':'缺失';byId('keyState').textContent=s.keySaved?'已保存':'未配置';
  const a=s.loginAuthorization,reasons={home_missing:'目录缺失',ssh_missing:'目录缺失',authorization_missing:'未写入',saved_key_not_installed:'公钥未安装',no_saved_key:'未配置校验',permissions_or_content:'权限或内容异常',ready:'已就绪'};
  byId('authorizationState').textContent=a?(reasons[a.reason]||'待检查'):'待检查';
@@ -48,7 +48,7 @@ function render(s){
 async function perform(action,data={},target='error'){
  if(working)return null;setBusy(true);byId('error').hidden=true;if(target==='keyError')clearKeyError();
  try{const result=await api(action,data);const visible={...result};delete visible.keyArchive;delete visible.emergencyArchive;render(visible);if(result.message)notify(result.message);return result;}
- catch(e){showError(e.name==='AbortError'?'操作超时，请刷新状态后再重试':e.message,target);return null;}
+ catch(e){if(action==='status'){byId('sshState').className='status-pill failed';byId('sshState').textContent='连接失败';}showError(e.name==='AbortError'?'操作超时，请刷新状态后再重试':e.message,target);return null;}
  finally{setBusy(false);}
 }
 function confirmAction(title,text,overwrite=false){

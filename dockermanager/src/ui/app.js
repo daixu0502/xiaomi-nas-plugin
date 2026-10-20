@@ -176,7 +176,7 @@ var document = window.XiaomiPluginClient.document;
     }).catch(function (error) {
       state.engineRunning = false;
       setEngineControls(false);
-      byId('engineBadge').className = 'status-pill stopped';
+      byId('engineBadge').className = 'status-pill failed';
       byId('engineBadge').innerHTML = '<i></i>连接失败';
       byId('engineSubtitle').textContent = error.message;
       byId('systemInfo').className = 'empty-state';
