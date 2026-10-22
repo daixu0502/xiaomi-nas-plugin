@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, os, re, subprocess, sys, time
+import json, os, re, subprocess, sys, time, socket
 from pathlib import Path
 sys.dont_write_bytecode = True
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'common'))
@@ -12,7 +12,8 @@ SERVICES={
  "samba":{"label":"文件共享","units":["smb.service","nmb.service"]},
  "crond":{"label":"定时任务","units":["crond.service"]},
  "mihomo":{"label":"Mihomo","plugin":"mihomo"},
- "quickshare":{"label":"文件快传","plugin":"quickshare"}
+ "quickshare":{"label":"文件快传","plugin":"quickshare"},
+ "downloadcenter":{"label":"下载中心","plugin":"downloadcenter"}
 }
 
 def output(data): print(json.dumps(data,ensure_ascii=False,separators=(",",":"))); raise SystemExit
@@ -91,13 +92,32 @@ def plugin_status(user,name):
  proc=subprocess.run([str(control),'status'],env=env,preexec_fn=demote_user(user),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=8,check=False)
  return 'active' if proc.returncode==0 else 'inactive'
 def service_list(user):
+ units=['docker.service','smb.service','nmb.service','crond.service']+['minas-plugin-'+p+'-'+user+'.service' for p in ('mihomo','quickshare','downloadcenter')]
+ proc=run(['systemctl','show',*units,'-p','Id','-p','ActiveState','-p','SubState','-p','LoadState'],8)
+ states={}
+ for block in proc.stdout.strip().split('\n\n'):
+  row=dict(line.split('=',1) for line in block.splitlines() if '=' in line)
+  if 'Id' in row:states[row['Id']]=row
  result=[]
  for key,item in SERVICES.items():
-  if 'plugin' in item:state=plugin_status(user,item['plugin'])
+  if 'plugin' in item:
+   unit='minas-plugin-'+item['plugin']+'-'+user+'.service';unit_state=states.get(unit,{})
+   state=unit_state.get('ActiveState','inactive') if unit_state.get('LoadState')!='not-found' else plugin_status(user,item['plugin'])
   else:
-   states=[run(['systemctl','is-active',unit],5).stdout.strip() for unit in item['units']]
-   state='active' if states and all(value=='active' for value in states) else 'inactive'
-  result.append({'id':key,'name':item['label'],'state':state})
+   status=[states.get(unit,{}).get('ActiveState','inactive') for unit in item['units']]
+   state='active' if status and all(value=='active' for value in status) else 'failed' if 'failed' in status else 'inactive'
+  row={'id':key,'name':item['label'],'state':state}
+  if key=='downloadcenter':
+   cores={}
+   for core,file in [('aria2','rpc.port'),('qbittorrent','qb.port')]:
+    try:
+     port=int((Path('/home')/user/'plugin/downloadcenter/var'/file).read_text())
+     if not 1024<=port<=65535:raise ValueError('port')
+     with socket.create_connection(('127.0.0.1',port),timeout=.2):cores[core]=True
+    except (OSError,ValueError):cores[core]=False
+   row['cores']=cores
+   if state=='active' and not all(cores.values()):row['state']='degraded'
+  result.append(row)
  return result
 def dir_size(path):
  proc=run(['du','-sk',path],20)
@@ -105,10 +125,15 @@ def dir_size(path):
  except Exception:return 0
 def cache_info(force=False):
  mem=meminfo();return {'pageCache':mem.get('Cached',0)+mem.get('Buffers',0),'logSize':cached('nascenter-logs',60,lambda:dir_size('/log'),force)}
-def overview(user,force=False):
- mem=meminfo();total=mem.get('MemTotal',0);available=mem.get('MemAvailable',mem.get('MemFree',0))
+def overview_details(user,force=False):
  mounts='-'.join(str(os.stat(p).st_dev) if Path(p).exists() else 'missing' for p in ('/nas/pool0','/data','/data/docker_data'))
- return {'ok':True,'cpu':{'usage':cpu_usage(),'load':[float(v) for v in Path('/proc/loadavg').read_text().split()[:3]],'temperature':cpu_temp()},'memory':{'total':total,'used':max(0,total-available),'available':available,'percent':round(100*(total-available)/max(1,total),1)},'uptime':float(Path('/proc/uptime').read_text().split()[0]),'network':network(),'filesystems':cached('nascenter-'+user+'-disks-'+mounts,30,disk_usage,force),'services':cached('nascenter-'+user+'-services',20,lambda:service_list(user),force),'cache':cache_info(force)}
+ return {'ok':True,'filesystems':cached('nascenter-'+user+'-disks-'+mounts,30,disk_usage,force),'services':cached('nascenter-'+user+'-services',20,lambda:service_list(user),force),'cache':cache_info(force),'sampledAt':time.time()}
+
+def overview(user,force=False,fast=False):
+ mem=meminfo();total=mem.get('MemTotal',0);available=mem.get('MemAvailable',mem.get('MemFree',0))
+ data={'ok':True,'cpu':{'usage':cpu_usage(),'load':[float(v) for v in Path('/proc/loadavg').read_text().split()[:3]],'temperature':cpu_temp()},'memory':{'total':total,'used':max(0,total-available),'available':available,'percent':round(100*(total-available)/max(1,total),1)},'uptime':float(Path('/proc/uptime').read_text().split()[0]),'network':network(),'cache':{'pageCache':mem.get('Cached',0)+mem.get('Buffers',0)}}
+ if not fast:data.update(overview_details(user,force))
+ return data
 def smart_disks():
  block=run(['lsblk','-J','-b','-o','NAME,PATH,TYPE,SIZE,MODEL,SERIAL'],10)
  try:devices=json.loads(block.stdout).get('blockdevices',[])
@@ -179,7 +204,8 @@ try:
    if disk['mount']!='/firmware' and (percent>=90 or disk.get('spaceWarning')):
     reasons.append(disk['label']+' 实际使用率 '+str(percent)+'%'+('；普通用户可用空间为 0，剩余包含受限/保留空间' if disk.get('ordinaryAvailable')==0 else '')+'；不能据此认定某个进程异常')
   output({'ok':True,'reasons':reasons,'cpu':details['rows'][:10], 'memory':sorted(details['rows'],key=lambda r:-r['rss'])[:10], 'note':details['note'],'timestamp':time.time()})
- if action=='overview':output(overview(user,req.get('force') is True))
+ if action=='overview':output(overview(user,req.get('force') is True,req.get('fast') is True))
+ if action=='overview_details':output(overview_details(user,req.get('force') is True))
  if action=='smart':output(smart_disks())
  if action=='service_restart':
   result=restart_service(user,str(req.get('service','')));invalidate('nascenter-'+user+'-services');output(result)

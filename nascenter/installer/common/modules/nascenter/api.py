@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 import privileged_runtime as runtime
 
-ACTIONS = {'overview','smart','processes','process_network','health_details','service_restart','drop_caches','clean_logs'}
+ACTIONS = {'overview','overview_details','smart','processes','process_network','health_details','service_restart','drop_caches','clean_logs'}
 
 def api(user, request):
     runtime.authorize(user, 'nascenter')

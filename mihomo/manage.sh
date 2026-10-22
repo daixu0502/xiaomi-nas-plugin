@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='mihomo'
 PLUGIN_LABEL='Mihomo'
-PLUGIN_VERSION='1.7.37'
+PLUGIN_VERSION='1.7.38'
 UNINSTALL_NOTE='卸载会停止该用户的代理；若 Docker 正使用此代理，会撤销它并重启 Docker。其他用户插件和普通文件保留。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -492,6 +492,10 @@ INSTALLER_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 nas_prepare install "${1:-}"
 PLUGIN_USER=$NAS_USER
 SPEC_WAS_ENABLED=$(jq -c --arg p "$PLUGIN_NAME" 'if (.[$p].enable|type)=="boolean" then .[$p].enable else true end' "$NAS_LIST")
+SPEC_WAS_RUNNING=true
+if [ -x "$NAS_HOME/scripts/control" ]; then
+    if "$NAS_HOME/scripts/control" status >/dev/null 2>&1; then SPEC_WAS_RUNNING=true; else SPEC_WAS_RUNNING=false; fi
+fi
 fail() { nas_fail "$@"; }
 CORE_VERSION="v1.19.31"
 BUNDLE_DIR=$INSTALLER_DIR
@@ -785,7 +789,9 @@ fi
 
 runuser -u "$PLUGIN_USER" -- python3 -B "$PLUGIN_HOME/src/files/plugin_paths.py" --migrate "$PLUGIN_HOME" || nas_fail "旧缓存迁移失败，未启动新服务"
 start_ok=0
-if [ "$SPEC_WAS_ENABLED" = true ]; then
+# Register supervision before the first service start, also on a clean NAS.
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture --user "$PLUGIN_USER" --plugin "$PLUGIN_NAME" --package "$INSTALLER_DIR/$PLUGIN_NAME" || nas_fail "规范校验或恢复登记失败"
+if [ "$SPEC_WAS_RUNNING" = true ]; then
 if runuser -u "$PLUGIN_USER" -- /usr/bin/env \
     PLUG_USER="$PLUGIN_USER" PLUG_NAME="$PLUGIN_NAME" \
     PLUG_HOME_DIR="$PLUGIN_HOME" PLUG_SRC_DIR="$SRC_DIR" \
@@ -795,7 +801,7 @@ else
     if runuser -u "$PLUGIN_USER" -- /usr/bin/env \
         PLUG_USER="$PLUGIN_USER" PLUG_NAME="$PLUGIN_NAME" \
         PLUG_HOME_DIR="$PLUGIN_HOME" PLUG_SRC_DIR="$SRC_DIR" \
-        "$SCRIPTS_DIR/control" enable; then
+        "$SCRIPTS_DIR/control" start; then
         start_ok=1
     fi
 fi
@@ -806,7 +812,7 @@ fi
 # Register with plugincenter only after the process has passed its own check;
 # at that point enable is idempotent because the runner detects the live PID.
 if [ "$start_ok" = "1" ]; then
-    plugincenter -u "$PLUGIN_USER" -p "$PLUGIN_NAME" enable >/dev/null 2>&1 || true
+    [ "$SPEC_WAS_ENABLED" != true ] || plugincenter -u "$PLUGIN_USER" -p "$PLUGIN_NAME" enable >/dev/null 2>&1 || true
 fi
 
 if [ "$start_ok" != "1" ]; then
@@ -845,6 +851,12 @@ echo "代理端口：$MIXED_PORT；控制端口：$CONTROLLER_PORT"
 echo "运行日志：$PLUGIN_HOME/tmp/runtime/mihomo.log"
 runuser -u "$PLUGIN_USER" -- env PLUG_USER="$PLUGIN_USER" PLUG_NAME="$PLUGIN_NAME" PLUG_HOME_DIR="$PLUGIN_HOME" PLUG_SRC_DIR="$SRC_DIR" PLUG_TMP_DIR="$TMP_DIR" PLUG_STATUS=unverified /usr/bin/plugin.sh verify || nas_fail "系统完整性校验失败"
 rm -f "$backup_file"
+# Preserve the native entry flag independently of its background service.
+exec 9>"/data/plugin/.$PLUGIN_USER.plugins.lock"; flock -x 9
+entry_next="$NAS_LIST.runtime-state.$$"
+jq --arg p "$PLUGIN_NAME" --argjson enabled "$SPEC_WAS_ENABLED" '.[$p].enable=$enabled | .[$p].status=(if $enabled then .[$p].status else "disable" end)' "$NAS_LIST" > "$entry_next"
+chmod --reference="$NAS_LIST" "$entry_next"; chown --reference="$NAS_LIST" "$entry_next"; mv -f "$entry_next" "$NAS_LIST"
+flock -u 9
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture --user "$PLUGIN_USER" --plugin "$PLUGIN_NAME" --package "$INSTALLER_DIR/$PLUGIN_NAME" || nas_fail "规范校验或恢复登记失败"
 NAS_INSTALL_SCRIPT
 }

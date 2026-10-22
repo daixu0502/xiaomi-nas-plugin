@@ -133,7 +133,8 @@ def wait_running(m, expected):
 
 
 def install_candidate(m, candidate, version):
-    from service import control_locked, live
+    from service import live
+    from service_client import control as managed_control, update_transaction
     target = m.var / 'core/qbittorrent-nox'
     if target.parent.is_symlink() or target.is_symlink():
         raise DownloadError('核心目录异常，拒绝更新')
@@ -143,24 +144,23 @@ def install_candidate(m, candidate, version):
         pending, previous, profile = stage / 'new', stage / 'old', m.var / 'qb-profile'
         shutil.copy2(candidate, pending); shutil.copy2(core_path(m), previous)
         old_version = binary_version(previous, m.runtime)
-        with open_lock(m.runtime / 'lifecycle.lock') as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+        with update_transaction(m):
             enabled, running = (m.var / 'enabled').exists(), bool(live(m))
             stopped, switched, saved_profile = False, False, False
             try:
-                if running: control_locked(m, 'stop'); stopped = True
+                if running: managed_control(m, 'stop', temporary=True); stopped = True
                 if profile.is_symlink(): raise DownloadError('qBittorrent 状态目录异常，拒绝更新')
                 if profile.exists():
                     shutil.copytree(profile, stage / 'profile', symlinks=True)
                     saved_profile = True
                 os.replace(pending, target); switched = True
                 # Start even when normally disabled to verify API compatibility, then stop again.
-                control_locked(m, 'start'); wait_running(m, version)
-                if not running: control_locked(m, 'stop')
+                managed_control(m, 'start', temporary=True); wait_running(m, version)
+                if not running: managed_control(m, 'stop', temporary=True)
             except Exception as exc:
                 if running and not stopped: raise
                 if switched:
-                    try: control_locked(m, 'stop')
+                    try: managed_control(m, 'stop', temporary=True)
                     except Exception as stop_error:
                         shutil.copy2(previous, m.var / 'qbittorrent-nox.recovery')
                         if saved_profile:
@@ -177,9 +177,10 @@ def install_candidate(m, candidate, version):
                         # that cannot be read by the original bundled core.
                         os.replace(profile, stage / 'failed-profile')
                 if running:
-                    control_locked(m, 'start'); wait_running(m, old_version)
+                    managed_control(m, 'start', temporary=True); wait_running(m, old_version)
                 raise DownloadError('升级未完成，原核心和任务状态已保留／恢复：' + str(exc)) from exc
             finally:
+                managed_control(m, 'finish', temporary=True)
                 if enabled: (m.var / 'enabled').touch(mode=0o600)
                 else: (m.var / 'enabled').unlink(missing_ok=True)
 

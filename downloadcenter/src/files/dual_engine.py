@@ -247,7 +247,7 @@ class DualManager(Manager):
 
     def fetch_sync(self, rows):
         result = super().fetch_sync(rows)
-        result['qb'] = self.qb.torrents() if any(self.is_qb(r) for r in rows) else []
+        result['qb'] = self.qb.torrents()
         return result
 
     def sync(self, ident=None, remote=None):

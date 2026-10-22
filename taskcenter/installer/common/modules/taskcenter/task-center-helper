@@ -403,7 +403,10 @@ def tick_user(user):
     launch_ids = []
     with database(user) as state:
         reconcile(state)
-        state['lastTick'] = time.time()
+        # Display-only liveness is disposable; do not fsync the task database
+        # every minute when no task or execution state changed.
+        try: write_state(user, 'taskcenter', 'heartbeat.json', {'at': time.time(), 'boot': boot_id()})
+        except (OSError, ValueError, subprocess.SubprocessError): pass
         if not state['scheduler']:
             return
         now = time.time()
@@ -477,7 +480,11 @@ def api(user, req):
                 public = {k: v for k, v in t.items() if k not in ('cleanupPreview', 'cleanupApproval')}
                 pending = retry_pending(state, t['id'])
                 tasks.append(dict(public, nextRun=next_time(t, time.time()), running=running(state, t['id']), retryAt=pending['retryAt'] if pending else None, cleanupApproved=t.get('cleanupApproval', {}).get('revision') == t['revision']))
-            return {'tasks': tasks, 'runs': list(reversed(state['runs'])), 'scheduler': state['scheduler'], 'lastTick': state.get('lastTick'), 'serverTime': time.time(), 'timezone': time.strftime('%Z %z'), 'poolReady': pool_ready()}
+            try:
+                heartbeat = read_state(user, 'taskcenter', 'heartbeat.json') or {}
+                last_tick = heartbeat.get('at') if heartbeat.get('boot') == boot_id() and type(heartbeat.get('at')) in (int,float) and 0 <= time.time()-heartbeat['at'] < 600 else None
+            except (OSError, ValueError, subprocess.SubprocessError): last_tick = None
+            return {'tasks': tasks, 'runs': list(reversed(state['runs'])), 'scheduler': state['scheduler'], 'lastTick': last_tick, 'serverTime': time.time(), 'timezone': time.strftime('%Z %z'), 'poolReady': pool_ready()}
         if action == 'log':
             ident = valid_id(req.get('id'))
             if not any(r['id'] == ident for r in state['runs']):

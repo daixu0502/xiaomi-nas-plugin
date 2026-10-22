@@ -180,10 +180,18 @@ def serve(m):
         _serve_locked(m)
 
 
+def poll_delay(remote):
+    aria_busy = any(t.get('status') in ('active', 'waiting') for t in remote.get('aria', []))
+    qb_busy = any(not t.get('state', '').startswith(('stopped', 'paused')) for t in remote.get('qb', []))
+    return 3 if aria_busy or qb_busy else 15
+
+
 def _serve_locked(m):
     # Refuse root even if launched outside the lifecycle script.
     if os.geteuid() == 0:
         raise DownloadError("下载核心禁止以 root 运行")
+    from runtime_log import redirect, drain
+    redirect(m.runtime / 'service.log')
     (m.runtime / "service.pid").write_text(str(os.getpid()))
     stopping = [False]
     signal.signal(signal.SIGTERM, lambda *_: stopping.__setitem__(0, True))
@@ -202,24 +210,25 @@ def _serve_locked(m):
             "connect-timeout": "15", "timeout": "60", "max-download-result": "1000", "follow-torrent": "false", "follow-metalink": "false",
             "bt-save-metadata": "false", "dht-file-path6": str(m.runtime / "dht6.dat"),
             "dht-file-path": str(m.runtime / "dht.dat"), "disk-cache": "16M", "console-log-level": "warn", "summary-interval": "0",
-            "log-level": "warn", "log": str(m.runtime / "aria2.log"), **m.options(settings), **m.bt_network_options(settings)}
+            "log-level": "warn", "log": "-", **m.options(settings), **m.bt_network_options(settings)}
     path = m.runtime / "aria2.conf"
     path.write_text("\n".join(k + "=" + v for k, v in conf.items()) + "\n")
     os.chmod(path, 0o600)
     child, qb_child, gateway, aria_lan = None, None, None, None
     try:
         child = subprocess.Popen([str(core_path(m)), "--conf-path=" + str(path)], stdin=subprocess.DEVNULL,
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, cwd=m.runtime,
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=m.runtime,
                                  env=dict(os.environ,TMPDIR=str(m.runtime)))
+        aria_output = drain(child.stdout, m.runtime / 'aria2.log')
         profile = m.qb.prepare()
         qb_log = m.runtime / 'qbittorrent.log'
         if qb_log.exists() and qb_log.stat().st_size > 2 * 1024 * 1024:
             os.replace(qb_log, m.runtime / 'qbittorrent.log.1')
-        with qb_log.open('a') as output:
-            from qb_update import core_path as qb_core_path
-            qb_child = subprocess.Popen([str(qb_core_path(m)), '--profile=' + str(profile),
-                                         '--confirm-legal-notice'], stdin=subprocess.DEVNULL, stdout=output, stderr=output, cwd=m.runtime,
-                                         env=dict(os.environ,TMPDIR=str(m.runtime),XDG_CACHE_HOME=str(m.runtime/'qt-cache'),XDG_RUNTIME_DIR=str(m.runtime)))
+        from qb_update import core_path as qb_core_path
+        qb_child = subprocess.Popen([str(qb_core_path(m)), '--profile=' + str(profile),
+                                     '--confirm-legal-notice'], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=m.runtime,
+                                     env=dict(os.environ,TMPDIR=str(m.runtime),XDG_CACHE_HOME=str(m.runtime/'qt-cache'),XDG_RUNTIME_DIR=str(m.runtime)))
+        qb_output = drain(qb_child.stdout, qb_log)
         for _ in range(20):
             if child.poll() is not None or qb_child.poll() is not None:
                 raise DownloadError("下载核心启动失败，请查看 aria2.log / qbittorrent.log")
@@ -235,34 +244,44 @@ def _serve_locked(m):
         gateway = start_gateway(m)
         from lan_rpc import Listener
         aria_lan = Listener(m)
-        last_save, last_auto = 0, time.time()
+        last_save, last_auto, sync_failures = 0, time.time(), 0
         tracker_worker = threading.Thread(target=apply_saved_trackers, args=(manager(m.home),), daemon=True)
         tracker_worker.start()
         while not stopping[0] and child.poll() is None and qb_child.poll() is None:
             m.ready()  # Pool lost: stop instead of writing into an empty mountpoint.
-            with m.locked():
-                sampled_rows = m.rows()
-                sampled_revision = (m.var / 'tasks.sqlite').stat().st_mtime_ns
-            remote = m.fetch_sync(sampled_rows)
-            with m.locked():
-                # Any mutation (including selection/source-only changes) supersedes
-                # this sample. No task can be resurrected or overwritten by it.
-                if (m.var / 'tasks.sqlite').stat().st_mtime_ns == sampled_revision:
-                    m.sync(remote=remote)
-                try:
-                    status = json.loads((m.runtime / "tracker-status.json").read_text())
-                except (OSError, ValueError):
-                    status = {}
-                s = m.settings()
-                update = status.get("state") == "pending" or (s["autoTrackers"] and s["sources"] and time.time() - max(status.get("time", 0), last_auto) > 86400)
-            if time.time() - last_save > 15:
-                m.save_session(); last_save = time.time()
-            if update and not (tracker_worker and tracker_worker.is_alive()):
-                tracker_worker = threading.Thread(target=update_trackers, args=(manager(m.home),), daemon=True)
-                tracker_worker.start(); last_auto = time.time()
-            if not stopping[0]:
-                m.process_job()
-            for _ in range(10):
+            delay = 3
+            try:
+                with m.locked():
+                    sampled_rows = m.rows()
+                    sampled_revision = (m.var / 'tasks.sqlite').stat().st_mtime_ns
+                remote = m.fetch_sync(sampled_rows)
+                with m.locked():
+                    # Any mutation (including selection/source-only changes) supersedes
+                    # this sample. No task can be resurrected or overwritten by it.
+                    if (m.var / 'tasks.sqlite').stat().st_mtime_ns == sampled_revision:
+                        m.sync(remote=remote)
+                    try:
+                        status = json.loads((m.runtime / "tracker-status.json").read_text())
+                    except (OSError, ValueError):
+                        status = {}
+                    s = m.settings()
+                    update = status.get("state") == "pending" or (s["autoTrackers"] and s["sources"] and time.time() - max(status.get("time", 0), last_auto) > 86400)
+                delay = poll_delay(remote)
+                if time.time() - last_save > (15 if delay == 3 else 120):
+                    m.save_session(); last_save = time.time()
+                if update and not (tracker_worker and tracker_worker.is_alive()):
+                    tracker_worker = threading.Thread(target=update_trackers, args=(manager(m.home),), daemon=True)
+                    tracker_worker.start(); last_auto = time.time()
+                if not stopping[0]:
+                    m.process_job()
+                sync_failures = 0
+                (m.runtime / 'sync-health.json').unlink(missing_ok=True)
+            except DownloadError:
+                sync_failures += 1
+                atomic_json(m.runtime / 'sync-health.json', {'failures': sync_failures, 'at': time.time(), 'message': '下载核心状态暂时不可用，正在重试'})
+                if sync_failures >= 3: raise
+                delay = min(15, 3 * sync_failures)
+            for _ in range(int(delay / .3)):
                 if stopping[0]:
                     break
                 time.sleep(.3)

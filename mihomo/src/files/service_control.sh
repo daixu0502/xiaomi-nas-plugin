@@ -7,6 +7,7 @@ minas_service_control() {
     case "$minas_action" in
         status) minas_operation=status;;
         start|restart|stop) minas_operation=$minas_action;;
+        update-start|update-stop|update-finish) minas_operation=$minas_action;;
         enable|postinstall|postupgrade) minas_operation=lifecycle-start;;
         disable|preuninstall|preupgrade) minas_operation=lifecycle-stop;;
         *) return 1;;

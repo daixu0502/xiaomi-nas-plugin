@@ -95,6 +95,7 @@ start_core() {
     }
 
     secret=$(tr -d '\r\n' < "$SECRET_FILE")
+    python3 -B "$SCRIPT_DIR/managed_providers.py" "$CONFIG_FILE" "$ETC_DIR" || return 1
     if [ -f "$LOG_FILE" ] && [ "$(wc -c < "$LOG_FILE")" -gt 5242880 ]; then
         mv -f "$LOG_FILE" "$LOG_FILE.1"
     fi
@@ -105,14 +106,19 @@ start_core() {
 
     # Any implicit cache / crash output belongs outside the verified source.
     cd "$ETC_DIR" || return 1
-    nohup "$BIN" \
+    nohup /usr/bin/python3 -B "$SCRIPT_DIR/runtime_log.py" run "$LOG_FILE" "$PID_FILE" -- "$BIN" \
         -d "$ETC_DIR" \
         -f "$CONFIG_FILE" \
         -ext-ctl "127.0.0.1:$CONTROLLER_PORT" \
         -secret "$secret" \
-        >> "$LOG_FILE" 2>&1 8>&- 9>&- &
-    pid=$!
-    printf '%s\n' "$pid" > "$PID_FILE"
+        >/dev/null 2>&1 8>&- 9>&- &
+    relay_pid=$!
+    relay_wait=0
+    while [ ! -s "$PID_FILE" ] && kill -0 "$relay_pid" 2>/dev/null && [ "$relay_wait" -lt 30 ]; do
+        sleep 0.1; relay_wait=$((relay_wait+1))
+    done
+    [ -s "$PID_FILE" ] || return 1
+    pid=$(cat "$PID_FILE")
     chmod 0600 "$PID_FILE"
 
     wait_count=0

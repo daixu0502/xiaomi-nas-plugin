@@ -118,7 +118,8 @@ def wait_running(m, expected):
 
 
 def install_candidate(m, candidate, version):
-    from service import control_locked, live
+    from service import live
+    from service_client import control as managed_control, update_transaction
     target = m.var / 'core/aria2c'
     if target.parent.is_symlink() or target.is_symlink():
         raise DownloadError('核心目录异常，拒绝更新')
@@ -130,33 +131,33 @@ def install_candidate(m, candidate, version):
         shutil.copy2(candidate, pending)
         shutil.copy2(core_path(m), previous)
         old_version = binary_version(previous)
-        with open_lock(m.runtime/'lifecycle.lock') as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+        with update_transaction(m):
             enabled = (m.var/'enabled').exists()
             running = bool(live(m))
             stopped = False
             try:
                 if running:
-                    control_locked(m, 'stop'); stopped = True
+                    managed_control(m, 'stop', temporary=True); stopped = True
                 os.replace(pending, target)
                 if running:
-                    control_locked(m, 'start'); wait_running(m, version)
+                    managed_control(m, 'start', temporary=True); wait_running(m, version)
             except Exception as exc:
                 if running and not stopped: raise
                 if running:
                     try:
-                        control_locked(m, 'stop')
+                        managed_control(m, 'stop', temporary=True)
                     except Exception as stop_error:
                         shutil.copy2(previous, m.var/'aria2c.recovery')
                         raise DownloadError('新核心尚未停止，未强制替换；旧核心已保留在 var/aria2c.recovery，请检查日志') from stop_error
                 os.replace(previous, target)
                 if running:
-                    control_locked(m, 'start')
+                    managed_control(m, 'start', temporary=True)
                     try: wait_running(m, old_version)
                     except DownloadError as rollback_error:
                         raise DownloadError('新版本启动失败，旧核心已恢复但服务未启动，请查看服务日志') from rollback_error
                 raise DownloadError('核心切换失败，已恢复旧核心：' + str(exc)) from exc
             finally:
+                managed_control(m, 'finish', temporary=True)
                 if enabled: (m.var/'enabled').touch(mode=0o600)
                 else: (m.var/'enabled').unlink(missing_ok=True)
 

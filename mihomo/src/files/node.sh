@@ -77,11 +77,19 @@ prepare_change() {
 
 prepare_config_candidate() {
     config_tmp="$RUNTIME_DIR/config.manual-node.$$"
-    if grep -q '^# Managed by the Xiaomi Smart Storage Mihomo plugin' "$CONFIG_FILE" 2>/dev/null \
-       && grep -q '^[[:space:]]*APP-MANUAL:' "$CONFIG_FILE" 2>/dev/null; then
-        cp "$CONFIG_FILE" "$config_tmp"
-    else
-        write_managed_config "$config_tmp"
+    write_managed_config "$config_tmp"
+    # Retain user-controlled top-level access/mode choices when rebuilding the
+    # provider set after its first node is added or its last node is deleted.
+    if grep -q '^# Managed by the Xiaomi Smart Storage Mihomo plugin' "$CONFIG_FILE"; then
+        python3 -B - "$CONFIG_FILE" "$config_tmp" <<'KEEP_OPTIONS'
+import re,sys
+from pathlib import Path
+old=Path(sys.argv[1]).read_text();p=Path(sys.argv[2]);new=p.read_text()
+for key in ('allow-lan','bind-address','mode','log-level','ipv6'):
+    found=re.search(r'^'+key+r':[^\n]*$',old,re.M)
+    if found:new=re.sub(r'^'+key+r':[^\n]*$',lambda _:found[0],new,flags=re.M)
+p.write_text(new)
+KEEP_OPTIONS
     fi
     chmod 0600 "$config_tmp"
 }

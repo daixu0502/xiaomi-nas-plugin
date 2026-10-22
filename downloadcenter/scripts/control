@@ -5,7 +5,12 @@ USER_NAME=$(printf '%s\n' "$SCRIPT_DIR" | sed -n 's#^/home/\(u[0-9][0-9]*\)/plug
 [ -n "$USER_NAME" ] || { echo '插件路径无效' >&2; exit 1; }
 HOME_DIR="/home/$USER_NAME/plugin/downloadcenter"
 . "$HOME_DIR/src/files/service_control.sh"
-minas_service_control downloadcenter "$USER_NAME" "${1:-}" || true
+if [ -f "/etc/minas-plugin-services/$USER_NAME-downloadcenter" ]; then
+    minas_service_control downloadcenter "$USER_NAME" "${1:-}" || true
+elif [ "${MINAS_SERVICE_MANAGED:-}" != 1 ]; then
+    echo '下载服务托管登记缺失，请重新安装插件' >&2
+    exit 1
+fi
 case "${1:-}" in start|enable|ensure|postinstall|postupgrade|stop|disable|preuninstall|preupgrade|status) ;; *) exit 0;; esac
 if [ "$(id -u)" = 0 ]; then
     exec runuser -u "$USER_NAME" -- /usr/bin/python3 -B "$HOME_DIR/src/files/service.py" "$1" "$HOME_DIR"

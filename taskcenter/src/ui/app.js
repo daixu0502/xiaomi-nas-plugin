@@ -165,7 +165,7 @@ var document = window.XiaomiPluginClient.document;
     $('schedulerToggle').setAttribute('aria-pressed',data.scheduler?'true':'false');
     $('clock').textContent='NAS 时间 '+timestamp(data.serverTime)+' · '+(data.timezone||''); $('poolInfo').textContent=data.poolReady?'存储池已挂载，可执行要求存储池就绪的任务。':'存储池尚未挂载：依赖存储池的任务不会执行。';
     $('countTotal').textContent=data.tasks.length;$('countEnabled').textContent=data.tasks.filter(t=>t.enabled).length;$('countRunning').textContent=data.runs.filter(r=>r.state==='running').length;
-    const failedCount=data.runs.filter(r=>['failed','timeout','interrupted'].includes(r.state)).length;
+    const failedCount=data.runs.filter(r=>['failed','timeout','interrupted'].includes(r.state)&&Number(r.ended||r.started)>=(data.serverTime||Date.now()/1000)-86400).length;
     $('countFailed').textContent=failedCount;
     $('countFailed').classList.toggle('metric-alert',failedCount>0);
     $('taskSummary').textContent=data.tasks.length+' 个任务 · '+data.tasks.filter(t=>t.enabled).length+' 个已启用';

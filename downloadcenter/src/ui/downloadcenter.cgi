@@ -57,9 +57,10 @@ try:
                 raise DownloadError("无效服务操作")
             # Fire-and-poll: never hold a CGI request open while stopping the engine.
             m.ready()
-            with (m.var / "control.log").open("w") as log:
-                subprocess.Popen([sys.executable, "-B", str(UI.parent / "files/service.py"), command, str(home)],
-                                 stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True)
+            with (m.runtime / "control.log").open("w") as log:
+                subprocess.Popen(['/bin/sh', str(home / 'scripts/control'), command],
+                                 stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True,
+                                 env={k:v for k,v in os.environ.items() if k != 'MINAS_SERVICE_MANAGED'})
             result = {"pending": True}
         else:
             result = m.dispatch(action, data)

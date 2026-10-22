@@ -130,11 +130,11 @@ var document = window.XiaomiPluginClient.document;
     try {
       const packet = await api('status',{includeSettings:!snapshot||fresh||page==='settings'||page==='trackers'});
       snapshot = {...packet,settings:packet.settings||snapshot?.settings}; const s = snapshot;
-      $('health').textContent = s.running ? '运行中' : '已停止'; $('health').className = 'badge ' + (s.running ? 'enabled' : 'failed');
+      $('health').textContent = s.running ? '运行中' : s.enabled ? '等待启动' : '已停止'; $('health').className = 'badge ' + (s.running ? 'enabled' : s.enabled ? 'warning' : 'stopped');
       $('qbEngineVersion').textContent = 'qBittorrent ' + (s.engines?.qbittorrent?.version || '未连接') + ' · BT／磁链';
       $('ariaEngineVersion').textContent = 'aria2 ' + (s.engineVersion || '未连接') + ' · 直链';
       $('version').textContent = '插件版本 ' + s.version; $('down').textContent = bytes(s.stats.downloadSpeed) + '/s'; $('up').textContent = bytes(s.stats.uploadSpeed) + '/s'; $('count').textContent = s.tasks.filter(t => live.includes(t.status)).length; $('free').textContent = bytes(s.free);
-      $('errorBanner').hidden = !s.error; $('errorBanner').textContent = s.error;
+      $('errorBanner').hidden = !s.error || (!s.running && !s.enabled); $('errorBanner').textContent = s.error;
       for (const id of ['newTask', 'pauseAll', 'resumeAll']) if (!$(id).hasAttribute('aria-busy')) $(id).disabled = !s.running;
       for (const [id, cmd] of [['pauseAll', 'pause'], ['resumeAll', 'resume'], ['clearHistory', 'clear']]) {
         const pending = s.job?.state === 'pending'; $(id).disabled = pending || !s.running;

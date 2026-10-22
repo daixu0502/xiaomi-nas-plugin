@@ -260,6 +260,9 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     parser=argparse.ArgumentParser(); parser.add_argument("--state",required=True); parser.add_argument("--port",type=int,default=19092); args=parser.parse_args()
     state=Path(args.state); secret_file=state/"server.secret"
+    from plugin_paths import runtime_directory
+    from runtime_log import redirect
+    redirect(runtime_directory(state.parent) / 'server.log')
     if not secret_file.is_file(): raise SystemExit("server.secret missing")
     user=state.parts[2] if len(state.parts)>2 and state.parts[1]=="home" else os.environ.get("USER","")
     if not re.fullmatch(r"u[0-9]+",user): raise SystemExit("invalid plugin user")

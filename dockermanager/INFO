@@ -2,15 +2,15 @@
   "plugin": "dockermanager",
   "name": "docker",
   "id": 19091,
-  "version": "1.1.15",
+  "version": "1.1.16",
   "tags": [
     "tool"
   ],
-  "timestamp": 1792479423,
+  "timestamp": 1792663305,
   "desc": "容器、镜像与存储卷管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "统一运行状态文字：检查中、运行中、已停止、等待中、需要关注、连接失败",
+  "changelog": "更新公共运行组件与服务恢复安装逻辑",
   "system": false,
   "size": 108748,
   "port": "",

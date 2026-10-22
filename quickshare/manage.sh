@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='quickshare'
 PLUGIN_LABEL='文件快传'
-PLUGIN_VERSION='1.1.39'
+PLUGIN_VERSION='1.1.40'
 UNINSTALL_NOTE='停止该用户的分享服务，现有分享链接失效；分享记录先备份，已上传的用户文件保留。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -446,6 +446,10 @@ INSTALLER_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 nas_prepare install "${1:-}"
 PLUGIN_USER=$NAS_USER
 SPEC_WAS_ENABLED=$(jq -c --arg p "$PLUGIN_NAME" 'if (.[$p].enable|type)=="boolean" then .[$p].enable else true end' "$NAS_LIST")
+SPEC_WAS_RUNNING=true
+if [ -x "$NAS_HOME/scripts/control" ]; then
+    if "$NAS_HOME/scripts/control" status >/dev/null 2>&1; then SPEC_WAS_RUNNING=true; else SPEC_WAS_RUNNING=false; fi
+fi
 fail() { nas_fail "$@"; }
 nas_require jq python3 sha256sum plugincenter flock runuser ss systemctl
 BUNDLE=$(CDPATH= cd "$(dirname "$0")" && pwd); PACKAGE="$BUNDLE/$PLUGIN_NAME"
@@ -498,9 +502,11 @@ chown "$PLUGIN_USER:$(id -gn "$PLUGIN_USER")" "$TMP"
 chown -R "$PLUGIN_USER:$PLUGIN_USER" "$HOME_DIR" "$SRC"; chown -h "$PLUGIN_USER:$PLUGIN_USER" "$HOME_DIR/src" "$HOME_DIR/tmp" "$WEB_LINK"
 chmod 0700 "$HOME_DIR" "$VAR" "$SRC" "$TMP"; chmod 0755 "$SRC/ui"
 runuser -u "$PLUGIN_USER" -- python3 -B "$HOME_DIR/src/files/plugin_paths.py" --migrate "$HOME_DIR" || nas_fail "旧缓存迁移失败，未启动新服务"
-if [ "$SPEC_WAS_ENABLED" = true ]; then
+# Register supervision before the first service start, also on a clean NAS.
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture --user "$PLUGIN_USER" --plugin "$PLUGIN_NAME" --package "$INSTALLER_DIR/$PLUGIN_NAME" || nas_fail "规范校验或恢复登记失败"
+if [ "$SPEC_WAS_RUNNING" = true ]; then
 PLUG_USER="$PLUGIN_USER" PLUG_HOME_DIR="$HOME_DIR" PLUG_SRC_DIR="$SRC" "$SCRIPTS/control" start
-plugincenter -u "$PLUGIN_USER" -p "$PLUGIN_NAME" enable >/dev/null 2>&1 || true
+[ "$SPEC_WAS_ENABLED" != true ] || plugincenter -u "$PLUGIN_USER" -p "$PLUGIN_NAME" enable >/dev/null 2>&1 || true
 else
     jq '.quickshare.enable=false | .quickshare.status="stopped"' "$LIST" > "$LIST.disabled.$$"
     chmod --reference="$LIST" "$LIST.disabled.$$"
@@ -512,6 +518,12 @@ echo "文件快传 $PLUGIN_VERSION 已安装，局域网服务：http://设备IP
 echo "APP 插件清单：$LIST"
 runuser -u "$PLUGIN_USER" -- env PLUG_USER="$PLUGIN_USER" PLUG_NAME="$PLUGIN_NAME" PLUG_HOME_DIR="$HOME_DIR" PLUG_SRC_DIR="$SRC" PLUG_TMP_DIR="$TMP" PLUG_STATUS=unverified /usr/bin/plugin.sh verify || nas_fail "系统完整性校验失败"
 rm -f "$backup"
+# Preserve the native entry flag independently of its background service.
+exec 9>"/data/plugin/.$PLUGIN_USER.plugins.lock"; flock -x 9
+entry_next="$NAS_LIST.runtime-state.$$"
+jq --arg p "$PLUGIN_NAME" --argjson enabled "$SPEC_WAS_ENABLED" '.[$p].enable=$enabled | .[$p].status=(if $enabled then .[$p].status else "disable" end)' "$NAS_LIST" > "$entry_next"
+chmod --reference="$NAS_LIST" "$entry_next"; chown --reference="$NAS_LIST" "$entry_next"; mv -f "$entry_next" "$NAS_LIST"
+flock -u 9
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture --user "$PLUGIN_USER" --plugin "$PLUGIN_NAME" --package "$INSTALLER_DIR/$PLUGIN_NAME" || nas_fail "规范校验或恢复登记失败"
 NAS_INSTALL_SCRIPT
 }

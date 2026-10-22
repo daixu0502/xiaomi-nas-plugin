@@ -1,11 +1,11 @@
 {
   "apiVersion": 1,
   "layoutVersion": 2,
-  "version": "1.1.6",
+  "version": "1.1.7",
   "plugin": "mihomo",
   "files": {
     "common/component_admin.py": "69eccdf483c6c090c789106c9f43b823d19a7957be4dbaac36061852d168c22e",
-    "common/privileged_runtime.py": "3e999e26dfb40a74637e78befe973017ca141c0b34303a527fb85f343b10aeb4",
+    "common/privileged_runtime.py": "550e8f3c6771955797c7f41210f2128eaa25bc03a59037b8669f04aef45c0f4b",
     "common/telemetry_cache.py": "8e7c762862af1253a1464ebc41281952a5d7374c889202e3aacaf630af90e80b",
     "common/user_state_io.py": "aeb1b5bd1a09d491c8dd59e8456e9aec93afb8ebc30845213a0d55ea4e53cebf",
     "component_admin.py": "8d4832b4794f552ab2bf0a5d2d17ce44e614d28497f7f54c3efa620856ec9257",

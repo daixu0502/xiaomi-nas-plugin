@@ -27,7 +27,7 @@ PLUGINS = {'mihomo', 'dockermanager', 'taskcenter', 'nascenter', 'sshrecovery', 
 SERVERS = {'mihomo', 'quickshare', 'downloadcenter'}
 MANAGED = SERVERS | {'taskcenter'}
 UNIT = 'minas-plugin-recovery'
-VERSION = '1.3.0'
+VERSION = '1.4.0'
 WATCH_UNIT = UNIT + '-watch.service'
 RUNTIME = Path('/run/minas-plugin-recovery')
 
@@ -175,6 +175,7 @@ def install_daemon(user, plugin):
         call(['systemctl', 'daemon-reload'])
     # Only fixed actions for this user's registered plugin. No command/path input.
     operations = ('start', 'stop', 'restart', 'status', 'lifecycle-start', 'lifecycle-stop')
+    if plugin == 'downloadcenter': operations += ('update-start', 'update-stop', 'update-finish')
     prefix = '/usr/bin/python3 -B ' + str(BASE / 'recovery.py') + ' service --user ' + user + ' --plugin ' + plugin + ' --operation '
     policy = user + ' ALL=(root) NOPASSWD: ' + ', '.join(prefix + action for action in operations) + '\n'
     rules = Path('/etc/sudoers.d') / ('minas-service-' + user + '-' + plugin)
@@ -203,10 +204,19 @@ def service_operation(user, plugin, operation):
         return call(['systemctl', 'is-active', '--quiet', unit], check=False).returncode
     with record_lock(directory):
         require((Path('/etc/systemd/system') / unit).is_file(), 'daemon unit missing')
+        if operation.startswith('update-'):
+            require(plugin == 'downloadcenter', 'unsupported update lifecycle')
+            if operation == 'update-finish':
+                (directory / 'service-update.json').unlink(missing_ok=True)
+                return 0
+            save(directory / 'service-update.json', dict(until=time.time() + 600))
+            result = call(['systemctl', operation.removeprefix('update-'), unit], check=False)
+            require(result.returncode == 0, '下载核心切换时服务操作失败')
+            return 0
         if operation == 'lifecycle-start':
             record = read(load_generation(directory) / 'record.json')
             apply_service_intent(record, directory)
-            if not record['enabled'] or not record['running']:
+            if not record['running']:
                 return 0
         if not operation.startswith('lifecycle-'):
             # A dedicated intent file cannot be overwritten by an in-flight
@@ -223,15 +233,11 @@ def apply_service_intent(record, directory):
     if not path.is_file(): return
     intent = read(path)
     require(isinstance(intent.get('running'), bool) and isinstance(intent.get('time'), (int, float)), 'invalid service intent')
-    if intent['time'] < record.get('intent_time', 0):
+    if intent['time'] < record.get('runtime_intent_time', record.get('native_intent_time', 0)):
         return
     record['running'] = intent['running']
     record['service_intent_time'] = intent['time']
-    record['intent_time'] = intent['time']
-    if intent['running']:
-        record['enabled'] = True
-        record['entry']['enable'] = True
-    record['entry']['status'] = 'running' if intent['running'] else 'stopped'
+    record['runtime_intent_time'] = intent['time']
 
 
 @contextlib.contextmanager
@@ -350,6 +356,8 @@ def apply_native_intent(record, event):
     # disabled even if the registry and source are removed before the next poll.
     if record['plugin'] in MANAGED:
         record['running'] = event['enabled']
+        record['runtime_intent_time'] = event['time']
+        record['native_intent_time'] = event['time']
 
 
 def observe_state(record, live, user, plugin, home, src):
@@ -377,13 +385,17 @@ def observe_state(record, live, user, plugin, home, src):
         if changed:
             record['intent_time'] = time.time()
     if plugin in MANAGED:
-        if changed:
+        if changed and newer:
+            # A usable registration with an advanced revision is an explicit
+            # native toggle. A boot rewrite without a revision is not.
             record['running'] = enabled
+            record['runtime_intent_time'] = time.time()
+            record['native_intent_time'] = record['runtime_intent_time']
         elif plugin == 'taskcenter':
             # Scheduler enable is a persistent, explicit flag in the protected
             # task state, independent of the plugin UI's enable flag.
             record['running'] = control(user, plugin, home, src, 'status', False).returncode == 0
-        elif enabled and control(user, plugin, home, src, 'status', False).returncode == 0:
+        elif not record.get('runtime_intent_time') and control(user, plugin, home, src, 'status', False).returncode == 0:
             record['running'] = True
 
 
@@ -475,7 +487,7 @@ def persist_state(user, plugin, home, src, owner, enabled):
             # stop removed this flag; persistence must retain its prior meaning.
             atomic(destination / 'var/enabled', b'', 0o600, owner)
     finally:
-        if running and pending and enabled:
+        if running and pending:
             control(user, plugin, home, src, 'start')
 
 
@@ -581,7 +593,7 @@ def snapshot(user, plugin, payload):
         if migrate_running:
             legacy_control(user, plugin, home, src, 'stop')
         install_daemon(user, plugin)
-        if migrate_running and entry.get('enable', True):
+        if migrate_running:
             control(user, plugin, home, src, 'start')
     verify(user, plugin, home, src)
     report = call(['plugincenter', '-u', user, 'list'])
@@ -614,6 +626,7 @@ def snapshot(user, plugin, payload):
         record = dict(user=user, plugin=plugin, src=str(src), tmp=str(Path(os.readlink(home / 'tmp'))),
                       entry=entry, enabled=bool(entry.get('enable', True)),
                       intent_time=time.time(),
+                      runtime_intent_time=time.time(),
                       running=plugin in MANAGED and control(user, plugin, home, src, 'status', False).returncode == 0)
         atomic(stage / 'record.json', encoded(record))
         # A committed generation is selected by a same-directory atomic pointer.
@@ -792,10 +805,13 @@ def restore_locked_record(directory, intents=None, check_source=True):
             verify(user, plugin, home, src)
     # Do not hold the list lock while lifecycle hooks update the list themselves.
     restore_component(saved, user, plugin)
-    if plugin in SERVERS and not record['running'] and record.get('service_intent_time') == record.get('intent_time'):
+    update = directory / 'service-update.json'
+    if update.is_file() and read(update).get('until', 0) > time.time():
+        return
+    if plugin in SERVERS and not record['running'] and record.get('runtime_intent_time'):
         if control(user, plugin, home, src, 'status', False).returncode == 0:
             control(user, plugin, home, src, 'stop')
-    if plugin in MANAGED and record['enabled'] and record['running']:
+    if plugin in MANAGED and record['running']:
         if control(user, plugin, home, src, 'status', False).returncode:
             result = control(user, plugin, home, src, 'start', False)
             # A user-owned control may start successfully but cannot update the
@@ -1086,7 +1102,7 @@ def main():
     parser.add_argument('--plugin', choices=sorted(PLUGINS))
     parser.add_argument('--package', '--payload', dest='payload', type=Path)
     parser.add_argument('--quiet', action='store_true')
-    parser.add_argument('--operation', choices=('start', 'stop', 'restart', 'status', 'lifecycle-start', 'lifecycle-stop'))
+    parser.add_argument('--operation', choices=('start', 'stop', 'restart', 'status', 'lifecycle-start', 'lifecycle-stop', 'update-start', 'update-stop', 'update-finish'))
     args = parser.parse_args()
     require(os.geteuid() == 0, 'root required')
     protected(BASE)

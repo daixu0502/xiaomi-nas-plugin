@@ -46,6 +46,7 @@ proxy-groups:
 rules:
   - MATCH,PROXY
 MANAGED_CONFIG
+    python3 -B "$SCRIPT_DIR/managed_providers.py" "$managed_config_target" "$PLUGIN_HOME/etc"
 }
 
 ensure_empty_provider() {

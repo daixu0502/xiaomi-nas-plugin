@@ -209,7 +209,10 @@ def map_path(m, value):
     root = m.root.resolve()
     if p == alias or alias in p.parents:
         folder = m.settings().get('openlistDirectory', 'Download')
-        base = m.directory(folder)
+        try: base = m.directory(folder)
+        except DownloadError:
+            try: base = m.directory(folder, create=True)
+            except FileExistsError: base = m.directory(folder)
         return base.joinpath(*p.relative_to(alias).parts)
     try: p.relative_to(root)
     except ValueError as exc: raise DownloadError('Openlist 下载路径必须在所属用户空间') from exc

@@ -1,17 +1,17 @@
 {
   "apiVersion": 1,
   "layoutVersion": 2,
-  "version": "1.1.6",
+  "version": "1.1.7",
   "plugin": "nascenter",
   "files": {
     "common/component_admin.py": "69eccdf483c6c090c789106c9f43b823d19a7957be4dbaac36061852d168c22e",
-    "common/privileged_runtime.py": "3e999e26dfb40a74637e78befe973017ca141c0b34303a527fb85f343b10aeb4",
+    "common/privileged_runtime.py": "550e8f3c6771955797c7f41210f2128eaa25bc03a59037b8669f04aef45c0f4b",
     "common/telemetry_cache.py": "8e7c762862af1253a1464ebc41281952a5d7374c889202e3aacaf630af90e80b",
     "common/user_state_io.py": "aeb1b5bd1a09d491c8dd59e8456e9aec93afb8ebc30845213a0d55ea4e53cebf",
     "component_admin.py": "8d4832b4794f552ab2bf0a5d2d17ce44e614d28497f7f54c3efa620856ec9257",
     "minas-helper": "8ed97c29410d8d0eca612b3ed1066cb7798bf8956a85cd073f86b27714c5b4f5",
-    "modules/nascenter/api.py": "272a3c80dc45e5af0402e50fab84982d41d423d0551bb9a5837fb0921040d50a",
-    "modules/nascenter/nas-center-helper": "932135e6aa8e84d38f86542f4e777c34ddc93a78a83bf316d69a155991b24181",
+    "modules/nascenter/api.py": "d9c212879b252ff349db1b123b5afe1a53b444572b70dbaa47490cecb4f3e061",
+    "modules/nascenter/nas-center-helper": "9a248f2adb51f8dc87282e67adcfdf4ec7772fa463134df9b2e39f39f7af1515",
     "modules/nascenter/process_metrics.py": "e3a653c59d60f1a5170218e480cdafe15fe4a876600bd2b9e6dc45787288f1f9"
   }
 }
