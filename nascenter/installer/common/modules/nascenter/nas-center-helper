@@ -134,7 +134,11 @@ def overview(user,force=False,fast=False):
  data={'ok':True,'cpu':{'usage':cpu_usage(),'load':[float(v) for v in Path('/proc/loadavg').read_text().split()[:3]],'temperature':cpu_temp()},'memory':{'total':total,'used':max(0,total-available),'available':available,'percent':round(100*(total-available)/max(1,total),1)},'uptime':float(Path('/proc/uptime').read_text().split()[0]),'network':network(),'cache':{'pageCache':mem.get('Cached',0)+mem.get('Buffers',0)}}
  if not fast:data.update(overview_details(user,force))
  return data
-def smart_disks():
+def smart_disks(user):
+ from user_state_io import read_state,write_state
+ try:previous=read_state(user,"nascenter","smart-last.json") or {}
+ except (OSError,ValueError,subprocess.SubprocessError):previous={}
+ fresh={}
  block=run(['lsblk','-J','-b','-o','NAME,PATH,TYPE,SIZE,MODEL,SERIAL'],10)
  try:devices=json.loads(block.stdout).get('blockdevices',[])
  except Exception:devices=[]
@@ -142,9 +146,20 @@ def smart_disks():
  for device in devices:
   path=str(device.get('path') or '')
   if device.get('type')!='disk' or not re.fullmatch(r'/dev/(sd[a-z]+|nvme[0-9]+n[0-9]+)',path):continue
-  proc=run(['smartctl','-a','-j',path],25)
+  proc=run(['smartctl','-n','standby,3,5','-a','-j',path],25)
   try:data=json.loads(proc.stdout)
   except Exception:data={}
+  messages=' '.join(str(m.get('string','')) for m in (data.get('smartctl') or {}).get('messages',[]))
+  sleeping=bool(re.search(r'STANDBY|SLEEP',str(data.get('power_mode',''))+' '+messages,re.I))
+  if sleeping or (proc.returncode and not data.get('smart_status')):
+   old=previous.get(path,{})
+   if old.get('serial')!=str(device.get('serial') or ''):old={}
+   row=dict(old)
+   row.update(path=path,name=device.get('name'),model=device.get('model') or '未知硬盘',serial=device.get('serial') or '',size=int(device.get('size') or 0),status='standby' if sleeping else 'unavailable',sleeping=sleeping,checkedAt=old.get('checkedAt'),attributes=old.get('attributes',[]),selfTests=old.get('selfTests',[]))
+   for key in ('reallocated','pending','offlineUncorrectable','reportedUncorrectable','mediaErrors'):row.setdefault(key,0)
+   result.append(row)
+   if old:fresh[path]=old
+   continue
   attrs={}
   attributes=[]
   for row in ((data.get('ata_smart_attributes') or {}).get('table') or []):
@@ -157,6 +172,10 @@ def smart_disks():
   tests=[]
   for test in (self_log.get('table') or [])[:10]:tests.append({'number':test.get('num'),'type':test.get('type') or {},'status':test.get('status') or {},'lifetimeHours':test.get('lifetime_hours'),'lba':test.get('lba_of_first_error')})
   result.append({'path':path,'name':device.get('name'),'model':data.get('model_name') or device.get('model') or '未知硬盘','serial':data.get('serial_number') or device.get('serial') or '', 'firmware':data.get('firmware_version') or '—','formFactor':(data.get('form_factor') or {}).get('name') or '—','sataVersion':(data.get('sata_version') or {}).get('string') or '—','interfaceSpeed':((data.get('interface_speed') or {}).get('current') or {}).get('string') or '—','logicalBlockSize':data.get('logical_block_size'),'physicalBlockSize':data.get('physical_block_size'),'size':int((data.get('user_capacity') or {}).get('bytes') or device.get('size') or 0),'passed':passed,'smartAvailable':bool((data.get('smart_support') or {}).get('available',True)),'smartEnabled':bool((data.get('smart_support') or {}).get('enabled',True)),'temperature':(data.get('temperature') or {}).get('current'),'hours':(data.get('power_on_time') or {}).get('hours'),'powerCycles':data.get('power_cycle_count'),'rotation':data.get('rotation_rate'),'reallocated':attrs.get('5',0),'reportedUncorrectable':attrs.get('187',0),'pending':attrs.get('197',0),'offlineUncorrectable':attrs.get('198',0),'mediaErrors':int(nvme.get('media_errors',0) or 0),'errorLogCount':int(((data.get('ata_smart_error_log') or {}).get('summary') or {}).get('count',0) or 0),'selfTestCount':int(self_log.get('count',0) or 0),'attributes':attributes,'selfTests':tests,'nvmeHealth':nvme,'badTotal':bad,'status':'healthy' if passed is True and bad==0 else ('warning' if passed is not False else 'failed')})
+  result[-1]['checkedAt']=int(time.time());fresh[path]=result[-1]
+ if fresh:
+  try:write_state(user,'nascenter','smart-last.json',fresh)
+  except (OSError,ValueError,subprocess.SubprocessError):pass
  return {'ok':True,'disks':result,'checkedAt':int(time.time())}
 def restart_service(user,key):
  item=SERVICES.get(key)
@@ -206,7 +225,7 @@ try:
   output({'ok':True,'reasons':reasons,'cpu':details['rows'][:10], 'memory':sorted(details['rows'],key=lambda r:-r['rss'])[:10], 'note':details['note'],'timestamp':time.time()})
  if action=='overview':output(overview(user,req.get('force') is True,req.get('fast') is True))
  if action=='overview_details':output(overview_details(user,req.get('force') is True))
- if action=='smart':output(smart_disks())
+ if action=='smart':output(smart_disks(user))
  if action=='service_restart':
   result=restart_service(user,str(req.get('service','')));invalidate('nascenter-'+user+'-services');output(result)
  if action=='drop_caches':output(drop_caches())

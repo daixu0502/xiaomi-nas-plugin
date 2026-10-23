@@ -432,6 +432,9 @@ def install(payload, plugin, user, plugin_version, backup):
 
 def remove(plugin, user, backup):
     data = runtime.registry()
+    if plugin in ('taskcenter','nascenter'):
+        from user_state_io import release_memory_cache
+        release_memory_cache(user,plugin)
     if plugin == 'sshrecovery':
         key = ssh_state() / 'keys' / (user + '.pub')
         if key.exists(): key.unlink()

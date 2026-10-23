@@ -2,15 +2,15 @@
   "plugin": "taskcenter",
   "name": "定时任务",
   "id": 19094,
-  "version": "1.0.15",
+  "version": "1.0.16",
   "tags": [
     "tool"
   ],
-  "timestamp": 1792663306,
+  "timestamp": 1792714936,
   "desc": "可视化任务计划与执行记录",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "心跳使用运行缓存，近24小时失败统计",
+  "changelog": "运行缓存使用有界内存文件系统，避免心跳与统计写入机械盘",
   "system": false,
   "size": 93301,
   "port": "",

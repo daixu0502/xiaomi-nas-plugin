@@ -13,6 +13,11 @@ import re
 import select
 import subprocess
 import sys
+import array
+import ctypes
+import fcntl
+import socket
+import stat
 
 HOME_ROOT = Path('/home')
 PLUGINS = {'dockermanager', 'nascenter', 'mihomo', 'taskcenter'}
@@ -21,7 +26,7 @@ MAX_BYTES = 4 * 1024 * 1024
 _PROGRAM = r'''
 import fcntl,json,os,stat,sys,tempfile
 from pathlib import Path
-home,operation,name=sys.argv[1:]
+home,operation,name=sys.argv[1:4]
 home=Path(home)
 for node in (home.parent,home):
     if node.is_symlink() or not node.is_dir():raise ValueError('plugin directory unavailable')
@@ -37,6 +42,19 @@ if directory.is_symlink():raise ValueError('state directory is a symlink')
 directory.mkdir(mode=0o700,exist_ok=True)
 if not directory.is_dir():raise ValueError('state directory unavailable')
 if directory.stat().st_uid!=os.geteuid() or directory.stat().st_mode&0o077:raise ValueError('unsafe cache permissions')
+
+if home.name in ('taskcenter','nascenter'):
+    import ctypes
+    fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    if operation=='prepare':
+        import socket,array
+        sock=socket.socket(fileno=int(sys.argv[4]))
+        sock.sendmsg([b'cache'],[(socket.SOL_SOCKET,socket.SCM_RIGHTS,array.array('i',[fd]))])
+        sys.exit(0)
+    buf=ctypes.create_string_buffer(256)
+    if ctypes.CDLL(None,use_errno=True).fstatfs(fd,buf)!=0 or ctypes.c_long.from_buffer(buf).value!=0x01021994:
+        raise ValueError('memory cache unavailable; refusing disk fallback')
+    os.close(fd)
 target=directory/name
 if target.is_symlink():raise ValueError('state file is a symlink')
 if operation=='lock':
@@ -87,10 +105,69 @@ def _arguments(user, plugin, name, operation):
             os.setuid(account.pw_uid)
         elif os.geteuid() != account.pw_uid:
             raise PermissionError('禁止访问其他用户的插件状态')
+    if plugin in ('taskcenter','nascenter') and operation!='prepare' and os.geteuid()==0:
+        _memory_cache(user,plugin,account)
     return dict(args=[sys.executable, '-I', '-c', _PROGRAM,
                       str(HOME_ROOT / user / 'plugin' / plugin), operation, name],
                 cwd='/', env={'PATH':'/usr/bin:/bin','LC_ALL':'C'},
                 preexec_fn=demote, close_fds=True)
+
+
+def _memory_cache(user,plugin,account,release=False):
+    fd=os.open('/run/minas-plugin-memory-cache.lock',os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
+    with os.fdopen(fd,'a') as lock:
+        if os.fstat(fd).st_uid!=0:raise ValueError('unsafe cache mount lock')
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        _mount_memory_cache(user,plugin,account,release)
+
+
+def release_memory_cache(user,plugin):
+    if os.geteuid()!=0 or plugin not in ('taskcenter','nascenter') or not re.fullmatch(r'u[0-9]+',user):
+        raise ValueError('invalid memory cache removal')
+    if (HOME_ROOT/user/'plugin'/plugin).is_dir():
+        _memory_cache(user,plugin,pwd.getpwnam(user),release=True)
+
+
+def _mount_memory_cache(user,plugin,account,release=False):
+    # The unprivileged worker opens the validated official cache directory.
+    # SCM_RIGHTS pins that inode across renames; root never traverses user cache.
+    parent,child=socket.socketpair()
+    parent.settimeout(8)
+    process=None
+    fd=None
+    try:
+        args=_arguments(user,plugin,'memory','prepare')
+        args['args'].append(str(child.fileno()))
+        process=subprocess.Popen(**args,pass_fds=(child.fileno(),),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        child.close()
+        _,ancillary,_,_=parent.recvmsg(16,socket.CMSG_SPACE(array.array('i').itemsize))
+        for level,kind,data in ancillary:
+            if level==socket.SOL_SOCKET and kind==socket.SCM_RIGHTS:
+                values=array.array('i');values.frombytes(data[:len(data)//values.itemsize*values.itemsize]);fd=values[0]
+        if fd is None:raise ValueError('cache descriptor missing')
+        process.wait(timeout=8)
+        if process.returncode:raise ValueError('cache preparation failed')
+        metadata=os.fstat(fd)
+        if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid!=account.pw_uid or metadata.st_mode&0o077:
+            raise ValueError('unsafe memory cache directory')
+        libc=ctypes.CDLL(None,use_errno=True)
+        def mounted():
+            buffer=ctypes.create_string_buffer(256)
+            if libc.fstatfs(fd,buffer):raise OSError(ctypes.get_errno(),'fstatfs')
+            return ctypes.c_long.from_buffer(buffer).value==0x01021994
+        target=('/proc/self/fd/'+str(fd)).encode()
+        if release:
+            if mounted() and libc.umount2(target,2):raise OSError(ctypes.get_errno(),'cannot detach memory cache')
+            return
+        if mounted():return
+        options=('size=16m,mode=0700,uid=%d,gid=%d' % (account.pw_uid,account.pw_gid)).encode()
+        if libc.mount(b'minas-cache',target,b'tmpfs',2|4|8,options):
+            raise OSError(ctypes.get_errno(),'cannot mount memory cache')
+    finally:
+        parent.close();child.close()
+        if fd is not None:os.close(fd)
+        if process is not None and process.poll() is None:
+            process.kill();process.wait()
 
 
 def read_state(user, plugin, name):
