@@ -96,6 +96,21 @@ cat /run/minas-plugin-recovery/watch-status.json
 python3 -B /data/.minas-plugin-recovery/recovery.py bootstrap
 ```
 
+## 版本维护
+
+每个插件的发布版本只维护在该插件根目录 `INFO` 文件的 `version` 字段，例如 [Mihomo 的 INFO](mihomo/INFO) 和 [下载中心的 INFO](downloadcenter/INFO)。修改该字段后，运行构建会自动同步安装器、界面和接口版本，无需逐个文件修改。
+
+每个安装包都包含自身的 `INFO` 与已同步的源码。只复制所需插件的安装包到 WSL、解压后运行该插件的 `manage.sh` 即可安装，无需仓库根目录文件或其他插件。
+
+```sh
+python3 workspace-tools/build_plugin_packages.py
+# 也可只同步源码中的版本，或检查是否一致：
+python3 workspace-tools/sync_versions.py
+python3 workspace-tools/sync_versions.py --check
+```
+
+其他文件中的发布版本由同步过程生成，无需逐个修改。上游内核版本、协议版本及历史说明中的版本号保持各自含义。
+
 ## 注意事项
 
 - 适用于支持当前安装脚本和依赖的 ARM64 小米 NAS；远程安装需要 root SSH。Mihomo 和下载中心安装时需联网获取并校验内核，不是完整离线包。

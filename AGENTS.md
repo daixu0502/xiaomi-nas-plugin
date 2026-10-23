@@ -11,4 +11,5 @@
 - 更新源码后同步 INFO 摘要和注册元数据，保留禁用状态、任务配置、SSH 材料及服务状态。完成原厂校验后才能报告真机部署成功；隔离测试不能替代真机验收。
 - 统一远端为 `https://github.com/daixu0502/xiaomi-nas-plugin`。提交和推送按当前用户授权执行，不绑定旧插件仓库，不因为本地重构而自动提交或推送。
 
-- 标准源码与安装包层级为根 INFO、src/files、src/ui、scripts/control、按需 etc；安装辅助在 installer/，不得重建 payload 包装层。版本维护源为 workspace-tools/plugins.json。
+- 标准源码与安装包层级为根 INFO、src/files、src/ui、scripts/control、按需 etc；安装辅助在 installer/，不得重建 payload 包装层。
+- 各插件的发布版本只维护在该插件根目录的 `INFO` 的 `version` 字段（如 `mihomo/INFO`），不创建仓库级版本配置。构建从各自 INFO 自动同步安装入口、页面资源缓存键与版本展示及接口版本；安装包携带完整 INFO 和已同步源码，可独立复制到 WSL 安装。也可运行 `python3 workspace-tools/sync_versions.py` 单独同步，`--check` 只检查。公共权限组件和恢复服务的版本分别维护在其公共维护源的 VERSION 常量，构建同步副本及组件摘要。不手动修改生成位置中的版本号，不将内核版本、协议版本或历史说明中的版本当作插件发布版本替换。

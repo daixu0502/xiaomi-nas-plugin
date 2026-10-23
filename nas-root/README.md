@@ -9,7 +9,7 @@
 | [SSH 开启：固件 1.0.9.462](xiaomi-storage-open-ssh-wsl-1.0.9.462.sh) | 用已登录客户端证书，经新固件 UCI/SMB 入口和一次性 Cron 尝试开启 SSH，验证后询问是否安装开机恢复。 |
 | [SSH 开启：固件 1.0.8.425](xiaomi-storage-open-ssh-wsl-1.0.8.425.sh) | 保留的旧固件入口，不适用于 1.0.9.462；成功后自动安装开机恢复。 |
 | [SSH 开机恢复安装器](install-ssh-autostart-fix.sh) | 通过已有 root SSH 安装或更新与 SSH 恢复插件同源的开机恢复。 |
-| [Docker bridge 修复](fix-docker-bridge.sh) | 检查网络规则，恢复 Docker 原生 IPv4 规则管理，提供限时确认和自动回退。 |
+| [Docker bridge 修复](fix-docker-bridge.sh) | 恢复原生 IPv4 规则；可选启用默认 bridge IPv6、NAT66 与开机恢复，提供限时确认和自动回退。 |
 
 ## 如何使用
 
