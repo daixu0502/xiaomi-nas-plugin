@@ -23,6 +23,13 @@ HOME_ROOT = Path('/home')
 PLUGINS = {'dockermanager', 'nascenter', 'mihomo', 'taskcenter'}
 MAX_BYTES = 4 * 1024 * 1024
 
+
+def _host_mount_namespace():
+    fd=os.open('/proc/1/ns/mnt',os.O_RDONLY)
+    try:
+        if ctypes.CDLL(None,use_errno=True).setns(fd,0):raise OSError(ctypes.get_errno(),'cannot enter host mount namespace')
+    finally:os.close(fd)
+
 _PROGRAM = r'''
 import fcntl,json,os,stat,sys,tempfile
 from pathlib import Path
@@ -100,6 +107,8 @@ def _arguments(user, plugin, name, operation):
     if account.pw_uid==0:raise ValueError('插件运行状态必须属于普通 NAS 用户')
     def demote():
         if os.geteuid() == 0:
+            if plugin in ('taskcenter','nascenter') and os.readlink('/proc/self/ns/mnt')!=os.readlink('/proc/1/ns/mnt'):
+                _host_mount_namespace()
             os.initgroups(account.pw_name, account.pw_gid)
             os.setgid(account.pw_gid)
             os.setuid(account.pw_uid)
@@ -114,6 +123,12 @@ def _arguments(user, plugin, name, operation):
 
 
 def _memory_cache(user,plugin,account,release=False):
+    # SSH and CGI may have private mount namespaces. Publish one host-wide
+    # layer so every request and Cron observes the same bounded memory cache.
+    if os.readlink('/proc/self/ns/mnt')!=os.readlink('/proc/1/ns/mnt'):
+        code="import sys,pwd;sys.path.insert(0,sys.argv[1]);import user_state_io as m;m._host_mount_namespace();m._memory_cache(sys.argv[2],sys.argv[3],pwd.getpwnam(sys.argv[2]),sys.argv[4]=='1')"
+        subprocess.run([sys.executable,'-I','-B','-c',code,str(Path(__file__).resolve().parent),user,plugin,'1' if release else '0'],check=True,capture_output=True,timeout=15)
+        return
     fd=os.open('/run/minas-plugin-memory-cache.lock',os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
     with os.fdopen(fd,'a') as lock:
         if os.fstat(fd).st_uid!=0:raise ValueError('unsafe cache mount lock')
