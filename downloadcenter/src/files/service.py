@@ -190,7 +190,7 @@ def _serve_locked(m):
     # Refuse root even if launched outside the lifecycle script.
     if os.geteuid() == 0:
         raise DownloadError("下载核心禁止以 root 运行")
-    from runtime_log import redirect, drain
+    from memory_log import redirect, drain
     redirect(m.runtime / 'service.log')
     (m.runtime / "service.pid").write_text(str(os.getpid()))
     stopping = [False]
@@ -204,7 +204,7 @@ def _serve_locked(m):
     conf = {"enable-rpc": "true", "rpc-listen-all": "false", "rpc-allow-origin-all": "false",
             "rpc-listen-port": (m.var / "rpc.port").read_text().strip(), "rpc-secret": (m.var / "rpc.secret").read_text().strip(),
             "listen-port": (m.var / "aria-peer.port").read_text().strip(), "dht-listen-port": (m.var / "aria-peer.port").read_text().strip(),
-            "dir": str(directory), "input-file": str(session), "save-session": str(session), "save-session-interval": "15",
+            "dir": str(directory), "input-file": str(session), "save-session": str(session), "save-session-interval": "0",
             "save-not-found": "true", "force-save": "false", "continue": "true", "auto-file-renaming": "true",
             "allow-overwrite": "false", "file-allocation": "none", "check-certificate": "true", "max-tries": "5", "retry-wait": "5",
             "connect-timeout": "15", "timeout": "60", "max-download-result": "1000", "follow-torrent": "false", "follow-metalink": "false",
@@ -248,14 +248,14 @@ def _serve_locked(m):
         tracker_worker = threading.Thread(target=apply_saved_trackers, args=(manager(m.home),), daemon=True)
         tracker_worker.start()
         while not stopping[0] and child.poll() is None and qb_child.poll() is None:
-            m.ready()  # Pool lost: stop instead of writing into an empty mountpoint.
+            m.ready(storage=False)  # Pool lost: stop instead of writing into an empty mountpoint.
             delay = 3
             try:
-                with m.locked():
+                with m.locked(storage=False):
                     sampled_rows = m.rows()
                     sampled_revision = (m.var / 'tasks.sqlite').stat().st_mtime_ns
                 remote = m.fetch_sync(sampled_rows)
-                with m.locked():
+                with m.locked(storage=False):
                     # Any mutation (including selection/source-only changes) supersedes
                     # this sample. No task can be resurrected or overwritten by it.
                     if (m.var / 'tasks.sqlite').stat().st_mtime_ns == sampled_revision:

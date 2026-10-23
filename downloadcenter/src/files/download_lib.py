@@ -19,7 +19,7 @@ from urllib.parse import urlsplit, parse_qs, unquote
 from urllib.request import Request, build_opener, ProxyHandler
 from urllib.error import HTTPError
 
-VERSION = "1.1.20"
+VERSION = "1.1.21"
 MAX_TORRENT = 4 * 1024 * 1024
 DEFAULTS = {"directory": "", "concurrent": 3, "connections": 4, "downloadKiB": 0,
             "uploadKiB": 1024, "seedRatio": 1.0, "seedMinutes": 60,
@@ -41,6 +41,11 @@ def core_path(m):
 
 
 def atomic_json(path, data):
+    try:
+        # Preserve JSON type corrections (True and 1 compare equal in Python).
+        canonical=lambda value:json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'))
+        if canonical(json.loads(path.read_text(encoding='utf-8')))==canonical(data):return
+    except (OSError,ValueError):pass
     temp = path.with_name(path.name + "." + secrets.token_hex(6))
     try:
         with temp.open("x", encoding="utf-8") as stream:
@@ -237,24 +242,25 @@ class Manager:
     def __init__(self, home, root, require_mount=True):
         self.home, self.root = Path(home), Path(root)
         self.var = self.home / "var"
-        from plugin_paths import runtime_directory
+        from memory_paths import runtime_directory
         self.runtime = runtime_directory(self.home)
         self.require_mount = require_mount
         self.settings_path = self.var / "settings.json"
 
-    def ready(self):
+    def ready(self, storage=True):
         if self.require_mount:
             pool = self.root.parent.parent
-            if not os.path.ismount(pool):
+            if str(pool) not in {line.split()[4] for line in Path('/proc/self/mountinfo').read_text().splitlines()}:
                 raise DownloadError("存储池尚未挂载，已禁止启动或写入下载任务")
+        if not storage:return
         if not self.root.is_dir() or self.root.is_symlink():
             raise DownloadError("当前用户文件空间不可用")
         if not self.var.is_dir():
             raise DownloadError("插件状态目录不存在，请重新安装")
 
     @contextlib.contextmanager
-    def locked(self):
-        self.ready()
+    def locked(self, storage=True):
+        self.ready(storage=storage)
         with open_lock(self.runtime / "api.lock") as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             yield
@@ -526,6 +532,7 @@ class Manager:
 
     def sync(self, ident=None, remote=None):
         rows = [r for r in self.sync_rows(ident, remote) if json.loads(r['snapshot']).get('engine') != 'qbittorrent']
+        if not rows:return
         if ident is None:
             samples = remote['aria'] if remote is not None else self.fetch_sync(rows)['aria']
             remote = {s['gid']: s for s in samples}
@@ -536,7 +543,7 @@ class Manager:
             except DownloadError:
                 self.rpc("getVersion")  # Do not mark tasks missing on a dead core.
                 remote = {}
-        root = self.root.resolve()
+        root = self.root
         with self.db() as db:
             for row in rows:
                 gid = row["gid"]
@@ -565,6 +572,10 @@ class Manager:
                     bt_name = item.get("bittorrent", {}).get("info", {}).get("name", "")
                     if bt_name and Path(bt_name).name == bt_name and not old.get("metadataPending"):
                         candidates.add(str(self.root / old["directory"] / (bt_name + ".aria2")))
+                    if ident is None and item.get('status') in ('paused','waiting'):
+                        # Defer ownership probes until active or an explicit
+                        # foreground operation; absent files must not be polled.
+                        candidates.clear()
                     registered = {r[0] for r in db.execute("SELECT path FROM task_files WHERE task=?", (row["id"],))}
                     for filename in candidates:
                         try:
@@ -611,7 +622,7 @@ class Manager:
         except (OSError, ValueError):
             tracker_status = {}
         try:
-            job = json.loads((self.runtime / "job.json").read_text())
+            job = json.loads((self.var / "job.json").read_text())
         except (OSError, ValueError):
             job = {}
         result = {"running": running, "error": error, "stats": stats, "tasks": tasks, "version": VERSION,
@@ -1080,7 +1091,7 @@ class Manager:
     def queue_job(self, command):
         self.rpc("getVersion")
         try:
-            previous = json.loads((self.runtime / "job.json").read_text())
+            previous = json.loads((self.var / "job.json").read_text())
         except (OSError, ValueError):
             previous = {}
         if previous.get("state") == "pending":
@@ -1095,14 +1106,17 @@ class Manager:
                 ids.append(row["id"])
         job = {"id": secrets.token_hex(8), "state": "pending", "command": command,
                "remaining": ids, "total": len(ids), "count": 0, "failed": []}
-        atomic_json(self.runtime / "job.json", job)
+        atomic_json(self.var / "job.json", job)
         return {"pending": True, "id": job["id"]}
 
     def process_job(self):
+        try:
+            if json.loads((self.var/'job.json').read_text()).get('state')!='pending':return
+        except (OSError,ValueError):return
         for _ in range(10):
             with self.locked():
                 try:
-                    job = json.loads((self.runtime / "job.json").read_text())
+                    job = json.loads((self.var / "job.json").read_text())
                 except (OSError, ValueError):
                     return
                 if job.get("state") != "pending":
@@ -1116,7 +1130,7 @@ class Manager:
                         job["count"] += 1
                     except DownloadError as exc:
                         job["failed"].append(str(exc))
-                atomic_json(self.runtime / "job.json", job)
+                atomic_json(self.var / "job.json", job)
 
     def dispatch(self, action, data):
         if action == 'status':

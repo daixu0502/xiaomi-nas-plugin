@@ -2,6 +2,7 @@
 """Verified qBittorrent 5 / libtorrent 2 updates, isolated from firmware src."""
 import fcntl
 from runtime_lock import open_lock
+from memory_paths import update_staging
 import json
 import hashlib
 import os
@@ -214,7 +215,7 @@ def run(m, command, proxy):
             common.update(installed, latest=info['latest'], libtorrent=info['libtorrent'], updateAvailable=available)
             if command == 'check' or not available:
                 write_state(m, **common, state='done', message='发现新版本，可下载并更新。' if available else '当前已是此渠道的最新版本。'); return
-            with tempfile.TemporaryDirectory(prefix='qb-download-', dir=m.runtime) as folder:
+            with tempfile.TemporaryDirectory(prefix='qb-download-', dir=update_staging(m.home)) as folder:
                 write_state(m, **common, state='downloading', message='正在下载并校验 SHA-256…')
                 candidate = Path(folder) / 'qbittorrent-nox'
                 unpack(fetch(info['url'], proxy, 100 * 1024 * 1024), info, candidate)

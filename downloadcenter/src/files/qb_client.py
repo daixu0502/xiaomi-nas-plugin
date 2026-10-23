@@ -148,6 +148,9 @@ class QB:
             conf.read(path)
         sections = {
             'LegalNotice': {'Accepted': 'true'},
+            'Application': {'FileLogger\\Enabled':'true','FileLogger\\Path':str(self.m.runtime/'qb-logs'),
+                            'FileLogger\\Backup':'false','FileLogger\\MaxSizeBytes':'262144',
+                            'FileLogger\\DeleteOld':'true','FileLogger\\Age':'1','FileLogger\\AgeType':'0'},
             'Preferences': {'WebUI\\Address': '127.0.0.1', 'WebUI\\Port': (self.m.var / 'qb.port').read_text().strip(),
                             'WebUI\\Username': 'downloadcenter', 'WebUI\\Password_PBKDF2': password,
                             'WebUI\\LocalHostAuth': 'true', 'WebUI\\AuthSubnetWhitelistEnabled': 'false',

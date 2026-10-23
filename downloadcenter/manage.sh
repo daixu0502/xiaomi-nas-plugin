@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='downloadcenter'
 PLUGIN_LABEL='下载中心'
-PLUGIN_VERSION='1.1.20'
+PLUGIN_VERSION='1.1.21'
 UNINSTALL_NOTE='停止所选用户下载服务；配置、种子和任务记录先备份。已下载及未完成文件均保留，不影响其他用户。'
 
 # Common installation flow adapted from the existing standalone plugins.
@@ -499,8 +499,9 @@ cp -R "$PACKAGE/src/files" "$stage/files"; cp -R "$PACKAGE/src/ui" "$stage/ui"
 # Keep a newer core installed through the UI when updating the plugin package.
 # Never execute a user-owned binary as root to obtain its version.
 if [ -x "$SRC/files/aria2c" ]; then
-    old_version=$(runuser -u "$USER_NAME" -- python3 -B "$HOME_DIR/src/files/plugin_paths.py" --migrate "$HOME_DIR" || nas_fail "旧缓存迁移失败，未启动新服务"
-runuser -u "$USER_NAME" -- "$SRC/files/aria2c" --version 2>/dev/null | sed -n 's/^aria2 version //p')
+    # Pending bulk operations are migrated to persistent var by the root
+    # runtime preparer. Do not treat var/job.json as disposable cache.
+    old_version=$(runuser -u "$USER_NAME" -- "$SRC/files/aria2c" --version 2>/dev/null | sed -n 's/^aria2 version //p')
     if python3 -c 'import re,sys; v=sys.argv[1]; sys.exit(0 if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+",v) and tuple(map(int,v.split("."))) > (1,37,0) else 1)' "$old_version"; then
         cp -p "$SRC/files/aria2c" "$stage/files/aria2c"
         nas_log "保留已更新的 aria2 $old_version 核心。"

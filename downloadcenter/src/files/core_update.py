@@ -2,6 +2,7 @@
 """Per-user, verified static-core updates. No arbitrary URLs or root helper."""
 import fcntl
 from runtime_lock import open_lock
+from memory_paths import update_staging
 import hashlib
 import io
 import json
@@ -198,7 +199,7 @@ def run(m, command, proxy):
             if command == 'check' or not available:
                 write_state(m, **common, state='done', message='发现新版本，可下载并更新。' if available else '当前已是此渠道的最新版本。')
                 return
-            with tempfile.TemporaryDirectory(prefix='core-download-', dir=m.runtime) as folder:
+            with tempfile.TemporaryDirectory(prefix='core-download-', dir=update_staging(m.home)) as folder:
                 write_state(m, **common, state='downloading', message='正在下载并校验 SHA-256…')
                 candidate = Path(folder)/'aria2c'
                 unpack(fetch(info['url'], proxy, 40 * 1024 * 1024), info, candidate)

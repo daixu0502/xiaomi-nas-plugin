@@ -19,6 +19,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import socket
+import array
 
 sys.dont_write_bytecode = True
 BASE = Path('/data/.minas-plugin-recovery')
@@ -27,7 +29,7 @@ PLUGINS = {'mihomo', 'dockermanager', 'taskcenter', 'nascenter', 'sshrecovery', 
 SERVERS = {'mihomo', 'quickshare', 'downloadcenter'}
 MANAGED = SERVERS | {'taskcenter'}
 UNIT = 'minas-plugin-recovery'
-VERSION = '1.4.0'
+VERSION = '1.5.2'
 WATCH_UNIT = UNIT + '-watch.service'
 RUNTIME = Path('/run/minas-plugin-recovery')
 
@@ -147,6 +149,87 @@ def daemon_unit(user, plugin):
     return 'minas-plugin-' + plugin + '-' + user + '.service'
 
 
+def memory_download(home):
+    try:return tuple(int(n) for n in json.loads((home/'INFO').read_text())['version'].split('.')) >= (1,1,21)
+    except (OSError,ValueError,KeyError):return False
+
+
+_MEMORY_RUNTIME = r'''
+import os,re,sys,stat,socket,array,json,tempfile,ctypes
+from pathlib import Path
+home=Path(sys.argv[1]);sock=socket.socket(fileno=int(sys.argv[2]))
+if home.is_symlink() or home.parent.is_symlink():raise ValueError('redirected plugin home')
+link=home/'tmp'
+if not link.is_symlink():raise ValueError('official cache link required')
+base=link.resolve(strict=True)
+match=re.fullmatch(r'/nas/(pool[0-9]+)/'+home.parts[2]+r'/plugin/plugintmp/downloadcenter',str(base))
+if not match or not os.path.ismount('/nas/'+match[1]):raise ValueError('pool unavailable')
+if base.stat().st_uid!=os.geteuid():raise ValueError('cache owner mismatch')
+directory=base/'runtime'
+if directory.is_symlink():raise ValueError('runtime symlink')
+directory.mkdir(mode=0o700,exist_ok=True)
+s=directory.stat()
+if not stat.S_ISDIR(s.st_mode) or s.st_uid!=os.geteuid() or s.st_mode&0o077:raise ValueError('unsafe runtime')
+fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+buf=ctypes.create_string_buffer(256)
+if ctypes.CDLL(None).fstatfs(fd,buf):raise OSError('fstatfs failed')
+if ctypes.c_long.from_buffer(buf).value!=0x01021994:
+    # Pending bulk commands are tasks, not disposable memory state.
+    old=directory/'job.json';target=home/'var/job.json'
+    if old.is_symlink() or target.is_symlink():raise ValueError('redirected operation queue')
+    if old.exists():
+        with old.open('rb') as source:raw=source.read(4194305)
+        if len(raw)>4194304 or not isinstance(json.loads(raw),dict):raise ValueError('invalid operation queue')
+        if target.exists() and target.read_bytes()!=raw:raise ValueError('conflicting operation queues')
+        if not target.exists():
+            tmpf,tmp=tempfile.mkstemp(prefix='.job-',dir=target.parent)
+            with os.fdopen(tmpf,'wb') as f:f.write(raw);f.flush();os.fsync(f.fileno())
+            os.replace(tmp,target)
+        old.unlink()
+sock.sendmsg([b'runtime'],[(socket.SOL_SOCKET,socket.SCM_RIGHTS,array.array('i',[fd]))])
+'''
+
+
+def download_runtime(user, operation='prepare'):
+    require(operation in ('prepare','release'), 'invalid runtime operation')
+    home,owner=identity(user,'downloadcenter')
+    require(owner[0]!=0, 'ordinary plugin user required')
+    if os.readlink('/proc/self/ns/mnt')!=os.readlink('/proc/1/ns/mnt'):
+        def host_namespace():
+            fd=os.open('/proc/1/ns/mnt',os.O_RDONLY)
+            try:require(ctypes.CDLL(None,use_errno=True).setns(fd,0)==0, 'host namespace unavailable')
+            finally:os.close(fd)
+        subprocess.run([sys.executable,'-B','-','runtime','--user',user,'--plugin','downloadcenter','--operation',operation],input=Path(__file__).read_bytes(),preexec_fn=host_namespace,check=True,timeout=30)
+        return
+    protected(RUNTIME)
+    with open(plain(RUNTIME/'download-runtime.lock'),'a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        parent,child=socket.socketpair();parent.settimeout(10);process=None;fd=None
+        try:
+            def demote():os.initgroups(user,owner[1]);os.setgid(owner[1]);os.setuid(owner[0])
+            process=subprocess.Popen([sys.executable,'-I','-B','-c',_MEMORY_RUNTIME,str(home),str(child.fileno())],pass_fds=(child.fileno(),),preexec_fn=demote,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+            child.close()
+            _,anc,_,_=parent.recvmsg(32,socket.CMSG_SPACE(array.array('i').itemsize))
+            for level,kind,data in anc:
+                if level==socket.SOL_SOCKET and kind==socket.SCM_RIGHTS:
+                    fds=array.array('i');fds.frombytes(data[:len(data)//fds.itemsize*fds.itemsize]);fd=fds[0]
+            _,error=process.communicate(timeout=10)
+            require(process.returncode==0 and fd is not None,'runtime validation failed: '+error.decode(errors='replace')[-500:])
+            meta=os.fstat(fd);require(stat.S_ISDIR(meta.st_mode) and meta.st_uid==owner[0] and not meta.st_mode&0o077,'unsafe runtime descriptor')
+            libc=ctypes.CDLL(None,use_errno=True);buf=ctypes.create_string_buffer(256)
+            require(libc.fstatfs(fd,buf)==0,'fstatfs failed');mounted=ctypes.c_long.from_buffer(buf).value==0x01021994
+            target=('/proc/self/fd/'+str(fd)).encode()
+            if operation=='release':
+                require(not mounted or libc.umount2(target,2)==0,'cannot release runtime')
+            elif not mounted:
+                options=('size=96m,mode=0700,uid=%d,gid=%d'%owner).encode()
+                require(libc.mount(b'minas-download-runtime',target,b'tmpfs',2|4|8,options)==0,'cannot mount memory runtime')
+        finally:
+            parent.close();child.close()
+            if fd is not None:os.close(fd)
+            if process is not None and process.poll() is None:process.kill();process.wait()
+
+
 @contextlib.contextmanager
 def record_lock(directory):
     plain(directory)
@@ -163,7 +246,8 @@ def install_daemon(user, plugin):
         '[Service]\nType=forking\nUser=' + user + '\nGroup=' + str(owner[1]) + '\n'
         'Environment=MINAS_SERVICE_MANAGED=1 PYTHONDONTWRITEBYTECODE=1 PLUG_USER=' + user +
         ' PLUG_HOME_DIR=' + str(home) + ' PLUG_SRC_DIR=' + str(home / 'src') + '\n'
-        'WorkingDirectory=' + str(home) + '\nPIDFile=' + str(home / 'tmp/runtime' / pidfile) + '\n'
+        'WorkingDirectory=' + str(home) + '\nPIDFile=' + str(home / 'tmp/runtime' / pidfile) + '\n' +
+        ('ExecStartPre=+/usr/bin/python3 -B '+str(BASE/'recovery.py')+' runtime --user '+user+' --plugin downloadcenter --operation prepare\n' if plugin=='downloadcenter' and memory_download(home) else '') +
         'ExecStart=/bin/sh ' + str(home / 'scripts/control') + ' start\n'
         'ExecStop=/bin/sh ' + str(home / 'scripts/control') + ' stop\n'
         # Explicit systemctl stop (including user/lifecycle stops) suppresses
@@ -225,6 +309,8 @@ def service_operation(user, plugin, operation):
         action = operation.removeprefix('lifecycle-')
         result = call(['systemctl', action, unit], check=False)
         require(result.returncode == 0, '服务操作失败，请查看服务日志：' + unit)
+        if plugin=='downloadcenter' and operation=='lifecycle-stop' and memory_download(identity(user,plugin)[0]):
+            download_runtime(user,'release')
     return 0
 
 
@@ -592,6 +678,11 @@ def snapshot(user, plugin, payload):
         migrate_running = not unit.exists() and legacy_control(user, plugin, home, src, 'status', False).returncode == 0
         if migrate_running:
             legacy_control(user, plugin, home, src, 'stop')
+        if plugin=='downloadcenter' and memory_download(home):
+            persist_state(user,plugin,home,src,owner,entry.get('enable',True))
+            protected(BASE)
+            atomic(BASE/'recovery.py',Path(__file__).read_bytes(),0o700)
+            download_runtime(user)
         install_daemon(user, plugin)
         if migrate_running:
             control(user, plugin, home, src, 'start')
@@ -604,6 +695,7 @@ def snapshot(user, plugin, payload):
     if isinstance(response, dict) and 'code' in response:
         require(response['code'] == 0, 'plugincenter list failed')
     persist_state(user, plugin, home, src, owner, entry.get('enable', True))
+    if plugin=='downloadcenter' and memory_download(home):download_runtime(user)
     verify(user, plugin, home, src)
     protected(BASE)
     protected(BASE / 'records')
@@ -780,6 +872,7 @@ def restore_locked_record(directory, intents=None, check_source=True):
         linked(home / 'tmp', tmp, owner)
         if plugin in SERVERS:
             install_daemon(user, plugin)
+            if plugin=='downloadcenter' and memory_download(home):download_runtime(user)
         webroot = Path(read(Path('/etc/config/plugin')).get('settings', {}).get('nginx_plugin', '/data/plugin/www'))
         plain(webroot / user).mkdir(parents=True, exist_ok=True)
         web = webroot / user / plugin
@@ -1087,6 +1180,7 @@ def forget(user, plugin):
         unit = Path('/etc/systemd/system') / daemon_unit(user, plugin)
         if unit.is_file():
             call(['systemctl', 'stop', unit.name])
+            if plugin=='downloadcenter' and memory_download(Path('/home')/user/'plugin'/plugin):download_runtime(user,'release')
             unit.unlink()
             call(['systemctl', 'daemon-reload'])
         for path in (Path('/etc/sudoers.d') / ('minas-service-' + user + '-' + plugin),
@@ -1097,18 +1191,22 @@ def forget(user, plugin):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('capture', 'normalize', 'reconcile', 'bootstrap', 'forget', 'status', 'service', 'watch'))
+    parser.add_argument('action', choices=('capture', 'normalize', 'reconcile', 'bootstrap', 'forget', 'status', 'service', 'watch','runtime'))
     parser.add_argument('--user')
     parser.add_argument('--plugin', choices=sorted(PLUGINS))
     parser.add_argument('--package', '--payload', dest='payload', type=Path)
     parser.add_argument('--quiet', action='store_true')
-    parser.add_argument('--operation', choices=('start', 'stop', 'restart', 'status', 'lifecycle-start', 'lifecycle-stop', 'update-start', 'update-stop', 'update-finish'))
+    parser.add_argument('--operation', choices=('start', 'stop', 'restart', 'status', 'lifecycle-start', 'lifecycle-stop', 'update-start', 'update-stop', 'update-finish','prepare','release'))
     args = parser.parse_args()
     require(os.geteuid() == 0, 'root required')
     protected(BASE)
     # Install/uninstall already owns this lock; their child coordinator must not
     # reacquire it. Timer/Cron use a nonblocking lock and retry on the next tick.
     with contextlib.ExitStack() as stack:
+        if args.action=='runtime':
+            require(args.plugin=='downloadcenter' and args.user and args.operation in ('prepare','release'),'invalid runtime identity')
+            download_runtime(args.user,args.operation)
+            return
         if args.action in ('reconcile', 'bootstrap'):
             lock = stack.enter_context(open(plain(Path('/data/plugin/.local-plugin-installer.lock')), 'a'))
             try:
