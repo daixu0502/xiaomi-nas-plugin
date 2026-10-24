@@ -60,6 +60,8 @@ sudo apt install openssh-client curl jq openssl coreutils smbclient
 
 首次开启功能尚未完成纯原厂设备的完整验收，以脚本最后的成功或失败提示为准。找不到客户端证书、需要指定私钥时，看[详细说明](docs/advanced-usage.md#1-首次开启-ssh固件-109462)。
 
+若旧脚本一直停在“等待一次性任务执行”，请重新下载当前脚本（2.2.2）。此版本修复了任务权限错误及临时共享无法自动清理的问题，见 [issue #3](https://github.com/daixu0502/xiaomi-nas-plugin/issues/3)。
+
 ## 让 SSH 开机自动恢复
 
 已经能用 root SSH 登录 NAS 时，在**电脑的 WSL 终端**运行：

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# SSH 2.2.1; authenticated UCI entry researched by lvmaple/minas_plugin.
+# SSH 2.2.2; authenticated UCI entry researched by lvmaple/minas_plugin.
 set -Eeuo pipefail
 umask 077
 fail() { printf '失败：%s\n' "$*" >&2; exit 1; }
 verbose() { if [[ $VERBOSE == 1 ]]; then printf '[诊断] %s\n' "$*" >&2; fi; }
 usage() {
     cat <<'HELP'
-小米智能存储开启 SSH 2.2.1（1.0.9.462 新入口，WSL / Linux）
+小米智能存储开启 SSH 2.2.2（1.0.9.462 新入口，WSL / Linux）
 用法：bash xiaomi-storage-open-ssh-wsl-1.0.9.462.sh [NAS IPv4] [--identity 私钥] [--cert-dir 证书目录] [-v]
 客户端证书 → 临时 SMB /etc 共享 → 一次性 Cron → Bash 映射 → 验证 root SSH。
 验证成功后询问是否调用同目录 install-ssh-autostart-fix.sh；默认不安装。
@@ -78,7 +78,8 @@ smb() {
 }
 remove_smb_file() {
     smb "del $1" || true
-    if smb "allinfo $1"; then return 1; fi
+    # smbclient can exit 0 even when allinfo reports a missing file.
+    smb "allinfo $1" || true
     # A transport/authentication failure is not proof that the file is absent.
     grep -Eq 'NT_STATUS_(OBJECT_NAME_NOT_FOUND|OBJECT_PATH_NOT_FOUND|NO_SUCH_FILE)' "$STAGE/smb.log"
 }
@@ -119,7 +120,7 @@ cleanup_remote() {
                 '.data.account[] | select((.id|tostring)==$id and .username==$user and .password==$password)' "$STAGE/accounts.json" >/dev/null; then
                 if jq -n --arg id "$SHARE_ID" '{id:$id}' | api netshare/del_samba_account > "$STAGE/delete.json"; then
                     code=$(jq -r '.code // -1' "$STAGE/delete.json")
-                    [[ $code == 0 ]] || ok=0
+                    if [[ $code != 0 ]]; then verbose "撤销临时 SMB 账户返回业务码 $code"; ok=0; fi
                 else ok=0; fi
             elif [[ $SHARE_CONFIRMED != 1 ]]; then
                 # An interrupted add can leave a UCI share without an account.
@@ -210,8 +211,14 @@ verbose "已确认空闲 SMB 槽位 $SHARE_ID"
 SMB_PASSWORD=$(openssl rand -hex 20)
 printf 'username = %s\npassword = %s\n' "$NAS_USER" "$SMB_PASSWORD" > "$STAGE/smb.auth"
 PREFIX=minasssh${TOKEN}000000
-printf -v WEIRD '%s\n"\nset sambashare.%s.user_force=root\nset sambashare.%s.create_mask=0644\nset sambashare.%s.path=etc\nset sambashare.%s.comment=' \
-    "$PREFIX" "$SECTION" "$SECTION" "$SECTION" "$SECTION"
+# Firmware's global force create mode=0760 is OR'ed after create mask.
+# _smb_add_share emits this multiline value within this share. Real newlines
+# are required: WebDAV rejects backslashes in directory names.
+CREATE_MODE="'0644
+force create mode=0644
+map archive=no'"
+printf -v WEIRD '%s\n"\nset sambashare.%s.user_force=root\nset sambashare.%s.create_mask=%s\nset sambashare.%s.path=etc\nset sambashare.%s.comment=' \
+    "$PREFIX" "$SECTION" "$SECTION" "$CREATE_MODE" "$SECTION" "$SECTION"
 ENCODED=$(printf '%s' "$WEIRD" | jq -sRr @uri)
 WDV_PATH=/pool0/data/$ENCODED/
 REAL_DIR=/home/$NAS_USER/pool0/data/$WEIRD
@@ -221,7 +228,7 @@ NAS: $NAS_IP; 本次 SMB 槽位: $SHARE_ID; 账户: $NAS_USER
 rm -f /etc/cron.d/$JOB /etc/cron.d/.$JOB /etc/$REMOTE.sh /etc/$REMOTE.status
 撤销任务与脚本后至少等待 60 秒，再次删除 /etc/$REMOTE.status，避免仍在执行的任务重建回执。
 仅撤销本次创建的 $SECTION（不要删除其他共享或模糊删除 passwd/shadow）：
-nas call smb_mgr.sh del_samba_account $NAS_USER $SHARE_ID
+nas call smb_mgr.sh del_account one $NAS_USER $SHARE_ID
 nas call smb_mgr.sh restart
 在客户端删除本次以 $PREFIX 开头的临时目录；保留其他目录和原有 SSH 公钥。
 本目录 smb.auth 含本次临时 SMB 密码。确认清理后删除本目录。
@@ -607,7 +614,12 @@ while ((SECONDS < DEADLINE)); do
     fi
     sleep 2
 done
-[[ $READY == 1 ]] || fail 'SSH 未通过本次执行回执和 UID 0 验证；未安装开机修复'
+if [[ $READY != 1 ]]; then
+    if [[ $WORKER_SETTLED == 1 ]]; then
+        fail 'NAS 任务已完成，但 SSH 未通过本次执行回执和 UID 0 验证；未安装开机修复'
+    fi
+    fail '未收到 NAS 一次性任务的完成回执，请检查 Cron 任务是否执行及文件权限；未安装开机修复'
+fi
 cleanup_remote || fail 'SSH 已验证，但临时任务/共享未确认清理完成'
 echo 'SSH 已验证成功；本次临时共享和任务已清理。请保留登录私钥。'
 printf 'SSH 登录命令：ssh -i %q root@%s\n' "$IDENTITY" "$NAS_IP"
