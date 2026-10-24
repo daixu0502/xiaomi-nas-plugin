@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='downloadcenter'
 PLUGIN_LABEL='下载中心'
-PLUGIN_VERSION='1.1.24'
+PLUGIN_VERSION='1.1.25'
 UNINSTALL_NOTE='停止所选用户下载服务；配置、种子和任务记录先备份。已下载及未完成文件均保留，不影响其他用户。'
 
 # Common installation flow adapted from the existing standalone plugins.
@@ -449,6 +449,15 @@ installer_emit_install() {
 INSTALLER_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" || nas_fail "统一目录检查失败"
 nas_prepare install "${1:-}"
+
+nas_layout_exit() {
+    nas_layout_rc=$?
+    trap - 0
+    if [ "$nas_layout_rc" != 0 ]; then python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" --abort --user "$NAS_USER" || true; fi
+    flock -u 7 2>/dev/null || true
+    exit "$nas_layout_rc"
+}
+trap nas_layout_exit 0
 nas_require python3 runuser ss sha256sum systemctl
 python3 -c 'import sys, sqlite3, fcntl; assert sys.version_info >= (3, 8)' || nas_fail "需要 Python 3.8+，以及 sqlite3、fcntl 模块。"
 [ "$(uname -m)" = aarch64 ] || nas_fail "目前安装包仅支持 ARM64 小米 NAS。"
@@ -558,6 +567,7 @@ python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture 
 # Dedicated systemd supervision replaces the legacy source-polling Cron.
 rm -f "/etc/cron.d/downloadcenter-$USER_NAME"
 systemctl reload crond.service >/dev/null 2>&1 || true
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" --finish --user "$NAS_USER" || nas_fail "当前插件旧文件清理未完成，已保留旧数据"
 NAS_INSTALL_SCRIPT
 }
 

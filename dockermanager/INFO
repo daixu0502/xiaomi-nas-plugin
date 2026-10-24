@@ -2,7 +2,7 @@
   "plugin": "dockermanager",
   "name": "docker",
   "id": 19091,
-  "version": "1.1.18",
+  "version": "1.1.19",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "容器、镜像与存储卷管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "安装时自动迁移旧目录、服务入口和恢复数据，保留配置、密钥与启停状态",
+  "changelog": "只迁移当前插件所需数据，新旧公共目录并存，最后一个使用者迁走后清理旧公共文件",
   "system": false,
   "size": 108747,
   "port": "",

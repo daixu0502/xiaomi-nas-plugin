@@ -2,7 +2,7 @@
   "plugin": "nascenter",
   "name": "控制中心",
   "id": 19093,
-  "version": "1.1.42",
+  "version": "1.1.43",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "性能、硬盘健康、网络和服务管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "安装时自动迁移旧目录、服务入口和恢复数据，保留配置、密钥与启停状态",
+  "changelog": "只迁移当前插件所需数据，新旧公共目录并存，最后一个使用者迁走后清理旧公共文件",
   "system": false,
   "size": 102673,
   "port": "",

@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='nascenter'
 PLUGIN_LABEL='控制中心'
-PLUGIN_VERSION='1.1.42'
+PLUGIN_VERSION='1.1.43'
 UNINSTALL_NOTE='保留被管理的系统服务及用户文件。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -455,6 +455,15 @@ installer_emit_install() {
 INSTALLER_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" || nas_fail "统一目录检查失败"
 nas_prepare install "${1:-}"
+
+nas_layout_exit() {
+    nas_layout_rc=$?
+    trap - 0
+    if [ "$nas_layout_rc" != 0 ]; then python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" --abort --user "$NAS_USER" || true; fi
+    flock -u 7 2>/dev/null || true
+    exit "$nas_layout_rc"
+}
+trap nas_layout_exit 0
 PLUGIN_USER=$NAS_USER
 fail() { nas_fail "$@"; }
 u=$NAS_USER
@@ -486,6 +495,7 @@ runuser -u "$u" -- env PLUG_USER="$u" PLUG_NAME="$name" PLUG_HOME_DIR="$home" PL
 rm -f "$backup"
 echo "控制中心 $version 已安装；完整性校验通过，安装暂存备份已清理。"
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture --user "$PLUGIN_USER" --plugin "$PLUGIN_NAME" --package "$INSTALLER_DIR/$PLUGIN_NAME" || nas_fail "规范校验或恢复登记失败"
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" --finish --user "$NAS_USER" || nas_fail "当前插件旧文件清理未完成，已保留旧数据"
 NAS_INSTALL_SCRIPT
 }
 installer_emit_uninstall() {

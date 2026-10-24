@@ -60,7 +60,7 @@ sudo apt install openssh-client curl jq openssl coreutils smbclient
 
 首次开启功能尚未完成纯原厂设备的完整验收，以脚本最后的成功或失败提示为准。找不到客户端证书、需要指定私钥时，看[详细说明](docs/advanced-usage.md#1-首次开启-ssh固件-109462)。
 
-若旧脚本一直停在“等待一次性任务执行”，请重新下载当前脚本（2.2.2）。此版本修复了任务权限错误及临时共享无法自动清理的问题，见 [issue #3](https://github.com/daixu0502/xiaomi-nas-plugin/issues/3)。
+若旧脚本一直停在“等待一次性任务执行”，请重新下载当前脚本（2.2.3）。此版本修复了任务权限错误及临时共享无法自动清理的问题，见 [issue #3](https://github.com/daixu0502/xiaomi-nas-plugin/issues/3)。
 
 ## 让 SSH 开机自动恢复
 
@@ -135,7 +135,7 @@ sh /home/rootx/upgrade-docker-29.9.2.sh --rollback 事务编号
 
 ## 旧目录需要自己搬吗？
 
-通常不需要。新版插件安装器和 SSH、Docker 工具会在需要时自动搬到 `/data/minas/`，保留配置和任务。
+通常不需要。新版安装器只把自己需要的文件接到 `/data/minas/`，保留配置和任务，其他插件可继续使用旧目录。最后一个使用者迁走后，再清理已无用途的公共文件。首次开启 SSH 的两个脚本不搬迁已有组件。
 
 `migrate-minas-data.sh` 是手动维护用的，需配套迁移资料才能执行；遇到迁移失败或目录冲突时，保留原数据和报错，按[详细说明](docs/advanced-usage.md#6-自定义目录迁移与失败恢复)处理。
 

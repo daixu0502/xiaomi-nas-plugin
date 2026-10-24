@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='mihomo'
 PLUGIN_LABEL='Mihomo'
-PLUGIN_VERSION='1.7.41'
+PLUGIN_VERSION='1.7.42'
 UNINSTALL_NOTE='卸载会停止该用户的代理；若 Docker 正使用此代理，会撤销它并重启 Docker。其他用户插件和普通文件保留。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -492,6 +492,15 @@ installer_emit_install() {
 INSTALLER_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" || nas_fail "统一目录检查失败"
 nas_prepare install "${1:-}"
+
+nas_layout_exit() {
+    nas_layout_rc=$?
+    trap - 0
+    if [ "$nas_layout_rc" != 0 ]; then python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" --abort --user "$NAS_USER" || true; fi
+    flock -u 7 2>/dev/null || true
+    exit "$nas_layout_rc"
+}
+trap nas_layout_exit 0
 PLUGIN_USER=$NAS_USER
 SPEC_WAS_ENABLED=$(jq -c --arg p "$PLUGIN_NAME" 'if (.[$p].enable|type)=="boolean" then .[$p].enable else true end' "$NAS_LIST")
 SPEC_WAS_RUNNING=true
@@ -875,6 +884,7 @@ jq --arg p "$PLUGIN_NAME" --argjson enabled "$SPEC_WAS_ENABLED" '.[$p].enable=$e
 chmod --reference="$NAS_LIST" "$entry_next"; chown --reference="$NAS_LIST" "$entry_next"; mv -f "$entry_next" "$NAS_LIST"
 flock -u 9
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture --user "$PLUGIN_USER" --plugin "$PLUGIN_NAME" --package "$INSTALLER_DIR/$PLUGIN_NAME" || nas_fail "规范校验或恢复登记失败"
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" --finish --user "$NAS_USER" || nas_fail "当前插件旧文件清理未完成，已保留旧数据"
 NAS_INSTALL_SCRIPT
 }
 installer_emit_uninstall() {

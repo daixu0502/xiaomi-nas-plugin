@@ -2,7 +2,7 @@
   "plugin": "taskcenter",
   "name": "定时任务",
   "id": 19094,
-  "version": "1.0.18",
+  "version": "1.0.19",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "可视化任务计划与执行记录",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "安装时自动迁移旧目录、服务入口和恢复数据，保留配置、密钥与启停状态",
+  "changelog": "只迁移当前插件所需数据，新旧公共目录并存，最后一个使用者迁走后清理旧公共文件",
   "system": false,
   "size": 93300,
   "port": "",

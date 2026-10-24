@@ -166,7 +166,12 @@ def migrate_docker_status(data, backup):
 
 def update_cron(data):
     plugins = {p for grants in data['users'].values() for p in grants}
-    file = CRON / 'minas-privileged'
+    file = CRON / 'minas-privileged-v2'
+    previous = CRON / 'minas-privileged'
+    if previous.is_file():
+        text = previous.read_text()
+        if str(BASE)+'/minas-helper ' in text and '/data/.minas-privileged' not in text:
+            previous.unlink()
     if plugins:
         text = 'SHELL=/bin/sh\nPATH=/usr/sbin:/usr/bin:/sbin:/bin:/data/docker\nMAILTO=""\n'
         if 'taskcenter' in plugins:
@@ -240,6 +245,9 @@ def ssh_state_lock(plugin):
     directories = [directory] if directory.exists() else []
     legacy = BASE/'sshrecovery'
     if legacy.exists() and legacy != directory: directories.append(legacy)
+    if str(BASE)=='/data/minas/privileged':
+        for node in (Path('/data/.minas-privileged/modules/sshrecovery/var'),Path('/data/.minas-privileged/sshrecovery')):
+            if node.is_dir():directories.append(node)
     descriptors = []
     try:
         for node in directories:
@@ -249,7 +257,8 @@ def ssh_state_lock(plugin):
             metadata = os.fstat(fd)
             if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o077:
                 raise ValueError('SSH 恢复操作锁权限异常')
-            fcntl.flock(fd, fcntl.LOCK_EX|fcntl.LOCK_NB)
+            if not any(os.fstat(other).st_ino==metadata.st_ino and os.fstat(other).st_dev==metadata.st_dev for other in descriptors[:-1]):
+                fcntl.flock(fd, fcntl.LOCK_EX|fcntl.LOCK_NB)
         yield
     finally:
         for fd in descriptors: os.close(fd)
@@ -339,8 +348,62 @@ def retire_legacy(plugin, user):
         except OSError: pass
 
 
+def migrate_component_state(plugin,user):
+    """Copy only this plugin/user; keep legacy peers running until finalization."""
+    import hashlib,base64
+    legacy=Path('/data/.minas-privileged')
+    if str(BASE)!='/data/minas/privileged' or not legacy.exists():return
+    runtime.secure_directory(legacy)
+    receipts=BASE/'migration'/plugin;runtime.secure_directory(BASE/'migration',create=True,mode=0o700)
+    runtime.secure_directory(receipts,create=True,mode=0o700)
+    receipt=receipts/(user+'.json');state=json.loads(receipt.read_text()) if receipt.exists() else {'files':{}}
+    def ensure(path):
+        if not path.exists():ensure(path.parent)
+        runtime.secure_directory(path,create=True,mode=0o700)
+    def copy(source,target,prefer_current=False):
+        if not source.is_file() or source.is_symlink():return
+        validate_tree(source)
+        if str(source) in state['files'] and target.is_file():return
+        raw=source.read_bytes()
+        if not target.exists():
+            ensure(target.parent)
+            atomic(target,raw,source.stat().st_mode&0o777)
+        elif target.read_bytes()!=raw and not prefer_current:
+            raise ValueError('当前插件的新旧状态不同，保留两边文件：'+str(source))
+        state['files'][str(source)]={'target':str(target),'sha256':hashlib.sha256(raw).hexdigest()}
+        atomic(receipt,state)
+    if plugin=='taskcenter':
+        directory=legacy/'users'/user
+        if directory.is_dir():
+            for source in directory.rglob('*'):
+                if source.is_file() and not source.is_symlink() and source.name!='lock':copy(source,BASE/'users'/user/source.relative_to(directory))
+            task=directory/'state.json'
+            if task.is_file() and not state.get('paused'):
+                original=task.read_bytes();value=json.loads(original)
+                if any(run.get('state')=='running' for run in value.get('runs',[])):raise ValueError('当前用户仍有旧版任务执行中，请等待其结束')
+                state['originalTask']=base64.b64encode(original).decode();state['pendingScheduler']=bool(value.get('scheduler'));atomic(receipt,state)
+                target=BASE/'users'/user/'state.json';pending=json.loads(target.read_text())
+                pending['scheduler']=False;atomic(target,pending)
+                value['scheduler']=False;atomic(task,value)
+                state['paused']=hashlib.sha256(task.read_bytes()).hexdigest();state['files'][str(task)]['sha256']=state['paused'];atomic(receipt,state)
+    if plugin=='sshrecovery':
+        for directory in (legacy/'modules/sshrecovery/var',legacy/'sshrecovery'):
+            if not directory.is_dir():continue
+            target=BASE/'modules/sshrecovery/var'
+            for source in directory.rglob('*'):
+                relative=source.relative_to(directory)
+                if relative.parts[0]=='keys' and relative.as_posix() not in ('keys/'+user+'.pub','keys/'+user+'.settings.json'):continue
+                if relative.parts[0]=='tmp' and (len(relative.parts)<2 or relative.parts[1]!='generated-'+user):continue
+                if source.name.endswith('.lock'):
+                    target_lock=target/relative
+                    if not target_lock.exists():ensure(target_lock.parent);os.link(source,target_lock)
+                    continue
+                if source.is_file() and not source.is_symlink():copy(source,target/relative,prefer_current=True)
+
+
 def install(payload, plugin, user, plugin_version, backup):
     values = bundle(payload, plugin)
+    migrate_component_state(plugin,user)
     old = runtime.registry() if (BASE/'registry.json').exists() else {'apiVersion':1,'version':'0.0.0','users':{},'modules':{}}
     if old.get('apiVersion') != runtime.API_VERSION:
         raise ValueError('公共权限组件 API 不兼容，拒绝升级')
@@ -502,7 +565,7 @@ def main():
         rule = SUDOERS / (args.plugin + '-' + args.user)
         if rule.exists(): shutil.copy2(str(rule), str(backup / 'sudoers'))
         for file in CRON.glob('*'):
-            if file.is_file() and file.name in {'minas-privileged', 'taskcenter', 'dockermanager-' + args.user}:
+            if file.is_file() and file.name in {'minas-privileged', 'minas-privileged-v2', 'taskcenter', 'dockermanager-' + args.user}:
                 shutil.copy2(str(file), str(backup / ('cron-' + file.name)))
         try:
             data = install(args.payload, args.plugin, args.user, args.plugin_version, backup) if args.action == 'install' else remove(args.plugin, args.user, backup)
@@ -533,11 +596,15 @@ def main():
                 if (legacy / MIGRATION_MARK).exists(): (legacy / MIGRATION_MARK).unlink()
             if (backup / 'sudoers').exists(): atomic(rule, (backup / 'sudoers').read_bytes(), 0o440)
             elif rule.exists(): rule.unlink()
-            for name in ['minas-privileged', 'taskcenter', 'dockermanager-' + args.user]:
+            for name in ['minas-privileged', 'minas-privileged-v2', 'taskcenter', 'dockermanager-' + args.user]:
                 saved_cron = backup / ('cron-' + name)
                 if saved_cron.exists(): atomic(CRON / name, saved_cron.read_bytes(), 0o644)
                 elif (CRON / name).exists(): (CRON / name).unlink()
             raise
+        else:
+            receipt=BASE/'migration'/args.plugin/(args.user+'.json')
+            if args.action=='install' and receipt.is_file():
+                state=json.loads(receipt.read_text());state['activated']=True;atomic(receipt,state)
         finally:
             if args.action == 'install': shutil.rmtree(backup)
     subprocess.run(['/usr/bin/systemctl', 'reload', 'crond.service'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
