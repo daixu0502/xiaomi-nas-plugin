@@ -10,7 +10,7 @@
     "common/user_state_io.py": "de65b4d964c403e9bd4cf7c7b0bfe18ba3dc551f610db928ab4e4fcc015a350f",
     "component_admin.py": "8d4832b4794f552ab2bf0a5d2d17ce44e614d28497f7f54c3efa620856ec9257",
     "minas-helper": "8ed97c29410d8d0eca612b3ed1066cb7798bf8956a85cd073f86b27714c5b4f5",
-    "modules/sshrecovery/restore-ssh.sh": "20959277de769df65898a908bdce557aafe32b4e6bc845c4e89daa892d6e3fae",
-    "modules/sshrecovery/ssh-recovery-helper": "33b009fc750fbdf78173a731799ff8a987494f5c209302d6d60b5212a41ca044"
+    "modules/sshrecovery/restore-ssh.sh": "36465ae1349d945f9b238e3e80d74a861703b7b01b2edde0e9a5a06a51e1c1de",
+    "modules/sshrecovery/ssh-recovery-helper": "ba4a0b7c0c1de2c2af67591644bc05685d337857249b1bde46ce086b2583c230"
   }
 }

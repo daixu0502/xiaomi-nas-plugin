@@ -87,6 +87,7 @@ write_repair_sources() {
     cat > "$STAGE/restore-ssh.sh" <<'MINAS_SSH_REPAIR_SH_SOURCE'
 #!/bin/sh
 # Pure POSIX shell recovery for Xiaomi NAS. Invoked with existing root authority.
+SSH_RECOVERY_VERSION='2.1.2'
 set -eu
 umask 077
 PATH=/usr/sbin:/usr/bin:/sbin:/bin

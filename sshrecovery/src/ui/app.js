@@ -35,7 +35,10 @@ function render(s){
  byId('authorizationNote').textContent=a?'实际登录目录：'+a.rootHome+'。服务器身份密钥与登录授权分别检查；“恢复公钥已保存”不代表已安装到登录目录。':'正在检查实际登录目录和授权文件。';
  byId('fingerprint').textContent=s.fingerprint||'尚未保存恢复公钥';byId('fingerprint').classList.toggle('empty',!s.fingerprint);
  byId('bootState').textContent=s.bootFinished===false?'开机检查中':s.bootFinished===true?'开机检查已结束':'无开机检查单元';
- const b=s.bootService;byId('bootService').textContent=b.current===true?'已安装（当前版本）':b.conflicts?.length?'已有配置需更新':b.worker&&b.cron&&b.dropin?'已安装':b.worker||b.cron||b.dropin?'配置不完整':'未安装';
+ const b=s.bootService;byId('bootService').textContent=b.current===true?'已安装（与自带版本一致）':b.conflicts?.length?'已有配置需更新':b.worker&&b.cron&&b.dropin?'已安装':b.worker||b.cron||b.dropin?'配置不完整':'未安装';
+ const scriptVersion=info=>info?(info.version||'未标记（SHA256 '+info.sha256.slice(0,12)+'）'):'无法读取';
+ byId('installedScriptVersion').textContent=b.worker?scriptVersion(b.installedScript):'未安装';
+ byId('bundledScriptVersion').textContent=scriptVersion(b.bundledScript);
  byId('generateKey').checked=s.settings?.generateWithoutPublicKey===true;
  byId('recoveryNote').textContent=byId('generateKey').checked?'未保存公钥时，点击恢复才生成登录密钥。请及时下载并妥善保存私钥。':'未保存公钥时，只开启 SSH，不改动密钥文件。已有公钥时，按保存的恢复材料恢复。';
  byId('downloadHint').hidden=!s.generated?.ready;

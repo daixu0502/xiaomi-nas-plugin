@@ -44,9 +44,11 @@ class RecoveryError(Exception):
     pass
 
 
-def boot_asset():
+def boot_asset(installed_fallback=True):
     # Keep offline/standalone recovery usable even without an installed plugin.
-    for path in (BASE/'modules/sshrecovery/restore-ssh.sh', Path(__file__).with_name('restore-ssh.sh'), BASE/'ssh-recovery-boot.sh', WORKER):
+    paths=(BASE/'modules/sshrecovery/restore-ssh.sh', Path(__file__).with_name('restore-ssh.sh'))
+    if installed_fallback:paths+=(BASE/'ssh-recovery-boot.sh', WORKER)
+    for path in paths:
         if path.is_file(): return path
     raise RecoveryError('SSH 开机修复脚本缺失')
 
@@ -62,6 +64,17 @@ def same_boot_code(actual,expected):
     # Ignore only line endings/final empty lines, never executable differences.
     normalize=lambda data:data.replace(b'\r\n',b'\n').rstrip(b'\n')
     return normalize(actual)==normalize(expected)
+
+
+def script_info(path):
+    """Read the worker's release marker without running recovery code."""
+    try:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size>1024*1024:return None
+        data=path.read_bytes().replace(b'\r\n',b'\n')
+    except OSError:return None
+    match=re.search(rb"^SSH_RECOVERY_VERSION='([0-9]+\.[0-9]+\.[0-9]+)'$",data,re.M)
+    return dict(version=match[1].decode('ascii') if match else None,
+                sha256=hashlib.sha256(data.rstrip(b'\n')).hexdigest())
 
 
 def refresh_installed_tools():
@@ -94,14 +107,16 @@ def refresh_installed_tools():
 
 
 def boot_status():
-    status=dict(worker=WORKER.is_file(),cron=CRON.is_file(),dropin=DROPIN.is_file(),current=False,conflicts=[],available=True)
+    status=dict(worker=WORKER.is_file(),cron=CRON.is_file(),dropin=DROPIN.is_file(),current=False,conflicts=[],available=True,
+                installedScript=script_info(WORKER),bundledScript=None)
     try:
+        status['bundledScript']=script_info(boot_asset(installed_fallback=False))
         data=boot_data()
         for path,expected in data.items():
             if path.exists() and (not path.is_file() or path.is_symlink() or not same_boot_code(path.read_bytes(),expected)):
                 status['conflicts'].append(path.name)
         status['current']=all(status[k] for k in ('worker','cron','dropin')) and not status['conflicts']
-    except OSError:
+    except (OSError,RecoveryError):
         status['available']=False
     return status
 
@@ -344,12 +359,12 @@ class Recovery:
         except (RecoveryError,OSError,ValueError):result['reason']='permissions_or_content'
         return result
 
-    def emergency_bundle(self):
+    def emergency_bundle(self,version):
         memory=io.BytesIO();files={'recover-ssh.py':Path(__file__).read_bytes(),
                                  'restore-ssh.sh':boot_asset().read_bytes(),
-                                 'manifest.json':json.dumps({'version':'1.1.11','user':self.user}).encode()}
+                                 'manifest.json':json.dumps({'version':version,'user':self.user}).encode()}
         if self.key.exists():files['recovery.pub']=(public_key(self.key.read_text())[0]+'\n').encode()
-        files['README.txt']=('SSH 应急包 1.1.11\n仅包含恢复程序、可选登录公钥，不包含私钥或 NAS 主机密钥。\n'
+        files['README.txt']=('SSH 应急包 '+version+'\n仅包含恢复程序、可选登录公钥，不包含私钥或 NAS 主机密钥。\n'
             '请提前下载到电脑并保留 Portainer 管理入口。\n'
             'SSH 与插件都无法使用时，将本包解压到 NAS 用户共享文件夹 data/ssh-emergency。\n'
             '在容器里将 NAS 的 / 绑定到 /nas，使用 root Console 执行：\n'
@@ -482,7 +497,7 @@ class Recovery:
         if self.host_key.is_file():
             try:host_valid=bool(command(['/usr/sbin/dropbearkey','-y','-f',str(self.host_key)],timeout=5))
             except (RecoveryError,OSError,subprocess.TimeoutExpired):pass
-        return dict(version='1.1.11',loginAuthorization=self.login_status(),hostKeyValid=host_valid,sshActive=socket.get('ActiveState')=='active',socketSupported=socket.get('LoadState')!='not-found',port=22,
+        return dict(loginAuthorization=self.login_status(),hostKeyValid=host_valid,sshActive=socket.get('ActiveState')=='active',socketSupported=socket.get('LoadState')!='not-found',port=22,
                     bootFinished=boot,keySaved=bool(fingerprint),fingerprint=fingerprint,hostKey=self.host_key.is_file(),hostBackup=self.host_backup.is_file(),
                     bootService=boot_status(),
                     events=[e for e in reversed(events) if e.get('user')==self.user][:20],settings=self.settings(),generated=self.generated_info())
@@ -673,6 +688,8 @@ def api(user,request):
     require(request.get('pluginUser')==user,'禁止访问其他用户的恢复材料')
     home=Path('/home')/user/'plugin/sshrecovery'
     require((home/'INFO').is_file(),'插件未安装')
+    version=json.loads((home/'INFO').read_bytes()).get('version')
+    require(isinstance(version,str) and re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+',version),'插件 INFO 版本无效')
     recovery=Recovery(user)
     with (STATE/'operations.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -687,12 +704,12 @@ def api(user,request):
         elif action=='download_keys':
             extra={'keyArchive':recovery.download_generated(),'downloadName':'ssh-login-keys.zip'};message='密钥包已领取，请保存下载文件。'
         elif action=='download_emergency':
-            extra={'emergencyArchive':recovery.emergency_bundle(),'downloadName':'nas-ssh-emergency.zip'};message='应急包已生成，请保存到电脑。包内不包含任何私钥。'
+            extra={'emergencyArchive':recovery.emergency_bundle(version),'downloadName':'nas-ssh-emergency.zip'};message='应急包已生成，请保存到电脑。包内不包含任何私钥。'
         elif action=='forget_key':
             recovery.key.unlink(missing_ok=True);recovery.clear_generated();recovery.log('已移除插件内保存的公钥；现有 authorized_keys 未修改');message='保存的恢复公钥已移除，当前登录公钥未删除。'
         elif action=='install_boot':message=recovery.install_boot(request.get('overwrite') is True)
         else:raise RecoveryError('不支持的操作')
-        return dict(ok=True,message=message,**recovery.status(),**extra)
+        return dict(ok=True,version=version,message=message,**recovery.status(),**extra)
 
 
 if __name__=='__main__':
