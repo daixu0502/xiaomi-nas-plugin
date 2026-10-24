@@ -9,21 +9,18 @@
 
 ## 如何使用
 
-### 安装与更新
+### 安装和更新
 
-使用完整源码或解压后的安装包，在本插件目录内执行。WSL / Linux 通过 root SSH 连接 NAS：
-
-```bash
-bash manage.sh install --ip 192.168.31.100 --users u123456789
-```
-
-在 NAS 本机以 root 运行时，省略 `--ip`：
+1. 在电脑的 **Ubuntu（WSL）终端**中，进入有 `manage.sh` 的插件文件夹，运行：
 
 ```bash
-bash manage.sh install --users u123456789
+bash manage.sh
 ```
 
-将示例 IP 和用户 ID 换成自己的值。直接运行 `bash manage.sh` 可进入交互菜单；安装和更新使用同一入口。安装后在小米客户端应用列表中打开本插件，必要时完全退出客户端再重进。
+2. 输入 `1`，选择“安装 / 更新”，按提示输入 NAS 的 IP，再选择自己的账号。只有一个账号时会自动选择。
+3. 等待提示安装成功，再到小米客户端的应用列表打开本插件。看不到时，退出客户端后重新打开。
+
+更新也是这三步，已有配置会保留。需要先让电脑能用 root SSH 登录 NAS；还没开启时，见[SSH 开启步骤](../nas-root/README.md#开启-ssh)。
 
 ### 管理 Docker
 
@@ -34,11 +31,9 @@ bash manage.sh install --users u123456789
 
 ### 卸载
 
-```bash
-bash manage.sh uninstall --ip 192.168.31.100 --users u123456789
-```
+再次运行 `bash manage.sh`，输入 `2` 选择“卸载”，按提示选择账号并确认。
 
-NAS 本机省略 `--ip`，按提示确认。其他参数可用 `bash manage.sh install --help` 查看。
+请用这个菜单卸载；只在小米客户端里删除，插件可能会自动恢复。手动指定账号等用法见[进阶说明](../docs/plugin-installation.md)。
 
 ## 注意事项
 
