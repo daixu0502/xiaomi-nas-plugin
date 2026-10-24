@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='mihomo'
 PLUGIN_LABEL='Mihomo'
-PLUGIN_VERSION='1.7.38'
+PLUGIN_VERSION='1.7.41'
 UNINSTALL_NOTE='卸载会停止该用户的代理；若 Docker 正使用此代理，会撤销它并重启 Docker。其他用户插件和普通文件保留。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -254,8 +254,9 @@ installer_main() {
 
 # Download once per batch and verify before placing the core in the install bundle.
 installer_prepare_package() {
-    local stage=$1 version=v1.19.31
-    local expected=9e0f11afbf38426b8bd88fdc594678f8161c57eccb4e1b77acb12b493904f1d4
+    local stage=$1
+    . "$SCRIPT_DIR/src/files/core-release.sh"
+    local version=$CORE_VERSION expected=$CORE_SHA256
     local asset="mihomo-linux-arm64-$version.gz"
     local cache="$SCRIPT_DIR/.cache" archive
     archive="$cache/$asset"
@@ -419,12 +420,12 @@ nas_uninstall() {
     mkdir -p "$NAS_BACKUP"
     chmod 0700 "$NAS_BACKUP"
     nas_log "停止所选用户的插件并备份配置……"
-    if [ -x /data/.minas-privileged/minas-helper ]; then
-        nas_response=$(jq -n --arg mpk "$NAS_HOME/INFO" --arg pluginUser "$NAS_USER" '{action:"docker_proxy_disable",pluginUser:$pluginUser}' | /data/.minas-privileged/minas-helper mihomo) || nas_fail "无法撤销 Docker 代理，未卸载插件。"
+    if [ -x /data/minas/privileged/minas-helper ]; then
+        nas_response=$(jq -n --arg mpk "$NAS_HOME/INFO" --arg pluginUser "$NAS_USER" '{action:"docker_proxy_disable",pluginUser:$pluginUser}' | /data/minas/privileged/minas-helper mihomo) || nas_fail "无法撤销 Docker 代理，未卸载插件。"
         printf '%s' "$nas_response" | jq -e '.ok == true' >/dev/null || nas_fail "Docker 代理撤销失败，未卸载插件。"
     fi
-    if [ -f /data/.minas-privileged/component_admin.py ]; then
-        python3 /data/.minas-privileged/component_admin.py remove --plugin "$NAS_PLUGIN" --user "$NAS_USER" || nas_fail "公共权限模块卸载失败"
+    if [ -f /data/minas/privileged/component_admin.py ]; then
+        python3 /data/minas/privileged/component_admin.py remove --plugin "$NAS_PLUGIN" --user "$NAS_USER" || nas_fail "公共权限模块卸载失败"
     fi
     plugincenter -u "$NAS_USER" -p "$NAS_PLUGIN" disable >/dev/null 2>&1 || true
     if [ -x "$NAS_HOME/scripts/control" ]; then
@@ -434,8 +435,8 @@ nas_uninstall() {
     for nas_data in etc var INFO; do
         if [ -e "$NAS_HOME/$nas_data" ]; then cp -a "$NAS_HOME/$nas_data" "$NAS_BACKUP/"; fi
     done
-    if [ -f /data/.minas-plugin-recovery/recovery.py ]; then
-        python3 -B /data/.minas-plugin-recovery/recovery.py forget --user "$NAS_USER" --plugin "$NAS_PLUGIN" || nas_fail "取消恢复登记失败"
+    if [ -f /data/minas/plugins/recovery/recovery.py ]; then
+        python3 -B /data/minas/plugins/recovery/recovery.py forget --user "$NAS_USER" --plugin "$NAS_PLUGIN" || nas_fail "取消恢复登记失败"
     fi
     nas_remove_entry
     case "$NAS_PLUGIN" in
@@ -489,6 +490,7 @@ installer_emit_install() {
     installer_emit_probe
     cat <<'NAS_INSTALL_SCRIPT'
 INSTALLER_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" || nas_fail "统一目录检查失败"
 nas_prepare install "${1:-}"
 PLUGIN_USER=$NAS_USER
 SPEC_WAS_ENABLED=$(jq -c --arg p "$PLUGIN_NAME" 'if (.[$p].enable|type)=="boolean" then .[$p].enable else true end' "$NAS_LIST")
@@ -497,9 +499,9 @@ if [ -x "$NAS_HOME/scripts/control" ]; then
     if "$NAS_HOME/scripts/control" status >/dev/null 2>&1; then SPEC_WAS_RUNNING=true; else SPEC_WAS_RUNNING=false; fi
 fi
 fail() { nas_fail "$@"; }
-CORE_VERSION="v1.19.31"
 BUNDLE_DIR=$INSTALLER_DIR
 PACKAGE_DIR="$BUNDLE_DIR/$PLUGIN_NAME"
+. "$PACKAGE_DIR/src/files/core-release.sh"
 nas_require jq sha256sum plugincenter runuser flock curl openssl python3 file cmp sudo systemctl ss visudo sort grep tail
 
 CORE_FILE="$PACKAGE_DIR/src/files/mihomo"
@@ -573,12 +575,27 @@ core_version_of() {
     printf '%s\n' "$candidate_text" | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?' | head -n 1
 }
 
+bundled_core_text=$(runuser -u "$PLUGIN_USER" -- "$stage_src/files/mihomo" -v 2>/dev/null) || fail "安装核心无法运行"
+printf '%s\n' "$bundled_core_text" | python3 -B "$stage_src/files/core_security.py" || fail "安装核心未通过 Go 安全检查"
+
 # Preserve runtime updates outside the verified source. Migrate a newer legacy
 # in-source core before replacing src; never bake it into the new source tree.
 bundled_core_version=$(core_version_of "$stage_src/files/mihomo" || true)
 existing_core="$VAR_DIR/core/mihomo"
 [ -x "$existing_core" ] || existing_core="$SRC_DIR/files/mihomo"
 if [ -x "$existing_core" ] && [ -n "$bundled_core_version" ]; then
+    existing_core_text=$(runuser -u "$PLUGIN_USER" -- "$existing_core" -v 2>/dev/null || true)
+    if ! printf '%s\n' "$existing_core_text" | python3 -B "$stage_src/files/core_security.py"; then
+        if [ "$existing_core" = "$VAR_DIR/core/mihomo" ]; then
+            [ ! -L "$VAR_DIR/core" ] && [ ! -L "$existing_core" ] || fail "核心目录异常"
+            safe_core_tmp=$(runuser -u "$PLUGIN_USER" -- mktemp "$VAR_DIR/core/.mihomo.security.XXXXXX") || fail "无法准备安全内核"
+            runuser -u "$PLUGIN_USER" -- cp "$stage_src/files/mihomo" "$safe_core_tmp" || fail "无法复制安全内核"
+            runuser -u "$PLUGIN_USER" -- chmod 0755 "$safe_core_tmp"
+            runuser -u "$PLUGIN_USER" -- mv -f "$safe_core_tmp" "$existing_core"
+        fi
+        existing_core="$stage_src/files/mihomo"
+        echo "已选择通过 Go 安全检查的安装核心。"
+    fi
     existing_core_arch=$(file "$existing_core" 2>/dev/null || true)
     existing_core_version=$(core_version_of "$existing_core" || true)
     case "$existing_core_arch" in

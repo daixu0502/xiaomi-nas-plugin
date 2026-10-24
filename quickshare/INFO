@@ -2,7 +2,7 @@
   "plugin": "quickshare",
   "name": "文件快传",
   "id": 19092,
-  "version": "1.1.40",
+  "version": "1.1.42",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "临时下载链接与文件上传入口",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "运行日志有界轮转，统一安装和服务恢复状态",
+  "changelog": "安装时自动迁移旧目录、服务入口和恢复数据，保留配置、密钥与启停状态",
   "system": false,
   "size": 149655,
   "port": "",

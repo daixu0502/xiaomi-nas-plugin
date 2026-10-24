@@ -9,7 +9,7 @@ import sys
 from urllib.parse import parse_qs
 sys.dont_write_bytecode=True
 UI=Path(__file__).resolve().parent
-HELPER='/data/.minas-privileged/minas-helper'
+HELPER='/data/minas/privileged/minas-helper'
 def output(data,mime='application/json; charset=utf-8'):
     print('Content-Type: '+mime+'\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n\r\n',end='')
     if isinstance(data,bytes):sys.stdout.flush();sys.stdout.buffer.write(data)

@@ -2,7 +2,7 @@
   "plugin": "taskcenter",
   "name": "定时任务",
   "id": 19094,
-  "version": "1.0.16",
+  "version": "1.0.18",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "可视化任务计划与执行记录",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "运行缓存使用有界内存文件系统，避免心跳与统计写入机械盘",
+  "changelog": "安装时自动迁移旧目录、服务入口和恢复数据，保留配置、密钥与启停状态",
   "system": false,
-  "size": 93301,
+  "size": 93300,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

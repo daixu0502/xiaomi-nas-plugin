@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='quickshare'
 PLUGIN_LABEL='文件快传'
-PLUGIN_VERSION='1.1.40'
+PLUGIN_VERSION='1.1.42'
 UNINSTALL_NOTE='停止该用户的分享服务，现有分享链接失效；分享记录先备份，已上传的用户文件保留。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -399,8 +399,8 @@ nas_uninstall() {
     for nas_data in etc var INFO; do
         if [ -e "$NAS_HOME/$nas_data" ]; then cp -a "$NAS_HOME/$nas_data" "$NAS_BACKUP/"; fi
     done
-    if [ -f /data/.minas-plugin-recovery/recovery.py ]; then
-        python3 -B /data/.minas-plugin-recovery/recovery.py forget --user "$NAS_USER" --plugin "$NAS_PLUGIN" || nas_fail "取消恢复登记失败"
+    if [ -f /data/minas/plugins/recovery/recovery.py ]; then
+        python3 -B /data/minas/plugins/recovery/recovery.py forget --user "$NAS_USER" --plugin "$NAS_PLUGIN" || nas_fail "取消恢复登记失败"
     fi
     nas_remove_entry
     case "$NAS_PLUGIN" in
@@ -443,6 +443,7 @@ installer_emit_install() {
     installer_emit_probe
     cat <<'NAS_INSTALL_SCRIPT'
 INSTALLER_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" || nas_fail "统一目录检查失败"
 nas_prepare install "${1:-}"
 PLUGIN_USER=$NAS_USER
 SPEC_WAS_ENABLED=$(jq -c --arg p "$PLUGIN_NAME" 'if (.[$p].enable|type)=="boolean" then .[$p].enable else true end' "$NAS_LIST")

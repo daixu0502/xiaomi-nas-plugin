@@ -6,11 +6,11 @@ import sys
 from pathlib import Path
 from urllib.request import urlopen
 
-VERSION = '5.2.4'
-RELEASE = 'release-5.2.4_v2.0.15'
+VERSION = '5.3.0'
+RELEASE = 'release-5.3.0_v2.1.2'
 ASSETS = {
-    'aarch64': 'f12e821d5782c39e3093d788689182e9ac823fa01b3a82d6c00fdb993e4428d8',
-    'x86_64': '14d29323f1c12c1e8892ac69496f8b51ddebb74b4b590fc13e343aa213fecaf4',
+    'aarch64': '5e4eeeea0ca58f551f21d4071a9f97dca47fc27f9884214e12eb2cde113d8843',
+    'x86_64': '006071fb46f4223de042d1b7fed877e5d8ea9ed11066779c92ab889a658cc30b',
 }
 
 

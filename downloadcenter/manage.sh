@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='downloadcenter'
 PLUGIN_LABEL='下载中心'
-PLUGIN_VERSION='1.1.21'
+PLUGIN_VERSION='1.1.24'
 UNINSTALL_NOTE='停止所选用户下载服务；配置、种子和任务记录先备份。已下载及未完成文件均保留，不影响其他用户。'
 
 # Common installation flow adapted from the existing standalone plugins.
@@ -396,8 +396,8 @@ nas_uninstall() {
     for nas_data in etc var INFO; do
         if [ -e "$NAS_HOME/$nas_data" ]; then cp -a "$NAS_HOME/$nas_data" "$NAS_BACKUP/"; fi
     done
-    if [ -f /data/.minas-plugin-recovery/recovery.py ]; then
-        python3 -B /data/.minas-plugin-recovery/recovery.py forget --user "$NAS_USER" --plugin "$NAS_PLUGIN" || nas_fail "取消恢复登记失败"
+    if [ -f /data/minas/plugins/recovery/recovery.py ]; then
+        python3 -B /data/minas/plugins/recovery/recovery.py forget --user "$NAS_USER" --plugin "$NAS_PLUGIN" || nas_fail "取消恢复登记失败"
     fi
     nas_remove_entry
     rm -f "/etc/cron.d/downloadcenter-$NAS_USER"
@@ -447,6 +447,7 @@ installer_emit_install() {
     installer_emit_probe
     cat <<'NAS_INSTALL_SCRIPT'
 INSTALLER_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" || nas_fail "统一目录检查失败"
 nas_prepare install "${1:-}"
 nas_require python3 runuser ss sha256sum systemctl
 python3 -c 'import sys, sqlite3, fcntl; assert sys.version_info >= (3, 8)' || nas_fail "需要 Python 3.8+，以及 sqlite3、fcntl 模块。"

@@ -14,8 +14,8 @@ import sys
 import tempfile
 import time
 
-PLUGIN, VERSION = 'sshrecovery', '1.1.17'
-SYSTEM = Path('/data/.minas-privileged')
+PLUGIN, VERSION = 'sshrecovery', '1.1.19'
+SYSTEM = Path('/data/minas/privileged')
 
 def system_install(user, payload):
     host=Path('/etc/dropbear/dropbear_rsa_host_key')
@@ -88,7 +88,7 @@ def paths(user, action):
     if web.is_symlink(): require(web.resolve() == src / 'ui', '网页入口目标异常')
     for name in ('var','etc','scripts','INFO'):
         node = home/name
-        allowed = name in ('var','etc') and node.is_symlink() and os.readlink(node) == '/data/.minas-plugin-data/' + user + '/' + PLUGIN + '/' + name
+        allowed = name in ('var','etc') and node.is_symlink() and os.readlink(node) == '/data/minas/plugins/data/' + user + '/' + PLUGIN + '/' + name
         require(not node.is_symlink() or allowed, '插件配置路径链接异常')
     if action == 'uninstall': require(installed(user), '该用户尚未安装SSH 恢复')
     return dict(user=user, uid=account.pw_uid, gid=account.pw_gid, home=home, src=src, tmp=tmp, registry=registry, web=web)
@@ -141,7 +141,7 @@ def install(p, payload):
         os.replace(stage, src); switched = True
         for name in ('scripts', 'var', 'etc'):
             directory = home / name
-            require(not directory.is_symlink() or os.readlink(directory) == '/data/.minas-plugin-data/' + p['user'] + '/' + PLUGIN + '/' + name, '插件数据目录异常')
+            require(not directory.is_symlink() or os.readlink(directory) == '/data/minas/plugins/data/' + p['user'] + '/' + PLUGIN + '/' + name, '插件数据目录异常')
             directory.mkdir(exist_ok=True); directory.chmod(0o700); os.chown(directory, *owner)
         atomic(control, (payload / 'scripts/control').read_bytes(), 0o755, owner)
         for name, target in (('src', src), ('tmp', tmp)):
@@ -191,18 +191,18 @@ def install(p, payload):
 
 def uninstall(p):
     home, src, tmp, registry, web = (p[k] for k in ('home', 'src', 'tmp', 'registry', 'web'))
-    backup = Path('/data/.sshrecovery-backups') / p['user'] / (time.strftime('%Y%m%d-%H%M%S') + '-' + str(os.getpid()))
+    backup = Path('/data/minas/backups/plugins/sshrecovery') / p['user'] / (time.strftime('%Y%m%d-%H%M%S') + '-' + str(os.getpid()))
     backup.mkdir(parents=True, mode=0o700)
     for name in ('var','INFO'):
         path=home/name
-        require(not path.is_symlink() or os.readlink(path) == '/data/.minas-plugin-data/' + p['user'] + '/' + PLUGIN + '/' + name, '备份对象链接异常')
+        require(not path.is_symlink() or os.readlink(path) == '/data/minas/plugins/data/' + p['user'] + '/' + PLUGIN + '/' + name, '备份对象链接异常')
         if path.is_dir(): shutil.copytree(path,backup/name,symlinks=True)
         elif path.is_file(): shutil.copy2(path,backup/name)
     shutil.copy2(registry,backup/'plugin-list.json')
     # Refuse module removal before touching the UI, e.g. if another privileged
     # operation is active. A failed permission transaction leaves the UI intact.
     system_remove(p['user'])
-    coordinator=Path('/data/.minas-plugin-recovery/recovery.py')
+    coordinator=Path('/data/minas/plugins/recovery/recovery.py')
     if coordinator.is_file():
         subprocess.run([sys.executable,'-B',str(coordinator),'forget','--user',p['user'],'--plugin',PLUGIN],check=True)
     data=read_json(registry);data.pop(PLUGIN,None);st=registry.stat()
@@ -227,6 +227,7 @@ def main(args):
         return
     require(action in ('install','uninstall') and len(args)==2, '操作参数无效')
     require(bool(re.fullmatch('u[0-9]+',args[1])), '无效用户')
+    if action=='install':subprocess.run([sys.executable,'-B',str(Path(__file__).parent/'data_layout.py')],check=True)
     with contextlib.ExitStack() as stack:
         for path in ('/data/plugin/.local-plugin-installer.lock', '/data/plugin/.'+args[1]+'.plugins.lock'):
             lock=stack.enter_context(open(path,'a'));fcntl.flock(lock,fcntl.LOCK_EX)

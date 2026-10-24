@@ -13,9 +13,9 @@ minas_service_control() {
         *) return 1;;
     esac
     if [ "$(id -u)" = 0 ]; then
-        /usr/bin/python3 -B /data/.minas-plugin-recovery/recovery.py service --user "$minas_user" --plugin "$minas_plugin" --operation "$minas_operation"
+        /usr/bin/python3 -B /data/minas/plugins/recovery/recovery.py service --user "$minas_user" --plugin "$minas_plugin" --operation "$minas_operation"
     else
-        sudo -n /usr/bin/python3 -B /data/.minas-plugin-recovery/recovery.py service --user "$minas_user" --plugin "$minas_plugin" --operation "$minas_operation"
+        sudo -n /usr/bin/python3 -B /data/minas/plugins/recovery/recovery.py service --user "$minas_user" --plugin "$minas_plugin" --operation "$minas_operation"
     fi
     exit $?
 }

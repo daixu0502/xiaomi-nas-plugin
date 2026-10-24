@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='taskcenter'
 PLUGIN_LABEL='定时任务'
-PLUGIN_VERSION='1.0.16'
+PLUGIN_VERSION='1.0.18'
 UNINSTALL_NOTE='停用该用户调度并备份任务和日志；不会删除任务引用的脚本、容器或用户文件。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -195,7 +195,7 @@ installer_main() {
     printf '  插件：%s\n  操作：%s\n  目标：%s\n' "$PLUGIN_LABEL" "$ACTION_LABEL" "${NAS_IP:-NAS 本机}"
     printf '  用户：%s\n' "${SELECTED[*]}"
     if [[ $ACTION == uninstall ]]; then
-        printf '  范围：仅删除所选用户的本插件；配置及记录先备份到 /data/.taskcenter-backups/。\n'
+        printf '  范围：仅删除所选用户的本插件；配置及记录先备份到 /data/minas/backups/plugins/taskcenter/。\n'
         printf '  说明：%s\n' "$UNINSTALL_NOTE"
     else
         printf '  说明：保留已有任务和记录；多用户独立注册，共享调度助手，无额外监听端口。\n'
@@ -387,14 +387,14 @@ nas_other_users() {
 nas_uninstall() {
     nas_prepare uninstall "${1:-}"
     nas_require cp date chmod chown rm
-    NAS_BACKUP="/data/.taskcenter-backups/$NAS_USER/$(date +%Y%m%d-%H%M%S)-$$"
+    NAS_BACKUP="/data/minas/backups/plugins/taskcenter/$NAS_USER/$(date +%Y%m%d-%H%M%S)-$$"
     mkdir -p "$NAS_BACKUP"
     chmod 0700 "$NAS_BACKUP"
     nas_log "停止所选用户的插件并备份配置……"
     # Shared helper removal is reference-aware and refuses active operations.
     # Legacy installations without the component retain the original uninstall path.
-    if [ -f /data/.minas-privileged/component_admin.py ]; then
-        python3 /data/.minas-privileged/component_admin.py remove --plugin "$NAS_PLUGIN" --user "$NAS_USER" ||
+    if [ -f /data/minas/privileged/component_admin.py ]; then
+        python3 /data/minas/privileged/component_admin.py remove --plugin "$NAS_PLUGIN" --user "$NAS_USER" ||
             nas_fail "公共权限组件正在使用，或撤销授权失败；未删除插件。"
     fi
     plugincenter -u "$NAS_USER" -p "$NAS_PLUGIN" disable >/dev/null 2>&1 || true
@@ -402,8 +402,8 @@ nas_uninstall() {
         if [ -e "$NAS_HOME/$nas_data" ]; then cp -a "$NAS_HOME/$nas_data" "$NAS_BACKUP/"; fi
     done
     if [ -d "/data/.taskcenter-system/users/$NAS_USER" ]; then cp -a "/data/.taskcenter-system/users/$NAS_USER" "$NAS_BACKUP/state"; fi
-    if [ -f /data/.minas-plugin-recovery/recovery.py ]; then
-        python3 -B /data/.minas-plugin-recovery/recovery.py forget --user "$NAS_USER" --plugin "$NAS_PLUGIN" || nas_fail "取消恢复登记失败"
+    if [ -f /data/minas/plugins/recovery/recovery.py ]; then
+        python3 -B /data/minas/plugins/recovery/recovery.py forget --user "$NAS_USER" --plugin "$NAS_PLUGIN" || nas_fail "取消恢复登记失败"
     fi
     nas_remove_entry
     case "$NAS_PLUGIN" in
@@ -456,6 +456,7 @@ installer_emit_install() {
     installer_emit_probe
     cat <<'NAS_INSTALL_SCRIPT'
 INSTALLER_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" || nas_fail "统一目录检查失败"
 nas_prepare install "${1:-}"
 PLUGIN_USER=$NAS_USER
 fail() { nas_fail "$@"; }
@@ -468,7 +469,7 @@ B=$(CDPATH= cd "$(dirname "$0")"&&pwd);P="$B/$name";root="/home/$u/plugin";home=
 was_enabled=$(jq -c --arg p "$name" ' .[$p] as $e | if ($e.enable|type)=="boolean" then $e.enable else true end' "$list")
 was_status=$(jq -r --arg p "$name" '.[$p].status // "running"' "$list")
 oldsrc="";[ -L "$home/src" ]&&oldsrc=$(readlink "$home/src" 2>/dev/null||true);case "$oldsrc" in */"$u"/plugin/pluginsrc/"$name")pool=${oldsrc%/pluginsrc/$name};;*)pool="/nas/pool0/$u/plugin";;esac
-srcp="$pool/pluginsrc";tmpp="$pool/plugintmp";src="$srcp/$name";tmp="$tmpp/$name";webroot=$(jq -r '.settings.nginx_plugin//"/data/plugin/www"' /etc/config/plugin);web="$webroot/$u/$name";icon=/data/plugin/www/icon/taskcenter.icon;helperdir=/data/.minas-privileged;helper="$helperdir/minas-helper";sudoers="/etc/sudoers.d/taskcenter-$u";lock="/data/plugin/.$u.plugins.lock"
+srcp="$pool/pluginsrc";tmpp="$pool/plugintmp";src="$srcp/$name";tmp="$tmpp/$name";webroot=$(jq -r '.settings.nginx_plugin//"/data/plugin/www"' /etc/config/plugin);web="$webroot/$u/$name";icon=/data/plugin/www/icon/taskcenter.icon;helperdir=/data/minas/privileged;helper="$helperdir/minas-helper";sudoers="/etc/sudoers.d/taskcenter-$u";lock="/data/plugin/.$u.plugins.lock"
 mkdir -p "$home" "$scripts" "$srcp" "$tmpp" "$(dirname "$web")" "$(dirname "$icon")" /etc/sudoers.d
 python3 "$P/installer/common/component_admin.py" install --plugin "$name" --user "$u" --payload "$P" --plugin-version "$version" || fail '公共权限组件安装失败'
 # Existing scheduler state, task IDs, enabled flags and logs are preserved.

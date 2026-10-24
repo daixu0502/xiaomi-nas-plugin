@@ -23,7 +23,7 @@ import privileged_runtime as runtime
 BASE = runtime.BASE
 HOME = Path('/home')
 PLUGIN_DATA = Path('/data/plugin')
-BACKUPS = Path('/data/.minas-privileged-backups')
+BACKUPS = Path('/data/minas/backups/privileged')
 SUDOERS = Path('/etc/sudoers.d')
 CRON = Path('/etc/cron.d')
 LEGACY = [Path('/data/plugin/.taskcenter-system'), Path('/data/.taskcenter-system')]
@@ -261,8 +261,8 @@ def migrate_ssh_state():
     # entry points, refuse retirement if an old process may still hold/wait on
     # the legacy lock. Never remove an unknown legacy file or real key material.
     if legacy.exists():
-        workers = {b'/data/ssh-autostart-fix/recover-ssh.py',
-                   b'/data/ssh-autostart-fix/restore-ssh.sh',
+        workers = {b'/data/minas/ssh/recover-ssh.py',
+                   b'/data/minas/ssh/restore-ssh.sh',
                    os.fsencode(BASE/'ssh-recovery-helper'),
                    os.fsencode(BASE/'ssh-recovery-boot.sh'),
                    os.fsencode(BASE/'modules/sshrecovery/restore-ssh.sh')}
@@ -376,25 +376,25 @@ def install(payload, plugin, user, plugin_version, backup):
         if not match or not 1024 <= int(match[1]) <= 65535: raise ValueError('Mihomo 端口未配置')
         data.setdefault('settings',{}).setdefault(user,{})['mihomo'] = {'proxyPort':int(match[1])}
     if plugin == 'sshrecovery':
-        worker = Path('/data/ssh-autostart-fix/recover-ssh.py')
+        worker = Path('/data/minas/ssh/recover-ssh.py')
         old_helper = BASE/'ssh-recovery-helper'
         if worker.is_file():
             # Preserve standalone emergency recovery when the flat asset retires.
             previous = worker.read_bytes()
             # Change only the retired asset lookup, preserving standalone fixes.
-            updated = previous.replace(b"BASE/'ssh-recovery-boot.sh'", b"Path('/data/ssh-autostart-fix/restore-ssh.sh')")
+            updated = previous.replace(b"BASE/'ssh-recovery-boot.sh'", b"Path('/data/minas/ssh/restore-ssh.sh')")
             updated = updated.replace(b"if not STATE.exists() and (BASE/'sshrecovery').exists():\n    STATE = BASE/'sshrecovery'\n", b'')
             updated = updated.replace(b"STATE = BASE/'sshrecovery'", b"STATE = BASE/'modules/sshrecovery/var'")
             if updated != previous:
                 compile(updated, str(worker), 'exec')
                 atomic(backup/'standalone-ssh-worker', previous, 0o600)
                 atomic(worker, updated, worker.stat().st_mode & 0o777)
-        shell_worker = Path('/data/ssh-autostart-fix/restore-ssh.sh')
+        shell_worker = Path('/data/minas/ssh/restore-ssh.sh')
         if shell_worker.is_file():
             validate_tree(shell_worker)
             previous = shell_worker.read_bytes()
-            updated = previous.replace(b'STATE=/data/.minas-privileged/sshrecovery\n',
-                                       b'STATE=/data/.minas-privileged/modules/sshrecovery/var\n')
+            updated = previous.replace(b'STATE=/data/minas/privileged/sshrecovery\n',
+                                       b'STATE=/data/minas/privileged/modules/sshrecovery/var\n')
             if updated != previous:
                 subprocess.run(['/bin/sh','-n'],input=updated,check=True,capture_output=True)
                 atomic(backup/'standalone-ssh-shell-worker',previous,0o600)
@@ -480,6 +480,7 @@ def main():
     if os.geteuid() != 0 or os.environ.get('SUDO_USER') not in (None, 'root'):
         raise ValueError('组件管理仅允许 root 安装器调用')
     runtime.account(args.user)
+    if str(BASE)=='/data/minas/privileged':runtime.ensure_data_layout()
     runtime.secure_directory(BASE, create=True)
 
     with runtime.lock('component.lock', exclusive=True, wait=15), ssh_state_lock(args.plugin):
@@ -521,9 +522,9 @@ def main():
                 shutil.copytree(backup/'legacy-helper',legacy)
             if (backup/'legacy-mihomo-sudoers').exists():atomic(old_mihomo_rule,(backup/'legacy-mihomo-sudoers').read_bytes(),0o440)
             if (backup/'standalone-ssh-worker').exists():
-                atomic(Path('/data/ssh-autostart-fix/recover-ssh.py'),(backup/'standalone-ssh-worker').read_bytes(),0o700)
+                atomic(Path('/data/minas/ssh/recover-ssh.py'),(backup/'standalone-ssh-worker').read_bytes(),0o700)
             if (backup/'standalone-ssh-shell-worker').exists():
-                atomic(Path('/data/ssh-autostart-fix/restore-ssh.sh'),(backup/'standalone-ssh-shell-worker').read_bytes(),0o700)
+                atomic(Path('/data/minas/ssh/restore-ssh.sh'),(backup/'standalone-ssh-shell-worker').read_bytes(),0o700)
             if (backup / 'legacy-source.json').exists():
                 legacy = Path(json.loads((backup / 'legacy-source.json').read_text())['path'])
                 if legacy not in [p / 'users' / args.user for p in LEGACY]:

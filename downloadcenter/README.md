@@ -7,6 +7,8 @@
 - 选择 BT 文件，配置并发、限速、做种偏好和 Tracker 列表及订阅。
 - 更新两个下载内核，查看更新状态；按需接入 Openlist 或 AriaNg 等外部客户端。
 
+默认 qBittorrent 内核为 5.3.0 / libtorrent 2.1.2，静态包包含 Qt 6.12.0、OpenSSL 4.0.3。安装下载会核对固定 SHA-256，已有任务、接口和配置在更新时保留。构建来源及许可见 [第三方组件说明](THIRD_PARTY_NOTICES.md)。qBittorrent、aria2 不使用 Go；系统 Python/OpenSSL 和 Docker 由 NAS 固件提供，更新本插件不等于更新这些系统组件。
+
 ## 如何使用
 
 ### 安装与更新

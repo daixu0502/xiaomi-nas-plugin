@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='dockermanager'
 PLUGIN_LABEL='docker'
-PLUGIN_VERSION='1.1.16'
+PLUGIN_VERSION='1.1.18'
 UNINSTALL_NOTE='保留 Docker 引擎、容器、镜像、网络和存储卷。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -393,8 +393,8 @@ nas_uninstall() {
     nas_log "停止所选用户的插件并备份配置……"
     # Shared helper removal is reference-aware and refuses active operations.
     # Legacy installations without the component retain the original uninstall path.
-    if [ -f /data/.minas-privileged/component_admin.py ]; then
-        python3 /data/.minas-privileged/component_admin.py remove --plugin "$NAS_PLUGIN" --user "$NAS_USER" ||
+    if [ -f /data/minas/privileged/component_admin.py ]; then
+        python3 /data/minas/privileged/component_admin.py remove --plugin "$NAS_PLUGIN" --user "$NAS_USER" ||
             nas_fail "公共权限组件正在使用，或撤销授权失败；未删除插件。"
     fi
     plugincenter -u "$NAS_USER" -p "$NAS_PLUGIN" disable >/dev/null 2>&1 || true
@@ -405,8 +405,8 @@ nas_uninstall() {
     for nas_data in etc var INFO; do
         if [ -e "$NAS_HOME/$nas_data" ]; then cp -a "$NAS_HOME/$nas_data" "$NAS_BACKUP/"; fi
     done
-    if [ -f /data/.minas-plugin-recovery/recovery.py ]; then
-        python3 -B /data/.minas-plugin-recovery/recovery.py forget --user "$NAS_USER" --plugin "$NAS_PLUGIN" || nas_fail "取消恢复登记失败"
+    if [ -f /data/minas/plugins/recovery/recovery.py ]; then
+        python3 -B /data/minas/plugins/recovery/recovery.py forget --user "$NAS_USER" --plugin "$NAS_PLUGIN" || nas_fail "取消恢复登记失败"
     fi
     nas_remove_entry
     case "$NAS_PLUGIN" in
@@ -456,6 +456,7 @@ installer_emit_install() {
     installer_emit_probe
     cat <<'NAS_INSTALL_SCRIPT'
 INSTALLER_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" || nas_fail "统一目录检查失败"
 nas_prepare install "${1:-}"
 PLUGIN_USER=$NAS_USER
 fail() { nas_fail "$@"; }
@@ -488,7 +489,7 @@ WEB_LINK="$WEB_USER_DIR/$PLUGIN_NAME"
 ICON_DIR="/data/plugin/www/icon"
 ICON_FILE="$ICON_DIR/$PLUGIN_NAME.icon"
 LOCK_FILE="/data/plugin/.$PLUGIN_USER.plugins.lock"
-HELPER_DIR="/data/.minas-privileged"
+HELPER_DIR="/data/minas/privileged"
 HELPER="$HELPER_DIR/minas-helper"
 SUDOERS="/etc/sudoers.d/dockermanager-$PLUGIN_USER"
 CRON_FILE="/etc/cron.d/dockermanager-$PLUGIN_USER"
@@ -500,7 +501,7 @@ WAS_STATUS=$(jq -r --arg p "$PLUGIN_NAME" '.[$p].status // "running"' "$LIST_FIL
 
 mkdir -p "$PLUGIN_ROOT" "$SRC_PARENT" "$TMP_PARENT" "$PLUGIN_HOME" "$SCRIPTS_DIR" \
     "$WEB_USER_DIR" "$ICON_DIR" /etc/sudoers.d
-[ ! -L "$VAR_DIR" ] || [ "$(readlink "$VAR_DIR")" = "/data/.minas-plugin-data/$PLUGIN_USER/$PLUGIN_NAME/var" ] || fail "插件状态目录链接异常"
+[ ! -L "$VAR_DIR" ] || [ "$(readlink "$VAR_DIR")" = "/data/minas/plugins/data/$PLUGIN_USER/$PLUGIN_NAME/var" ] || fail "插件状态目录链接异常"
 mkdir -p "$VAR_DIR"; chown "$PLUGIN_USER:$PLUGIN_USER" "$VAR_DIR"; chmod 0700 "$VAR_DIR"
 python3 "$PACKAGE_DIR/installer/common/component_admin.py" install --plugin "$PLUGIN_NAME" --user "$PLUGIN_USER" --payload "$PACKAGE_DIR" --plugin-version "$PLUGIN_VERSION" || fail "公共权限组件安装失败"
 

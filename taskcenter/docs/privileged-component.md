@@ -3,7 +3,7 @@
 安装后的代码布局：
 
 ```text
-/data/.minas-privileged/
+/data/minas/privileged/
   minas-helper                 稳定 sudo / cron 入口
   component_admin.py           稳定 root 安装器入口
   common/                      通用运行库、安装事务、用户状态 IO、短期监控缓存

@@ -160,7 +160,8 @@ do_update() {
 
     fetch_latest
     current=$(current_version)
-    if [ "$current" = "$latest_version" ]; then
+    current_text=$("$BIN" -v 2>/dev/null || true)
+    if [ "$current" = "$latest_version" ] && printf '%s\n' "$current_text" | python3 -B "$SCRIPT_DIR/core_security.py" >/dev/null 2>&1; then
         write_check_metadata "$current" "$latest_version"
         jq -n --arg version "$current" '{ok:true,updated:false,currentVersion:$version,latestVersion:$version}'
         return
@@ -189,6 +190,9 @@ do_update() {
     case "$binary_arch" in *ARM*aarch64*|*ARM64*) ;; *) json_error "下载的核心不是 ARM64 程序" ;; esac
     candidate_version=$($binary_tmp -v 2>/dev/null | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?' | head -n 1 || true)
     [ "$candidate_version" = "$latest_version" ] || json_error "下载的核心版本与 Release 不一致"
+    candidate_text=$("$binary_tmp" -v 2>/dev/null) || json_error "下载的核心无法运行"
+    security_error=$(printf '%s\n' "$candidate_text" | python3 -B "$SCRIPT_DIR/core_security.py" 2>&1) \
+        || json_error "$security_error"
     "$binary_tmp" -t -d "$ETC_DIR" -f "$CONFIG_FILE" > "$test_log" 2>&1 \
         || json_error "新核心无法通过当前配置校验，未执行替换"
 

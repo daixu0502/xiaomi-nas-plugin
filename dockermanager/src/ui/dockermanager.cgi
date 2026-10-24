@@ -7,7 +7,7 @@ plugin_user=$(printf '%s\n' "$SCRIPT_DIR" | sed -n 's#^/home/\(u[0-9][0-9]*\)/pl
 if [ -z "$plugin_user" ]; then plugin_user=$(stat -c '%U' "$SCRIPT_FILE" 2>/dev/null || true); fi
 case "$plugin_user" in u[0-9]*) ;; *) plugin_user=$(id -un) ;; esac
 
-HELPER="/data/.minas-privileged/minas-helper"
+HELPER="/data/minas/privileged/minas-helper"
 INFO_FILE="/home/$plugin_user/plugin/dockermanager/INFO"
 
 json_header() {
@@ -63,7 +63,7 @@ printf '%s' "$body" | jq empty >/dev/null 2>&1 || json_error "请求不是有效
 request=$(printf '%s' "$body" | jq --arg action "$action" '. + {action:$action}') || json_error "无法处理请求"
 response=$(printf '%s' "$request" | sudo -n "$HELPER" dockermanager 2>/dev/null) || json_error "无法调用公共 Docker 权限助手"
 printf '%s' "$response" | jq empty >/dev/null 2>&1 || json_error "权限助手返回了无法解析的数据"
-plugin_version=$(jq -r '.version // "1.1.16"' "$INFO_FILE" 2>/dev/null || printf '1.1.16')
+plugin_version=$(jq -r '.version // "1.1.18"' "$INFO_FILE" 2>/dev/null || printf '1.1.18')
 
 json_header
 printf '%s' "$response" | jq --arg pluginVersion "$plugin_version" '. + {pluginVersion:$pluginVersion}'

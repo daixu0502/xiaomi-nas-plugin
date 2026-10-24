@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='nascenter'
 PLUGIN_LABEL='控制中心'
-PLUGIN_VERSION='1.1.40'
+PLUGIN_VERSION='1.1.42'
 UNINSTALL_NOTE='保留被管理的系统服务及用户文件。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -391,8 +391,8 @@ nas_uninstall() {
     mkdir -p "$NAS_BACKUP"
     chmod 0700 "$NAS_BACKUP"
     nas_log "停止所选用户的插件并备份配置……"
-    if [ -f /data/.minas-privileged/component_admin.py ]; then
-        python3 /data/.minas-privileged/component_admin.py remove --plugin "$NAS_PLUGIN" --user "$NAS_USER" || nas_fail "公共权限模块卸载失败"
+    if [ -f /data/minas/privileged/component_admin.py ]; then
+        python3 /data/minas/privileged/component_admin.py remove --plugin "$NAS_PLUGIN" --user "$NAS_USER" || nas_fail "公共权限模块卸载失败"
     fi
     plugincenter -u "$NAS_USER" -p "$NAS_PLUGIN" disable >/dev/null 2>&1 || true
     if [ -x "$NAS_HOME/scripts/control" ]; then
@@ -402,8 +402,8 @@ nas_uninstall() {
     for nas_data in etc var INFO; do
         if [ -e "$NAS_HOME/$nas_data" ]; then cp -a "$NAS_HOME/$nas_data" "$NAS_BACKUP/"; fi
     done
-    if [ -f /data/.minas-plugin-recovery/recovery.py ]; then
-        python3 -B /data/.minas-plugin-recovery/recovery.py forget --user "$NAS_USER" --plugin "$NAS_PLUGIN" || nas_fail "取消恢复登记失败"
+    if [ -f /data/minas/plugins/recovery/recovery.py ]; then
+        python3 -B /data/minas/plugins/recovery/recovery.py forget --user "$NAS_USER" --plugin "$NAS_PLUGIN" || nas_fail "取消恢复登记失败"
     fi
     nas_remove_entry
     case "$NAS_PLUGIN" in
@@ -453,6 +453,7 @@ installer_emit_install() {
     installer_emit_probe
     cat <<'NAS_INSTALL_SCRIPT'
 INSTALLER_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" || nas_fail "统一目录检查失败"
 nas_prepare install "${1:-}"
 PLUGIN_USER=$NAS_USER
 fail() { nas_fail "$@"; }
@@ -464,9 +465,9 @@ B=$(CDPATH= cd "$(dirname "$0")"&&pwd);P="$B/$name";root="/home/$u/plugin";home=
 was_enabled=$(jq -c --arg p "$name" ' .[$p] as $e | if ($e.enable|type)=="boolean" then $e.enable else true end' "$list")
 was_status=$(jq -r --arg p "$name" '.[$p].status // "running"' "$list")
 oldsrc="";[ -L "$home/src" ]&&oldsrc=$(readlink "$home/src" 2>/dev/null||true);case "$oldsrc" in */"$u"/plugin/pluginsrc/"$name")pool=${oldsrc%/pluginsrc/$name};;*)pool="/nas/pool0/$u/plugin";;esac
-srcp="$pool/pluginsrc";tmpp="$pool/plugintmp";src="$srcp/$name";tmp="$tmpp/$name";webroot=$(jq -r '.settings.nginx_plugin//"/data/plugin/www"' /etc/config/plugin);web="$webroot/$u/$name";icon=/data/plugin/www/icon/nascenter.icon;helperdir=/data/.minas-privileged;helper="$helperdir/minas-helper";sudoers="/etc/sudoers.d/nascenter-$u";lock="/data/plugin/.$u.plugins.lock"
+srcp="$pool/pluginsrc";tmpp="$pool/plugintmp";src="$srcp/$name";tmp="$tmpp/$name";webroot=$(jq -r '.settings.nginx_plugin//"/data/plugin/www"' /etc/config/plugin);web="$webroot/$u/$name";icon=/data/plugin/www/icon/nascenter.icon;helperdir=/data/minas/privileged;helper="$helperdir/minas-helper";sudoers="/etc/sudoers.d/nascenter-$u";lock="/data/plugin/.$u.plugins.lock"
 mkdir -p "$home" "$scripts" "$srcp" "$tmpp" "$(dirname "$web")" "$(dirname "$icon")" "$helperdir" /etc/sudoers.d
-[ ! -L "$home/var" ] || [ "$(readlink "$home/var")" = "/data/.minas-plugin-data/$u/$name/var" ] || nas_fail "插件状态目录链接异常"
+[ ! -L "$home/var" ] || [ "$(readlink "$home/var")" = "/data/minas/plugins/data/$u/$name/var" ] || nas_fail "插件状态目录链接异常"
 mkdir -p "$home/var";chown "$u:$u" "$home/var";chmod 0700 "$home/var"
 stage="$srcp/.$name.new.$$";old="$srcp/.$name.old.$$";rm -rf "$stage";mkdir -p "$stage";cp -R "$P/src/files" "$stage/files";cp -R "$P/src/ui" "$stage/ui";chmod 0755 "$stage/files/"*.sh "$stage/ui/nascenter.cgi";chmod 0644 "$stage/ui/index.html" "$stage/ui/"*.js "$stage/ui/"*.css "$stage/ui/config";[ ! -d "$src" ]||mv "$src" "$old";mv "$stage" "$src";[ ! -d "$old" ]||rm -rf "$old"
 cp "$P/scripts/control" "$scripts/control";chmod 0755 "$scripts/control";rm -f "$home/src" "$home/tmp";ln -s "$src" "$home/src";mkdir -p "$tmp";ln -s "$tmp" "$home/tmp"

@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='sshrecovery'
 PLUGIN_LABEL='SSH 恢复'
-PLUGIN_VERSION='1.1.17'
+PLUGIN_VERSION='1.1.19'
 UNINSTALL_NOTE='仅删除所选用户的插件及恢复材料；不关闭 SSH，不移除已安装的登录公钥。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -195,7 +195,7 @@ installer_main() {
     printf '  插件：%s\n  操作：%s\n  目标：%s\n' "$PLUGIN_LABEL" "$ACTION_LABEL" "${NAS_IP:-NAS 本机}"
     printf '  用户：%s\n' "${SELECTED[*]}"
     if [[ $ACTION == uninstall ]]; then
-        printf '  范围：仅删除所选用户的本插件；配置及记录先备份到 /data/.sshrecovery-backups/。\n'
+        printf '  范围：仅删除所选用户的本插件；配置及记录先备份到 /data/minas/backups/plugins/sshrecovery/。\n'
         printf '  说明：%s\n' "$UNINSTALL_NOTE"
     else
         printf '  说明：保留已有导航配置；多用户独立注册，无后台常驻进程、无额外端口。\n'

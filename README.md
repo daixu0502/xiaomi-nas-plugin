@@ -42,6 +42,8 @@ bash dockermanager/manage.sh install --users u123456789
 
 将 `dockermanager` 换成表中对应的插件目录，将示例 IP 和用户 ID 换成实际值。重复运行安装命令即可更新；直接运行 `bash dockermanager/manage.sh` 可进入交互菜单。
 
+新安装包会在安装前自动将旧自定义目录迁入 `/data/minas/`，保留配置、任务、密钥和原启停状态；只安装部分插件也可迁移。已完成迁移时重复安装不会再次搬迁。目录冲突时停止并保留两边数据，迁移失败时自动恢复原布局，详情见[目录说明](nas-root/docs/data-layout.md)。
+
 | 选项 | 用途 |
 | --- | --- |
 | `--users u123456789,u987654321` | 选择一个或多个 NAS 用户。 |
@@ -79,8 +81,8 @@ NAS 本机省略 `--ip`。核对范围后按提示确认；非交互卸载需添
 在 NAS root 终端执行：
 
 ```bash
-python3 -B /data/.minas-plugin-recovery/recovery.py status
-python3 -B /data/.minas-plugin-recovery/recovery.py reconcile
+python3 -B /data/minas/plugins/recovery/recovery.py status
+python3 -B /data/minas/plugins/recovery/recovery.py reconcile
 ```
 
 查看事件监听状态：
@@ -93,7 +95,7 @@ cat /run/minas-plugin-recovery/watch-status.json
 若升级后恢复服务的启动入口丢失，但恢复程序仍在，可手动重新登记：
 
 ```bash
-python3 -B /data/.minas-plugin-recovery/recovery.py bootstrap
+python3 -B /data/minas/plugins/recovery/recovery.py bootstrap
 ```
 
 ## 版本维护
@@ -116,7 +118,7 @@ python3 workspace-tools/sync_versions.py --check
 - 适用于支持当前安装脚本和依赖的 ARM64 小米 NAS；远程安装需要 root SSH。Mihomo 和下载中心安装时需联网获取并校验内核，不是完整离线包。
 - 插件安装按 NAS 用户区分；Docker、系统服务、SSH 和整机重启操作会影响整台设备，管理权限只授予可信用户。
 - 以安装脚本最终成功 / 失败汇总为准。有用户安装失败时，处理错误后重试对应用户；更新后检查实际启用状态和服务状态。
-- 配置和持久数据通过插件的 `etc/var` 入口访问，实际存放于 `/data/.minas-plugin-data/<用户>/<插件>/`；恢复程序和副本位于 `/data/.minas-plugin-recovery/`。这些目录包含正在使用的数据，请勿当作临时缓存删除。
+- 配置和持久数据通过插件的 `etc/var` 入口访问，实际存放于 `/data/minas/plugins/data/<用户>/<插件>/`；恢复程序和副本位于 `/data/minas/plugins/recovery/`。这些目录包含正在使用的数据，请勿当作临时缓存删除。
 - 正式卸载使用 `manage.sh uninstall`，它会取消自动恢复登记。仅在应用市场中删除插件时，恢复服务可能将它补回；保留数据及卸载影响以各插件说明和执行提示为准。
 - 恢复需要 `/data` 中的程序、数据及所需系统依赖仍存在。如果固件同时清除所有启动入口，需要手动恢复；不能保证适配任意固件升级。
 - 监听器不监控配置、下载进度、普通日志和 PID 内容，等待事件不会反复访问存储池。其他插件、容器和系统服务仍可能访问硬盘，不能据此保证整机休眠。冲突源码不会被静默覆盖；连续失败后需修正问题并手动检查或等待新事件。

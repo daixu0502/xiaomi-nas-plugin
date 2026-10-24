@@ -2,13 +2,13 @@
 
 ## qBittorrent / libtorrent
 
-- qBittorrent 上游、版权与许可（GPL-2.0-or-later）：https://github.com/qbittorrent/qBittorrent/tree/release-5.2.4
+- qBittorrent 上游、版权与许可（GPL-2.0-or-later）：https://github.com/qbittorrent/qBittorrent/tree/release-5.3.0
 - libtorrent：https://github.com/arvidn/libtorrent （BSD-3-Clause）。
-- 安装器固定 qBittorrent 5.2.4 / libtorrent 2.0.15，使用第三方 `userdocs/qbittorrent-nox-static` 静态构建，不是上游官方 Linux 二进制。
+- 安装器固定 qBittorrent 5.3.0 / libtorrent 2.1.2，使用第三方 `userdocs/qbittorrent-nox-static` 静态构建，不是上游官方 Linux 二进制。该构建使用 Qt 6.12.0、OpenSSL 4.0.3、Boost 1.92.0 和 zlib 1.3.2。
 - 构建脚本、依赖及源码说明：https://github.com/userdocs/qbittorrent-nox-static
-- 发布：https://github.com/userdocs/qbittorrent-nox-static/releases/tag/release-5.2.4_v2.0.15
+- 发布：https://github.com/userdocs/qbittorrent-nox-static/releases/tag/release-5.3.0_v2.1.2
 - ARM64 文件：`aarch64-qbittorrent-nox`
-- SHA-256：`f12e821d5782c39e3093d788689182e9ac823fa01b3a82d6c00fdb993e4428d8`
+- SHA-256：`5e4eeeea0ca58f551f21d4071a9f97dca47fc27f9884214e12eb2cde113d8843`
 
 源码包不携带 qBittorrent 二进制，安装时下载并核对固定哈希。重新分发含核心的包时，必须同时遵守 qBittorrent、Qt、libtorrent、OpenSSL 及静态链接依赖的许可、版权通知和对应源码提供义务。
 

@@ -1,17 +1,17 @@
 {
   "apiVersion": 1,
-  "layoutVersion": 2,
-  "version": "1.1.10",
+  "layoutVersion": 3,
+  "version": "1.2.1",
   "plugin": "mihomo",
   "files": {
-    "common/component_admin.py": "9fb7cff728c00624977da00b5a0dcf15fe54768f2285b0ee83774211796cc7c8",
-    "common/privileged_runtime.py": "b53613172b988449993468b02024144b2ec0ac4166fb58990ae09c9d97920a95",
+    "common/component_admin.py": "580a3d022a257b35abdbee4d76712f7d204edf8ed6e1c9783e78ff07da0f5af0",
+    "common/privileged_runtime.py": "98543f99068a3c509e8cea7d457d5a73ff1c539c6068dcc1c32fc59184735caf",
     "common/telemetry_cache.py": "8e7c762862af1253a1464ebc41281952a5d7374c889202e3aacaf630af90e80b",
     "common/user_state_io.py": "de65b4d964c403e9bd4cf7c7b0bfe18ba3dc551f610db928ab4e4fcc015a350f",
     "component_admin.py": "8d4832b4794f552ab2bf0a5d2d17ce44e614d28497f7f54c3efa620856ec9257",
     "minas-helper": "8ed97c29410d8d0eca612b3ed1066cb7798bf8956a85cd073f86b27714c5b4f5",
     "modules/mihomo/api.py": "1c32cedfc74a9010a12e314c48962988389b98c722c548d35ed4b7c7d4503e9f",
     "modules/mihomo/docker_proxy_status.py": "f57fd7d0f6bce71b27d30da42e0372898c0ff90fa6f328ee32bab6b21b035221",
-    "modules/mihomo/mihomo-docker-proxy": "e4d6ec7c8cf9f4bd84f757782e4ca7945b61e41576c6a04d8f484f4db289cf3a"
+    "modules/mihomo/mihomo-docker-proxy": "961988953090142c4ab967e445863c1862be03c1718e17ab8013e2f50edaa96c"
   }
 }

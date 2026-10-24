@@ -2,7 +2,7 @@
   "plugin": "nascenter",
   "name": "控制中心",
   "id": 19093,
-  "version": "1.1.40",
+  "version": "1.1.42",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "性能、硬盘健康、网络和服务管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "运行缓存使用有界内存文件系统，避免心跳与统计写入机械盘；SMART 跳过休眠硬盘",
+  "changelog": "安装时自动迁移旧目录、服务入口和恢复数据，保留配置、密钥与启停状态",
   "system": false,
-  "size": 102674,
+  "size": 102673,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

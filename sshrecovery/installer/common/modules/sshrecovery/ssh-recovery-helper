@@ -21,17 +21,17 @@ import time
 import zipfile
 
 sys.dont_write_bytecode = True
-BASE = Path('/data/.minas-privileged')
+BASE = Path('/data/minas/privileged')
 # Only the root installer reads/migrates legacy state. All runtime writers,
 # including exported emergency tools, use the module's persistent directory.
 STATE = BASE/'modules/sshrecovery/var'
-WORKER = Path('/data/ssh-autostart-fix/restore-ssh.sh')
+WORKER = Path('/data/minas/ssh/restore-ssh.sh')
 CRON = Path('/etc/cron.d/keep-ssh')
 DROPIN = Path('/etc/systemd/system/minas.boot_check.service.d/90-keep-ssh.conf')
 SOCKET = 'dropbear.socket'
 BOOT = 'minas.boot_check.service'
 SHELL_DROPIN = Path('/etc/systemd/system/dropbear@.service.d/90-normal-shell.conf')
-ROOT_TOOL = Path('/data/ssh-autostart-fix/recover-ssh.py')
+ROOT_TOOL = Path('/data/minas/ssh/recover-ssh.py')
 LOGIN_BACKUP = ROOT_TOOL.parent/'login-authorized-keys'
 PENDING_CRON = Path('/etc/cron.d/ssh-recovery-once')
 PENDING_RESULT = ROOT_TOOL.parent/'emergency-result.json'
@@ -51,7 +51,7 @@ def boot_data():
     # The shell worker has no dependency on the optional Python emergency CLI.
     return {WORKER:boot_asset().read_bytes(),
             DROPIN:b'[Service]\n# Restore SSH after the Xiaomi boot check when this drop-in is loaded.\nExecStartPost=/usr/bin/systemctl start dropbear.socket\n',
-            CRON:b'SHELL=/bin/sh\nPATH=/usr/sbin:/usr/bin:/sbin:/bin\nMAILTO=""\n\n# Wait for the real boot-check completion, then perform bounded SSH rechecks.\n@reboot root /bin/sh /data/ssh-autostart-fix/restore-ssh.sh\n'}
+            CRON:b'SHELL=/bin/sh\nPATH=/usr/sbin:/usr/bin:/sbin:/bin\nMAILTO=""\n\n# Wait for the real boot-check completion, then perform bounded SSH rechecks.\n@reboot root /bin/sh /data/minas/ssh/restore-ssh.sh\n'}
 
 
 def same_boot_code(actual,expected):
@@ -299,7 +299,7 @@ class Recovery:
             '在容器里将 NAS 的 / 绑定到 /nas，使用 root Console 执行：\n'
             'chroot /nas /usr/bin/python3 /nas/pool0/'+self.user+'/data/ssh-emergency/recover-ssh.py --local-recover --offline\n'
             '脚本先修复文件，再通过一次性宿主机 Cron 加载配置和开启 SSH。需宿主机 crond 正常运行。\n'
-            '查看结果：cat /nas/data/ssh-autostart-fix/emergency-result.json\n'
+            '查看结果：cat /nas/data/minas/ssh/emergency-result.json\n'
             '也可在已有宿主机 root 终端执行同一程序并去掉 --offline。\n'
             '若未包含 recovery.pub，执行时用 --public-key 指定自己的公钥文件。\n'
             '固件若移除 Python、Cron、Docker 或所有管理入口，本包不能保证恢复；没有预留隐藏账户或免认证端口。\n').encode()
@@ -584,7 +584,7 @@ def root_command(args):
     require((home/'.ssh/authorized_keys').is_file(),'没有登录授权，请提供 --public-key 公钥文件')
     atomic(ROOT_TOOL,Path(__file__).read_bytes(),0o700);snapshot_login(home)
     if args.offline:
-        cron=b'SHELL=/bin/sh\nPATH=/usr/sbin:/usr/bin:/sbin:/bin\n* * * * * root /usr/bin/python3 /data/ssh-autostart-fix/recover-ssh.py --activate-pending >/dev/null 2>&1\n'
+        cron=b'SHELL=/bin/sh\nPATH=/usr/sbin:/usr/bin:/sbin:/bin\n* * * * * root /usr/bin/python3 /data/minas/ssh/recover-ssh.py --activate-pending >/dev/null 2>&1\n'
         safe(PENDING_CRON);require(not PENDING_CRON.exists() or PENDING_CRON.read_bytes()==cron,'已有不同的一次性恢复任务')
         atomic(PENDING_RESULT,b'{"ok":false,"state":"pending"}\n');atomic(PENDING_CRON,cron,0o644)
         print(json.dumps({'ok':True,'state':'pending','message':'文件已准备；等待宿主机 Cron 激活，尚未验证 SSH。','result':str(PENDING_RESULT)},ensure_ascii=False));return
