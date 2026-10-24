@@ -378,12 +378,52 @@ prepare_account() {
     fi
     if [ -f "$home/.ssh/authorized_keys" ]; then chmod 0600 "$home/.ssh/authorized_keys"; fi
 }
+# BEGIN MINAS BASH PROBE
+bash_path_safe() (
+    node=$1
+    while :; do
+        [ ! -L "$node" ] || exit 1
+        info=$(/usr/bin/stat -c '%u:%a' "$node") || exit 1
+        owner=${info%%:*}; mode=${info#*:}
+        [ "$owner" = 0 ] && [ "$((0$mode & 0022))" = 0 ] || exit 1
+        [ "$node" != / ] || break
+        node=${node%/*}; [ -n "$node" ] || node=/
+    done
+)
+find_bash() (
+    limited=$1
+    # Fixed absolute paths only; never select a command from the caller's PATH.
+    for candidate in /usr/bin/bash.bash /bin/bash.bash /usr/local/bin/bash /usr/bin/bash /bin/bash /opt/bin/bash; do
+        normal=$(/usr/bin/readlink -f "$candidate" 2>/dev/null) || continue
+        [ -f "$normal" ] && [ -x "$normal" ] || continue
+        [ "$normal" != "$limited" ] || continue
+        if [ "$normal" -ef "$limited" ]; then
+            # Existing SSH sessions inherit the service-private Bash bind.
+            /usr/bin/mountpoint -q "$limited" || continue
+        fi
+        case $normal in *[!a-zA-Z0-9_./-]*) continue ;; esac
+        # Resolve aliases, but require the real executable and all its parents
+        # to be root-owned and not writable by other users before executing it.
+        bash_path_safe "$normal" 2>/dev/null || continue
+        # Disable startup files and inherited shell settings. An executable
+        # filename alone does not prove that it is a working, unrestricted Bash.
+        reply=$(/usr/bin/timeout -k 1 2 /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C \
+            "$normal" --noprofile --norc -p -c \
+            '[[ -n ${BASH_VERSION-} && $- != *r* ]] && builtin printf "%s\n" __MINAS_BASH_OK__' \
+            </dev/null 2>/dev/null) || continue
+        [ "$reply" = __MINAS_BASH_OK__ ] || continue
+        printf '%s\n' "$normal"
+        exit 0
+    done
+    printf '%s\n' '未找到通过执行验证的 Bash（已检查固定绝对路径）' >&2
+    exit 1
+)
+# END MINAS BASH PROBE
+
 repair_shell() {
     [ -e /usr/sbin/mi-shell ] || return 0
-    target_shell=$(readlink -f /usr/sbin/mi-shell)
-    normal_shell=$(readlink -f /usr/bin/bash.bash 2>/dev/null || true)
-    [ -x "$normal_shell" ] || normal_shell=$(readlink -f /bin/bash 2>/dev/null || true)
-    [ -x "$normal_shell" ] || fail 'mi-shell 固件缺少可用 Bash'
+    target_shell=$(/usr/bin/readlink -f /usr/sbin/mi-shell)
+    normal_shell=$(find_bash "$target_shell") || fail 'mi-shell 固件缺少可用 Bash'
     case "$normal_shell:$target_shell" in *[!a-zA-Z0-9_./:-]*) fail 'shell 路径包含不支持字符' ;; esac
     safe "$normal_shell"; safe "$target_shell"; safe "${SHELL_DROPIN%/*}"
     mkdir -p "${SHELL_DROPIN%/*}"

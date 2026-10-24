@@ -35,6 +35,9 @@ ROOT_TOOL = Path('/data/minas/ssh/recover-ssh.py')
 LOGIN_BACKUP = ROOT_TOOL.parent/'login-authorized-keys'
 PENDING_CRON = Path('/etc/cron.d/ssh-recovery-once')
 PENDING_RESULT = ROOT_TOOL.parent/'emergency-result.json'
+BASH_CANDIDATES = tuple(map(Path, ('/usr/bin/bash.bash','/bin/bash.bash','/usr/local/bin/bash',
+                                 '/usr/bin/bash','/bin/bash','/opt/bin/bash')))
+BASH_PROBE = '[[ -n ${BASH_VERSION-} && $- != *r* ]] && builtin printf "%s\\n" __MINAS_BASH_OK__'
 
 
 class RecoveryError(Exception):
@@ -182,6 +185,28 @@ def root_environment():
     return {'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','HOME':pwd.getpwuid(0).pw_dir,'LC_ALL':'C','OPENSSL_CONF':'/dev/null'}
 
 
+def find_bash(limited, candidates=BASH_CANDIDATES):
+    for candidate in candidates:
+        try:
+            source=candidate.resolve(strict=True)
+            if not source.is_file() or not source.stat().st_mode & 0o111 or source==limited:continue
+            if source.samefile(limited):
+                mounted=subprocess.run(['/usr/bin/mountpoint','-q',str(limited)],
+                                       stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                                       timeout=2,env=root_environment())
+                if mounted.returncode:continue
+            if not re.fullmatch(r'/[A-Za-z0-9_./-]+',str(source)):continue
+            safe(source)
+            result=subprocess.run(['/usr/bin/timeout','-k','1','2','/usr/bin/env','-i',
+                                   'PATH=/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL=C',str(source),
+                                   '--noprofile','--norc','-p','-c',BASH_PROBE],
+                                  stdin=subprocess.DEVNULL,capture_output=True,text=True,
+                                  timeout=4,env=root_environment())
+            if result.returncode==0 and result.stdout=='__MINAS_BASH_OK__\n':return source
+        except (OSError,RuntimeError,RecoveryError,subprocess.TimeoutExpired):continue
+    raise RecoveryError('未找到通过执行验证的 Bash（已检查固定绝对路径）')
+
+
 def private_public(text):
     require(isinstance(text,str) and 0<len(text)<=65536, '私钥长度无效')
     require(text.strip().startswith('-----BEGIN OPENSSH PRIVATE KEY-----') and text.strip().endswith('-----END OPENSSH PRIVATE KEY-----'), '私钥仅支持 OpenSSH Ed25519；其他密钥请上传 .pub 文件')
@@ -244,12 +269,14 @@ class Recovery:
         self.settings_file=state/'keys'/(user+'.settings.json')
         self.generated=state/'tmp'/('generated-'+user)
         self.shell_dropin,self.normal_shell,self.limited_shell=shell_paths or (SHELL_DROPIN,Path('/usr/bin/bash.bash'),Path('/usr/sbin/mi-shell'))
+        self.bash_candidates=(self.normal_shell,) if shell_paths else BASH_CANDIDATES
 
     def restore_shell(self):
         # New firmware launches mi-shell despite root's configured login shell.
         # Bind Bash only inside each Dropbear service; retain the vendor binary.
         if not self.limited_shell.exists():return False
-        source=self.normal_shell.resolve(strict=True);target=self.limited_shell.resolve(strict=True)
+        target=self.limited_shell.resolve(strict=True)
+        source=find_bash(target,self.bash_candidates)
         for path in (source,target,self.shell_dropin):safe(path)
         require(source.is_file() and source.stat().st_mode & 0o111 and target.is_file(),'固件的 SSH 命令解释器不可用')
         require(all(re.fullmatch(r'/[A-Za-z0-9_./@-]+',str(p)) for p in (source,target)),'SSH 命令解释器路径异常')

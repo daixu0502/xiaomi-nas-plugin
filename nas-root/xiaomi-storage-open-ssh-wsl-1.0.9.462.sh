@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# SSH 2.2.3; authenticated UCI entry researched by lvmaple/minas_plugin.
+# SSH 2.2.4; authenticated UCI entry researched by lvmaple/minas_plugin.
 set -Eeuo pipefail
 umask 077
 fail() { printf '失败：%s\n' "$*" >&2; exit 1; }
 verbose() { if [[ $VERBOSE == 1 ]]; then printf '[诊断] %s\n' "$*" >&2; fi; }
 usage() {
     cat <<'HELP'
-小米智能存储开启 SSH 2.2.3（1.0.9.462 新入口，WSL / Linux）
+小米智能存储开启 SSH 2.2.4（1.0.9.462 新入口，WSL / Linux）
 用法：bash xiaomi-storage-open-ssh-wsl-1.0.9.462.sh [NAS IPv4] [--identity 私钥] [--cert-dir 证书目录] [-v]
 客户端证书 → 临时 SMB /etc 共享 → 一次性 Cron → Bash 映射 → 验证 root SSH。
 验证成功后询问是否调用同目录 install-ssh-autostart-fix.sh；默认不安装。
@@ -298,12 +298,51 @@ record=$(awk -F: '$1=="root" {n++; row=$0} END {if(n==1) print row; else exit 1}
 home=$(printf '%s\n' "$record" | cut -d: -f6)
 case $home in /root|/home/rootx) ;; *) echo '不支持的 root 主目录' >&2; exit 1 ;; esac
 # Same service-private bind as the current NAS; vendor mi-shell stays intact.
+# BEGIN MINAS BASH PROBE
+bash_path_safe() (
+    node=$1
+    while :; do
+        [ ! -L "$node" ] || exit 1
+        info=$(/usr/bin/stat -c '%u:%a' "$node") || exit 1
+        owner=${info%%:*}; mode=${info#*:}
+        [ "$owner" = 0 ] && [ "$((0$mode & 0022))" = 0 ] || exit 1
+        [ "$node" != / ] || break
+        node=${node%/*}; [ -n "$node" ] || node=/
+    done
+)
+find_bash() (
+    limited=$1
+    # Fixed absolute paths only; never select a command from the caller's PATH.
+    for candidate in /usr/bin/bash.bash /bin/bash.bash /usr/local/bin/bash /usr/bin/bash /bin/bash /opt/bin/bash; do
+        normal=$(/usr/bin/readlink -f "$candidate" 2>/dev/null) || continue
+        [ -f "$normal" ] && [ -x "$normal" ] || continue
+        [ "$normal" != "$limited" ] || continue
+        if [ "$normal" -ef "$limited" ]; then
+            # Existing SSH sessions inherit the service-private Bash bind.
+            /usr/bin/mountpoint -q "$limited" || continue
+        fi
+        case $normal in *[!a-zA-Z0-9_./-]*) continue ;; esac
+        # Resolve aliases, but require the real executable and all its parents
+        # to be root-owned and not writable by other users before executing it.
+        bash_path_safe "$normal" 2>/dev/null || continue
+        # Disable startup files and inherited shell settings. An executable
+        # filename alone does not prove that it is a working, unrestricted Bash.
+        reply=$(/usr/bin/timeout -k 1 2 /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C \
+            "$normal" --noprofile --norc -p -c \
+            '[[ -n ${BASH_VERSION-} && $- != *r* ]] && builtin printf "%s\n" __MINAS_BASH_OK__' \
+            </dev/null 2>/dev/null) || continue
+        [ "$reply" = __MINAS_BASH_OK__ ] || continue
+        printf '%s\n' "$normal"
+        exit 0
+    done
+    printf '%s\n' '未找到通过执行验证的 Bash（已检查固定绝对路径）' >&2
+    exit 1
+)
+# END MINAS BASH PROBE
 conf=/etc/systemd/system/dropbear@.service.d/90-normal-shell.conf
 if [ -e /usr/sbin/mi-shell ]; then
-    normal=$(readlink -f /usr/bin/bash.bash 2>/dev/null || true)
-    [ -x "$normal" ] || normal=$(readlink -f /bin/bash)
-    limited=$(readlink -f /usr/sbin/mi-shell)
-    [ -x "$normal" ] && [ "$normal" != "$limited" ]
+    limited=$(/usr/bin/readlink -f /usr/sbin/mi-shell)
+    normal=$(find_bash "$limited") || exit 1
     case $normal:$limited in *[!a-zA-Z0-9_./:-]*) exit 1 ;; esac
     safe "$normal"; safe "$limited"; safe "${conf%/*}"; safe "$conf"
     mkdir -p "${conf%/*}"

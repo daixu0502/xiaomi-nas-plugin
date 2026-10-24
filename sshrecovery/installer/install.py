@@ -14,7 +14,7 @@ import sys
 import tempfile
 import time
 
-PLUGIN, VERSION = 'sshrecovery', '1.1.20'
+PLUGIN, VERSION = 'sshrecovery', '1.1.21'
 SYSTEM = Path('/data/minas/privileged')
 
 def system_install(user, payload):
