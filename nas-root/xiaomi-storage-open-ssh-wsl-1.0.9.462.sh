@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# SSH 2.2.5; authenticated UCI entry researched by lvmaple/minas_plugin.
+# SSH 2.2.6; authenticated UCI entry researched by lvmaple/minas_plugin.
 set -Eeuo pipefail
 umask 077
 fail() { printf '失败：%s\n' "$*" >&2; exit 1; }
 verbose() { if [[ $VERBOSE == 1 ]]; then printf '[诊断] %s\n' "$*" >&2; fi; }
 usage() {
     cat <<'HELP'
-小米智能存储开启 SSH 2.2.5（1.0.9.462 新入口，WSL / Linux）
+小米智能存储开启 SSH 2.2.6（1.0.9.462 新入口，WSL / Linux）
 用法：bash xiaomi-storage-open-ssh-wsl-1.0.9.462.sh [NAS IPv4] [--identity 私钥] [--cert-dir 证书目录] [-v]
 客户端证书 → 临时 SMB /etc 共享 → 一次性 Cron → Bash 映射 → 验证 root SSH。
 验证成功后询问是否调用同目录 install-ssh-autostart-fix.sh；默认不安装。
@@ -343,6 +343,25 @@ put() {
     chmod "$permissions" "$next"
     mv -f "$next" "$target"
 }
+prepare_shell_dropin_dir() {
+    # Repair only this managed root-owned directory; keep strict checks on
+    # every ancestor and on the config file itself.
+    dropin_dir=/etc/systemd/system/dropbear@.service.d
+    safe "${dropin_dir%/*}"
+    [ ! -L "$dropin_dir" ] || { echo "路径包含符号链接：$dropin_dir" >&2; exit 1; }
+    if [ -e "$dropin_dir" ]; then
+        [ -d "$dropin_dir" ] || { echo "SSH 配置目录不是目录：$dropin_dir" >&2; exit 1; }
+        [ "$(stat -c %u "$dropin_dir")" = 0 ] || { echo "路径不是 root 所有：$dropin_dir" >&2; exit 1; }
+        dropin_mode=$(stat -c %a "$dropin_dir")
+        if [ "$((0$dropin_mode & 0022))" != 0 ]; then
+            chmod go-w "$dropin_dir"
+            note "已收紧 SSH 配置目录写权限：$dropin_dir（原权限 $dropin_mode）"
+        fi
+    else
+        mkdir -p -m 0755 "$dropin_dir"
+    fi
+    safe "$dropin_dir"
+}
 [ "$(id -u)" = 0 ] || exit 1
 rm -f "$job"
 safe "$root_log"
@@ -350,7 +369,7 @@ next=$(mktemp "/etc/$REMOTE.log.XXXXXXXX")
 chmod 0600 "$next"; mv -f "$next" "$root_log"
 exec >> "$root_log" 2>&1
 log_active=1
-note '小米 NAS SSH 开启 2.2.5 执行日志（不记录密码、密钥内容或认证参数）'
+note '小米 NAS SSH 开启 2.2.6 执行日志（不记录密码、密钥内容或认证参数）'
 case ${NAS_USER:-} in
     u*) digits=${NAS_USER#u}; case $digits in ''|*[!0-9]*) ;; *)
         user_log=/home/$NAS_USER/pool0/data/ssh-open-$TOKEN.log
@@ -420,8 +439,9 @@ if [ -e /usr/sbin/mi-shell ]; then
     note "Bash 已验证：$normal"
     step shell-bind '设置 Dropbear 专用 Bash 映射'
     case $normal:$limited in *[!a-zA-Z0-9_./:-]*) exit 1 ;; esac
-    safe "$normal"; safe "$limited"; safe "${conf%/*}"; safe "$conf"
-    mkdir -p "${conf%/*}"
+    safe "$normal"; safe "$limited"
+    prepare_shell_dropin_dir
+    safe "$conf"
     expected=$(mktemp "${conf%/*}/.minas-first-ssh.XXXXXXXX")
     printf '[Service]\nBindReadOnlyPaths=%s:%s\n' "$normal" "$limited" > "$expected"
     if [ -e "$conf" ] && ! cmp -s "$conf" "$expected"; then
