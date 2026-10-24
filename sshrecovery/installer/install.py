@@ -14,7 +14,7 @@ import sys
 import tempfile
 import time
 
-PLUGIN, VERSION = 'sshrecovery', '1.1.21'
+PLUGIN, VERSION = 'sshrecovery', '1.1.22'
 SYSTEM = Path('/data/minas/privileged')
 
 def system_install(user, payload):
@@ -28,6 +28,12 @@ def system_install(user, payload):
     report=json.loads(result.stdout)
     saved=SYSTEM/'modules/sshrecovery/var/host/dropbear_rsa_host_key'
     if host.is_file() and not saved.exists():atomic(saved,host.read_bytes(),0o400,(0,0))
+    # Update only already-installed recovery programs. A fresh plugin install
+    # must not install boot jobs or change the current SSH enable/running state.
+    refresh=subprocess.run([sys.executable,'-B',str(SYSTEM/'modules/sshrecovery/ssh-recovery-helper'),'--refresh-installed'],
+                           capture_output=True,timeout=30)
+    require(refresh.returncode==0,'同步已安装的 SSH 恢复程序失败：'+refresh.stdout.decode('utf-8',errors='replace').strip())
+    report['sshTools']=json.loads(refresh.stdout)
     return report
 
 def system_remove(user):
@@ -173,7 +179,9 @@ def install(p, payload):
         require(check.returncode == 0, '系统源码校验未通过，正在回退安装')
         report=system_install(p['user'],payload)
         print('公共权限组件：'+report['helperVersion']+'；安装事务完成，临时回退文件已清理')
-        print('SSH 恢复 1.1.14 已安装：' + p['user'] + '；未改动开机修复服务，未预置登录公钥。')
+        tools=report['sshTools']
+        print('SSH 恢复 '+VERSION+' 已安装：' + p['user'] + '；已同步 '+str(len(tools['updated']))+' 个已有恢复程序，保留服务启用状态及登录公钥。')
+        if tools['skipped']:print('保留自定义恢复程序：'+', '.join(tools['skipped']))
     except BaseException:
         st=registry.stat(); atomic(registry,old_registry,st.st_mode & 0o777,(st.st_uid,st.st_gid))
         if not web_existed and web.is_symlink(): web.unlink()

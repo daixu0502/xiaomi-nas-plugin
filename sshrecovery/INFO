@@ -2,7 +2,7 @@
   "plugin": "sshrecovery",
   "name": "SSH 恢复",
   "id": 19098,
-  "version": "1.1.21",
+  "version": "1.1.22",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "手动开启 SSH、恢复主机密钥与登录公钥",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "按固定绝对路径查找并执行验证 Bash，跳过受限或无效的命令解释器",
+  "changelog": "使用绝对路径验证 Bash；安装更新时同步已有开机和应急恢复程序，保留服务启用状态及密钥",
   "system": false,
   "size": 69276,
   "port": "",

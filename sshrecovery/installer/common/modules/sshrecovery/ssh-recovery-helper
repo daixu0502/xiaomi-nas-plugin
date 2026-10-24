@@ -64,6 +64,35 @@ def same_boot_code(actual,expected):
     return normalize(actual)==normalize(expected)
 
 
+def refresh_installed_tools():
+    """Refresh existing managed recovery code without enabling any service."""
+    candidates={WORKER:(boot_asset().read_bytes(),b'#!/bin/sh\n# Pure POSIX shell recovery for Xiaomi NAS.'),
+                ROOT_TOOL:(Path(__file__).read_bytes(),b'#!/usr/bin/python3\n"""Bounded root operations for SSH recovery,')}
+    previous={};updates={};skipped=[]
+    for path,(expected,signature) in candidates.items():
+        safe(path)
+        if not path.exists():continue
+        require(path.is_file() and path.stat().st_size<=1024*1024,'已安装的 SSH 恢复程序异常')
+        actual=path.read_bytes()
+        if same_boot_code(actual,expected):continue
+        if not actual.replace(b'\r\n',b'\n').startswith(signature):
+            skipped.append(str(path));continue
+        if path==WORKER:
+            result=subprocess.run(['/bin/sh','-n'],input=expected,capture_output=True,timeout=10)
+            require(result.returncode==0,'SSH 开机修复程序语法检查失败')
+        else:compile(expected,str(path),'exec')
+        previous[path]=(actual,stat.S_IMODE(path.stat().st_mode))
+        updates[path]=expected
+    changed=[]
+    try:
+        for path,data in updates.items():
+            atomic(path,data,previous[path][1]);changed.append(path)
+    except BaseException:
+        for path in reversed(changed):atomic(path,*previous[path])
+        raise
+    return {'updated':list(map(str,changed)),'skipped':skipped}
+
+
 def boot_status():
     status=dict(worker=WORKER.is_file(),cron=CRON.is_file(),dropin=DROPIN.is_file(),current=False,conflicts=[],available=True)
     try:
@@ -580,7 +609,7 @@ def activate_pending():
 def root_cli(argv=None):
     parser=argparse.ArgumentParser(description='NAS root SSH 修复；支持旧固件和 mi-shell 固件，不提供远程免认证入口。')
     modes=parser.add_mutually_exclusive_group(required=True)
-    for mode in ('local-recover','boot-repair','prepare-boot','activate-pending','diagnose'):modes.add_argument('--'+mode,action='store_true')
+    for mode in ('local-recover','boot-repair','prepare-boot','activate-pending','diagnose','refresh-installed'):modes.add_argument('--'+mode,action='store_true')
     parser.add_argument('--user');parser.add_argument('--public-key',type=Path)
     parser.add_argument('--offline',action='store_true');parser.add_argument('--install-boot',action='store_true')
     args=parser.parse_args(argv);require(os.geteuid()==0,'此工具必须在 NAS root 终端或宿主机 chroot 中运行')
@@ -594,6 +623,8 @@ def root_cli(argv=None):
 
 
 def root_command(args):
+    if args.refresh_installed:
+        print(json.dumps(refresh_installed_tools(),ensure_ascii=False));return
     if args.activate_pending:print(json.dumps(activate_pending(),ensure_ascii=False));return
     if args.prepare_boot:
         init_recovery_state();snapshot_login(Path(pwd.getpwuid(0).pw_dir));repair_boot_materials();return
