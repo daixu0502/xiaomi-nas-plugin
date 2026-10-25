@@ -7,8 +7,8 @@ from sync_versions import synchronize as synchronize_versions
 
 ROOT=Path(__file__).resolve().parents[1]
 CANON=ROOT/'workspace-tools/privileged-component'
-PROJECTS={'dockermanager':'dockermanager','taskcenter':'taskcenter','sshrecovery':'sshrecovery','mihomo':'mihomo','nascenter':'nascenter'}
-MODULE_FILES={'dockermanager':('docker-manager-helper',),'taskcenter':('task-center-helper','task_schedule.py','task_maintenance.py'),'sshrecovery':('ssh-recovery-helper','restore-ssh.sh'),'mihomo':('api.py','mihomo-docker-proxy','docker_proxy_status.py'),'nascenter':('api.py','nas-center-helper','process_metrics.py')}
+PROJECTS={'dockermanager':'dockermanager','taskcenter':'taskcenter','sshrecovery':'sshrecovery','mihomo':'mihomo','nascenter':'nascenter','mediaeditor':'mediaeditor'}
+MODULE_FILES={'dockermanager':('docker-manager-helper',),'taskcenter':('task-center-helper','task_schedule.py','task_maintenance.py'),'sshrecovery':('ssh-recovery-helper','restore-ssh.sh'),'mihomo':('api.py','mihomo-docker-proxy','docker_proxy_status.py'),'nascenter':('api.py','nas-center-helper','process_metrics.py'),'mediaeditor':('api.py','store.py','sqlite_native.py','provider.py')}
 CORE=('minas-helper','component_admin.py','common/privileged_runtime.py','common/component_admin.py','common/user_state_io.py','common/telemetry_cache.py')
 
 def synchronize():

@@ -6,7 +6,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGINS = ('dockermanager', 'mihomo', 'taskcenter', 'nascenter',
-           'sshrecovery', 'quickshare', 'downloadcenter')
+           'sshrecovery', 'quickshare', 'downloadcenter', 'mediaeditor')
 COMPONENTS = {
     'privileged': 'workspace-tools/privileged-component/common/privileged_runtime.py',
     'recovery': 'workspace-tools/plugin-recovery/recovery.py',

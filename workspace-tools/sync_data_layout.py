@@ -8,10 +8,10 @@ BEGIN='# BEGIN MINAS DATA LAYOUT (generated)'
 END='# END MINAS DATA LAYOUT'
 SHELL_BEGIN='# BEGIN MINAS AUTO LAYOUT SHELL (generated)'
 SHELL_END='# END MINAS AUTO LAYOUT SHELL'
-PLUGINS=('dockermanager','mihomo','taskcenter','nascenter','sshrecovery','quickshare','downloadcenter')
+PLUGINS=('dockermanager','mihomo','taskcenter','nascenter','sshrecovery','quickshare','downloadcenter','mediaeditor')
 PRIVATE={'dockermanager':['docker-manager-helper'],'taskcenter':['task-center-helper','task_schedule.py','task_maintenance.py'],
          'sshrecovery':['ssh-recovery-helper','restore-ssh.sh'],'mihomo':['api.py','mihomo-docker-proxy','docker_proxy_status.py'],
-         'nascenter':['api.py','nas-center-helper','process_metrics.py']}
+         'nascenter':['api.py','nas-center-helper','process_metrics.py'],'mediaeditor':['api.py','store.py','sqlite_native.py','provider.py']}
 FLAT={'dockermanager':['docker-manager-helper'],'taskcenter':['task-center-helper','task_schedule.py','task_maintenance.py'],
       'sshrecovery':['ssh-recovery-helper','ssh-recovery-boot.sh']}
 

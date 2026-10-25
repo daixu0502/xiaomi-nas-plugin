@@ -1,0 +1,18 @@
+{
+  "apiVersion": 1,
+  "layoutVersion": 3,
+  "version": "1.2.4",
+  "plugin": "mediaeditor",
+  "files": {
+    "common/component_admin.py": "363a43d96182e7611d03528cb8d66fc569f4024d1deef77c068d4f82cca86fb9",
+    "common/privileged_runtime.py": "0ecbff65b9d353ae1a1991573f00eee1bdf4a51942de33ba5e22d2b3068c4a5e",
+    "common/telemetry_cache.py": "8e7c762862af1253a1464ebc41281952a5d7374c889202e3aacaf630af90e80b",
+    "common/user_state_io.py": "de65b4d964c403e9bd4cf7c7b0bfe18ba3dc551f610db928ab4e4fcc015a350f",
+    "component_admin.py": "8d4832b4794f552ab2bf0a5d2d17ce44e614d28497f7f54c3efa620856ec9257",
+    "minas-helper": "f6e858adb112512f7caf2a885cb6a72e2ae16e0608935362c3968240edf94fc5",
+    "modules/mediaeditor/api.py": "fd5186ac6c18f9c99d081de1470362366472ebe0250ad67e96a5173ae1b78814",
+    "modules/mediaeditor/provider.py": "7d3a0b68f4067b4ceac17e02350011b8e7668579471a41f893e8e7f5f3aab243",
+    "modules/mediaeditor/sqlite_native.py": "2b995b2dee457ef055a6f5219bd1d4ede4ffd16d33e9bf474b932faa15c94453",
+    "modules/mediaeditor/store.py": "152ddb5d4bd2ae556fcf8649f09b1f6b79dd8d87097923a858b7d3f6742b6194"
+  }
+}

@@ -72,6 +72,7 @@ var document = window.XiaomiPluginClient.document;
   },{passive:false});
   function syncSelect(select) { const b=triggers.get(select); if(b)b.textContent=select.selectedOptions[0]?select.selectedOptions[0].textContent:'请选择'; }
   document.querySelectorAll('select').forEach(select=>{
+    if(window.XiaomiPluginClient.enhanceSelect){window.XiaomiPluginClient.enhanceSelect(select);return;}
     const b=node('button','pick-trigger'); b.type='button'; b.setAttribute('aria-haspopup','dialog'); select.hidden=true; select.after(b); triggers.set(select,b); syncSelect(select);
     select.addEventListener('change',()=>syncSelect(select));
     b.onclick=()=>{pickerSelect=select; $('pickerTitle').textContent=select.parentElement.firstChild.textContent.trim()||'选择选项'; $('pickerOptions').replaceChildren(); Array.from(select.options).forEach(o=>{const opt=button(o.textContent,o.selected?'selected':'',()=>{select.value=o.value;select.dispatchEvent(new Event('change'));close('picker');},o.disabled);$('pickerOptions').append(opt);});show('picker');};

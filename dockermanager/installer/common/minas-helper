@@ -15,7 +15,7 @@ import privileged_runtime as runtime
 
 
 def load(name, filename):
-    paths = {'docker-manager-helper':'modules/dockermanager/docker-manager-helper', 'task-center-helper':'modules/taskcenter/task-center-helper', 'ssh-recovery-helper':'modules/sshrecovery/ssh-recovery-helper', 'mihomo-api.py':'modules/mihomo/api.py', 'nascenter-api.py':'modules/nascenter/api.py'}
+    paths = {'docker-manager-helper':'modules/dockermanager/docker-manager-helper', 'task-center-helper':'modules/taskcenter/task-center-helper', 'ssh-recovery-helper':'modules/sshrecovery/ssh-recovery-helper', 'mihomo-api.py':'modules/mihomo/api.py', 'nascenter-api.py':'modules/nascenter/api.py', 'mediaeditor-api.py':'modules/mediaeditor/api.py'}
     file = runtime.BASE / paths[filename]
     if not file.exists() and filename in ('docker-manager-helper','task-center-helper','ssh-recovery-helper'):
         file = runtime.BASE / filename # API-v1 module not yet migrated by its own package.
@@ -51,7 +51,7 @@ def dispatch(plugin, request, caller):
         raise ValueError('不能访问其他用户的任务')
     if plugin == 'sshrecovery':
         return load('minas_ssh', 'ssh-recovery-helper').api(user, request)
-    if plugin in ('mihomo', 'nascenter'):
+    if plugin in ('mihomo', 'nascenter', 'mediaeditor'):
         return load('minas_' + plugin, plugin + '-api.py').api(user, request)
     return load('minas_tasks', 'task-center-helper').api(user, request)
 

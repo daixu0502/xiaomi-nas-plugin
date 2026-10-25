@@ -1,6 +1,6 @@
 # 小米 NAS 插件
 
-给小米智能存储增加七个功能，按需要安装即可。
+给小米智能存储增加八个功能，按需要安装即可。
 
 | 想做什么 | 选这个插件 | 文件夹名称 |
 | --- | --- | --- |
@@ -11,6 +11,7 @@
 | 恢复 SSH、设置开机自动恢复 | [SSH 恢复](sshrecovery/README.md) | `sshrecovery` |
 | 发文件下载链接、接收上传 | [文件快传](quickshare/README.md) | `quickshare` |
 | 下载直链、磁链和种子 | [下载中心](downloadcenter/README.md) | `downloadcenter` |
+| 搜索官方影片代码、修正系列和批量集数 | [影视编辑](mediaeditor/README.md) | `mediaeditor` |
 
 ## 更新、卸载和常见问题
 

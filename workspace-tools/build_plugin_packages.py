@@ -13,7 +13,7 @@ from version_catalog import load
 from sync_versions import synchronize
 VERSIONS=load()['plugins']
 PRIVILEGED={'dockermanager':'dockermanager','taskcenter':'taskcenter',
-            'sshrecovery':'sshrecovery','mihomo':'mihomo','nascenter':'nascenter'}
+            'sshrecovery':'sshrecovery','mihomo':'mihomo','nascenter':'nascenter','mediaeditor':'mediaeditor'}
 
 
 def package_paths(base):
@@ -50,6 +50,11 @@ def validate_component(base,folder):
 
 def build(only=None):
     global VERSIONS
+    # The shared control implementation must match every standalone plugin.
+    import importlib.util
+    spec=importlib.util.spec_from_file_location('shared_ui_controls',ROOT/'workspace-tools/sync-ui-controls.py')
+    shared_ui=importlib.util.module_from_spec(spec);spec.loader.exec_module(shared_ui)
+    shared_ui.synchronize(check=True)
     VERSIONS=load()['plugins']
     if only:assert set(only)<=VERSIONS.keys(),'unknown plugin ID'
     synchronize()

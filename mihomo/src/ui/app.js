@@ -214,6 +214,7 @@ var document = window.XiaomiPluginClient.document;
   }
 
   function enhanceSelect(select) {
+    if (window.XiaomiPluginClient.enhanceSelect) { window.XiaomiPluginClient.enhanceSelect(select); return; }
     if (!select || select.dataset.miPicker === 'true') return;
     select.dataset.miPicker = 'true';
     var selected = select.options[select.selectedIndex];
@@ -589,22 +590,27 @@ var document = window.XiaomiPluginClient.document;
         title.appendChild(textElement('span', '', item.value.type || 'Selector'));
 
         var currentNode = item.value.now || item.value.all[0] || '';
-        var trigger = createSelectTrigger(currentNode, '选择 ' + item.name + ' 节点');
-        trigger.addEventListener('click', function () {
-          openPicker('选择 ' + item.name, item.value.all, currentNode, function (node) {
-            trigger.disabled = true;
+        var select = document.createElement('select');
+        select.setAttribute('aria-label', '选择 ' + item.name + ' 节点');
+        item.value.all.forEach(function (node) {
+          var option = document.createElement('option'); option.value = node; option.textContent = node;
+          select.appendChild(option);
+        });
+        select.value = currentNode;
+        select.addEventListener('change', function () {
+            var node = select.value;
+            if (node === currentNode) return;
+            select.disabled = true;
             postJson('select_proxy', { group: item.name, node: node })
             .then(function () {
               currentNode = node;
-              setSelectTriggerValue(trigger, node);
               toast(item.name + ' 已切换');
             })
             .catch(function (error) { toast(error.message, true); loadProxies(); })
-            .finally(function () { trigger.disabled = false; });
-          }, trigger);
+            .finally(function () { select.disabled = false; });
         });
         row.appendChild(title);
-        row.appendChild(trigger);
+        row.appendChild(select);
         container.appendChild(row);
       });
     }).catch(function (error) {

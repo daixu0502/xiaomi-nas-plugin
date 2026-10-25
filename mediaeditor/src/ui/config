@@ -1,0 +1,24 @@
+{
+  "title": "影视编辑",
+  "desc": "官方影视代码搜索与媒体库修正",
+  "icon": "/mediaeditor.icon",
+  "type": "url",
+  "dev_type": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "url": [
+    {
+      "dev_type": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "url": "/index.html#/mediaeditor"
+    }
+  ],
+  "sortid": 19100
+}

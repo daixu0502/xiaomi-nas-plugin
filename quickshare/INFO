@@ -2,7 +2,7 @@
   "plugin": "quickshare",
   "name": "文件快传",
   "id": 19092,
-  "version": "1.1.44",
+  "version": "1.1.46",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "临时下载链接与文件上传入口",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "清理无用样式、重复声明与导入，同步公共构建源码，保留配置及服务状态",
+  "changelog": "下拉菜单改为控件原位置展开的无背景遮罩浮层，支持搜索、窗口边缘避让、滚动与缩放定位",
   "system": false,
-  "size": 148951,
+  "size": 172874,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

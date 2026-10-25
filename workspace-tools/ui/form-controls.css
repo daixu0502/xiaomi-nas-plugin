@@ -1,0 +1,39 @@
+/* @ROOT@ is replaced with the plugin scope by sync-ui-controls.py. */
+@ROOT@{--font-ui:"Microsoft YaHei UI","Microsoft YaHei",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif;font-family:var(--font-ui);font-size:16px;line-height:1.6}
+@ROOT@ .minas-plugin-body{font-family:var(--font-ui);font-size:16px;line-height:1.6}
+@ROOT@ button,@ROOT@ input,@ROOT@ select,@ROOT@ textarea{font-family:var(--font-ui);font-size:15px;line-height:1.55}
+@ROOT@ label{font-size:14px;line-height:1.6}
+@ROOT@ small,@ROOT@ .hint,@ROOT@ .help,@ROOT@ .sub,@ROOT@ .note,@ROOT@ .technical{font-size:13px;line-height:1.65}
+@ROOT@ .technical,@ROOT@ code,@ROOT@ .code{font-family:var(--font-code,Consolas,"Microsoft YaHei UI",monospace);font-size:13px;line-height:1.65}
+@ROOT@ input[type="checkbox"]:not([role="switch"]),@ROOT@ input[type="radio"]{appearance:none;-webkit-appearance:none;box-sizing:border-box;width:20px;height:20px;min-width:20px;min-height:20px;margin:0 6px 0 0;padding:0;border:1.5px solid var(--muted,#708096);border-radius:6px;background:var(--surface,#fff);vertical-align:middle;flex:0 0 20px;cursor:pointer;transition:background .15s,border-color .15s;position:relative;box-shadow:none}
+@ROOT@ input[type="radio"]{border-radius:50%}
+@ROOT@ input[type="checkbox"]:not([role="switch"]):checked,@ROOT@ input[type="checkbox"]:not([role="switch"]):indeterminate,@ROOT@ input[type="radio"]:checked{background:var(--accent,#2468bf);border-color:var(--accent,#2468bf)}
+@ROOT@ input[type="checkbox"]:not([role="switch"]):checked:after{content:"";position:absolute;left:6px;top:2px;width:5px;height:10px;border:solid var(--on-accent,#fff);border-width:0 2px 2px 0;transform:rotate(45deg)}
+@ROOT@ input[type="checkbox"]:not([role="switch"]):indeterminate:after{content:"";position:absolute;left:4px;right:4px;top:8px;height:2px;background:var(--on-accent,#fff);border:0;transform:none}
+@ROOT@ input[type="radio"]:checked:after{content:"";position:absolute;inset:5px;background:var(--on-accent,#fff);border-radius:50%}
+@ROOT@ input[type="checkbox"]:disabled,@ROOT@ input[type="radio"]:disabled{opacity:.45;cursor:not-allowed}
+@ROOT@ input[type="checkbox"]:focus-visible,@ROOT@ input[type="radio"]:focus-visible,@ROOT@ .ui-select-trigger:focus-visible,@ROOT@ .ui-choice-panel button:focus-visible{outline:3px solid var(--accent,#2468bf);outline-offset:3px}
+@ROOT@ select.ui-select-native{position:absolute!important;width:1px!important;height:1px!important;min-height:0!important;min-width:0!important;padding:0!important;border:0!important;margin:-1px!important;overflow:hidden!important;clip-path:inset(50%)!important;white-space:nowrap!important;pointer-events:none!important;opacity:0!important}
+@ROOT@ .ui-select-trigger{display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;max-width:100%;min-height:44px;margin:0;padding:10px 13px;border:1px solid var(--line,#d4dce7);border-radius:10px;background:var(--surface,#fff);color:var(--text,#192b43);text-align:left;font-weight:400;cursor:pointer;box-shadow:0 1px 2px #152a4010}
+@ROOT@ .ui-select-trigger:hover:not(:disabled),@ROOT@ .ui-select-trigger[aria-expanded="true"]{border-color:var(--accent,#2468bf);background:var(--soft,#edf3ff)}
+@ROOT@ .ui-select-trigger:disabled{opacity:.5;cursor:not-allowed}
+@ROOT@ .ui-select-value{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+@ROOT@ .ui-select-chevron{width:8px;height:8px;flex:0 0 8px;border:solid currentColor;border-width:0 1.8px 1.8px 0;transform:rotate(45deg);margin:-4px 3px 0 0;opacity:.65}
+@ROOT@ .ui-choice-layer{position:fixed;inset:0;z-index:100;pointer-events:none;background:transparent;box-sizing:border-box;isolation:isolate}
+@ROOT@ .ui-choice-layer.ui-choice-local{position:absolute}
+@ROOT@ .ui-choice-panel{position:absolute;display:flex;flex-direction:column;visibility:hidden;pointer-events:auto;max-height:360px;min-height:0;margin:0;padding:6px;border:1px solid var(--line,#d4dce7);border-radius:12px;background:var(--surface,#fff);color:var(--text,#192b43);box-shadow:0 8px 28px #08152726,0 2px 6px #08152712;text-align:left;box-sizing:border-box;gap:6px;overflow:hidden}
+@ROOT@ input.ui-choice-search{width:100%;min-height:38px;margin:0;border:1px solid var(--line,#d4dce7);border-radius:8px;padding:8px 10px;background:var(--bg,#eef2f7);color:inherit;flex-shrink:0;box-sizing:border-box;font-size:14px}
+@ROOT@ .ui-choice-options{min-height:0;overflow:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:5px;padding:3px;scrollbar-width:thin}
+@ROOT@ .ui-choice-option{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:40px;height:auto;flex:0 0 auto;margin:0;padding:8px 10px;border:1px solid transparent;border-radius:8px;background:transparent;color:inherit;text-align:left;font-size:14px;font-weight:400;white-space:normal;line-height:1.6;cursor:pointer}
+@ROOT@ .ui-choice-option:hover:not(:disabled){background:var(--bg,#eef2f7)}
+@ROOT@ .ui-choice-option[aria-selected="true"]{background:var(--soft,#edf3ff);border-color:var(--accent,#2468bf);color:var(--accent,#2468bf);font-weight:600}
+@ROOT@ .ui-choice-option:disabled{opacity:.45;cursor:not-allowed}
+@ROOT@ .ui-choice-copy{overflow-wrap:anywhere;min-width:0}
+@ROOT@ .ui-choice-mark{flex:0 0 20px;font-size:18px;text-align:center}
+@ROOT@ .ui-choice-group{font-size:13px;color:var(--muted,#708096);padding:8px 13px 2px}
+@ROOT@ .ui-choice-empty{padding:24px 12px;text-align:center;color:var(--muted,#708096)}
+@ROOT@ .ui-choice-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--line,#d4dce7);padding:8px 4px 2px;color:var(--muted,#708096);font-size:13px;flex-shrink:0}
+@ROOT@ .ui-choice-done{background:var(--accent,#2468bf);color:var(--on-accent,#fff);border:0;border-radius:9px;padding:9px 18px;cursor:pointer}
+@ROOT@ .ui-choice-layer [hidden],@ROOT@ .ui-select-trigger[hidden]{display:none!important}
+@media(max-width:600px){@ROOT@ .ui-choice-option{min-height:44px}}
+@media(forced-colors:active){@ROOT@ input[type="checkbox"],@ROOT@ input[type="radio"]{appearance:auto}@ROOT@ .ui-choice-option[aria-selected="true"]{outline:2px solid Highlight}}

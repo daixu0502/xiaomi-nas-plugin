@@ -66,7 +66,7 @@ def plan(root=ROOT):
 
     shared = root / 'workspace-tools/privileged-component/common/privileged_runtime.py'
     replace(shared, r"^(VERSION = ')" + SEMVER + r"(')$", catalog['components']['privileged'])
-    for plugin in ('dockermanager', 'mihomo', 'taskcenter', 'nascenter', 'sshrecovery'):
+    for plugin in ('dockermanager', 'mihomo', 'taskcenter', 'nascenter', 'sshrecovery', 'mediaeditor'):
         common = root / plugin / 'installer/common'
         pending[common / 'common/privileged_runtime.py'] = pending[shared]
         manifest_path = common / 'manifest.json'
@@ -80,7 +80,7 @@ def plan(root=ROOT):
         dump(manifest_path, manifest)
 
     return {path: data for path, data in pending.items()
-            if path.read_bytes().replace(b'\r\n', b'\n') != data}
+            if not path.exists() or path.read_bytes().replace(b'\r\n', b'\n') != data}
 
 
 def synchronize(root=ROOT, check=False):

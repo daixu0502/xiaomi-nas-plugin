@@ -10,12 +10,12 @@ import stat
 import subprocess
 import time
 
-VERSION = '1.2.3'
+VERSION = '1.2.4'
 LAYOUT_VERSION = 3
 API_VERSION = 1
 BASE = Path('/data/minas/privileged')
 DOCKER = '/data/docker/docker'
-MODULES = {'dockermanager', 'taskcenter', 'sshrecovery', 'mihomo', 'nascenter'}
+MODULES = {'dockermanager', 'taskcenter', 'sshrecovery', 'mihomo', 'nascenter', 'mediaeditor'}
 DISTRIBUTORS = MODULES
 
 

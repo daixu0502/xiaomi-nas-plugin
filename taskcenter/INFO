@@ -2,7 +2,7 @@
   "plugin": "taskcenter",
   "name": "定时任务",
   "id": 19094,
-  "version": "1.0.20",
+  "version": "1.0.22",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "可视化任务计划与执行记录",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "清理无用样式、重复声明与导入，同步公共构建源码，保留配置及服务状态",
+  "changelog": "下拉菜单改为控件原位置展开的无背景遮罩浮层，支持搜索、窗口边缘避让、滚动与缩放定位",
   "system": false,
-  "size": 92528,
+  "size": 116555,
   "port": "",
   "type": "standard",
   "forceupgrade": false,
