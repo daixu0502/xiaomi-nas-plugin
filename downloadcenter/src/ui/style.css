@@ -273,12 +273,7 @@
 
 /* BEGIN SHARED FORM CONTROLS */
 /* [data-minas-plugin="downloadcenter"] is replaced with the plugin scope by sync-ui-controls.py. */
-[data-minas-plugin="downloadcenter"]{--font-ui:"Microsoft YaHei UI","Microsoft YaHei",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif;font-family:var(--font-ui);font-size:16px;line-height:1.6}
-[data-minas-plugin="downloadcenter"] .minas-plugin-body{font-family:var(--font-ui);font-size:16px;line-height:1.6}
-[data-minas-plugin="downloadcenter"] button,[data-minas-plugin="downloadcenter"] input,[data-minas-plugin="downloadcenter"] select,[data-minas-plugin="downloadcenter"] textarea{font-family:var(--font-ui);font-size:15px;line-height:1.55}
-[data-minas-plugin="downloadcenter"] label{font-size:14px;line-height:1.6}
-[data-minas-plugin="downloadcenter"] small,[data-minas-plugin="downloadcenter"] .hint,[data-minas-plugin="downloadcenter"] .help,[data-minas-plugin="downloadcenter"] .sub,[data-minas-plugin="downloadcenter"] .note,[data-minas-plugin="downloadcenter"] .technical{font-size:13px;line-height:1.65}
-[data-minas-plugin="downloadcenter"] .technical,[data-minas-plugin="downloadcenter"] code,[data-minas-plugin="downloadcenter"] .code{font-family:var(--font-code,Consolas,"Microsoft YaHei UI",monospace);font-size:13px;line-height:1.65}
+/* Text metrics and font families are owned by typography.css. */
 [data-minas-plugin="downloadcenter"] input[type="checkbox"]:not([role="switch"]),[data-minas-plugin="downloadcenter"] input[type="radio"]{appearance:none;-webkit-appearance:none;box-sizing:border-box;width:20px;height:20px;min-width:20px;min-height:20px;margin:0 6px 0 0;padding:0;border:1.5px solid var(--muted,#708096);border-radius:6px;background:var(--surface,#fff);vertical-align:middle;flex:0 0 20px;cursor:pointer;transition:background .15s,border-color .15s;position:relative;box-shadow:none}
 [data-minas-plugin="downloadcenter"] input[type="radio"]{border-radius:50%}
 [data-minas-plugin="downloadcenter"] input[type="checkbox"]:not([role="switch"]):checked,[data-minas-plugin="downloadcenter"] input[type="checkbox"]:not([role="switch"]):indeterminate,[data-minas-plugin="downloadcenter"] input[type="radio"]:checked{background:var(--accent,#2468bf);border-color:var(--accent,#2468bf)}

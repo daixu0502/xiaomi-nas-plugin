@@ -2,7 +2,7 @@
   "plugin": "mihomo",
   "name": "Mihomo",
   "id": 19090,
-  "version": "1.7.45",
+  "version": "1.7.46",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "Mihomo 代理管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "下拉菜单改为控件原位置展开的无背景遮罩浮层，支持搜索、窗口边缘避让、滚动与缩放定位；Geo 策略与动态代理节点统一使用原位置下拉菜单",
+  "changelog": "参照官方设置页统一 MiSans 优先字体、14px 正文、字重与行距，调整标题/按钮/辅助文字层级，保留代码和日志等宽显示及手机输入字号",
   "system": false,
-  "size": 282254,
+  "size": 287547,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

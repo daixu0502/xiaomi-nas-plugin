@@ -10,7 +10,7 @@ import sys
 from urllib.parse import parse_qs,urlsplit
 sys.dont_write_bytecode=True
 DIRECTORY=Path(__file__).resolve().parent
-ACTIONS={'status','list','details','search','preview','apply','history','preview_undo'}
+ACTIONS={'status','list','details','search','preview','apply','history','preview_undo','check_code','files','preview_relations','scan_repairs','preview_repair'}
 
 
 def reply(value):

@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='mediaeditor'
 PLUGIN_LABEL='影视编辑'
-PLUGIN_VERSION='1.0.5'
+PLUGIN_VERSION='1.1.1'
 UNINSTALL_NOTE='不修改官方影视库，受保护的编辑备份与历史保留在 /data/minas/plugins/mediaeditor/。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.

@@ -2,7 +2,7 @@
   "plugin": "mediaeditor",
   "name": "影视编辑",
   "id": 19100,
-  "version": "1.0.5",
+  "version": "1.1.1",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "官方影视代码搜索、系列归属修正与批量集数编辑",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "下拉菜单改为控件原位置展开的无背景遮罩浮层，支持搜索、窗口边缘避让、滚动与缩放定位；顶部英文统一为 XIAOMI SMART STORAGE",
+  "changelog": "参照官方设置页统一 MiSans 优先字体、14px 正文、字重与行距，调整标题/按钮/辅助文字层级，保留代码和日志等宽显示及手机输入字号",
   "system": false,
-  "size": 186559,
+  "size": 206221,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

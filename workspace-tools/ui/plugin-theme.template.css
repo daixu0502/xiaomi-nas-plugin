@@ -19,12 +19,12 @@ __ROOT__ {
   --disabled-bg:#303740;--disabled-text:#aab5c4;--disabled-border:#47515f;
   --shadow:0 6px 20px rgba(0,0,0,.10);color-scheme:dark;
 }}
-__ROOT__ .minas-plugin-body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;}
+__ROOT__ .minas-plugin-body{margin:0;background:var(--bg);color:var(--text);font:14px/20px var(--font-ui,"MiSans","Microsoft YaHei UI",sans-serif);}
 __ROOT__ :is(h1,h2,h3,p){margin:0;}
-__ROOT__ :is(h1,h2,h3){color:var(--text);font-weight:700;}
-__ROOT__ p{color:var(--muted);font-size:14px;line-height:1.65;overflow-wrap:anywhere;}
+__ROOT__ :is(h1,h2,h3){color:var(--text);font-weight:500;}
+__ROOT__ p{color:var(--muted);font-size:14px;line-height:20px;overflow-wrap:anywhere;}
 __ROOT__ :is(input,textarea,select,button){font-family:inherit;}
-__ROOT__ button:not(.icon-button):not(.close-button):not(.close-modal):not(.dialog-close){font-size:14px;font-weight:600;line-height:1.45;}
+__ROOT__ button:not(.icon-button):not(.close-button):not(.close-modal):not(.dialog-close){font-size:14px;font-weight:500;line-height:20px;}
 __ROOT__ :is(input,textarea,select):not([type=checkbox]):not([type=radio]){font-size:16px;font-weight:400;}
 __ROOT__ :is(input,textarea)::placeholder{color:var(--muted);opacity:1;}
 __ROOT__ .shell{padding:16px max(14px,env(safe-area-inset-right)) max(30px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));}

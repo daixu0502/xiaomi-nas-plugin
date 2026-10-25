@@ -2,7 +2,7 @@
   "plugin": "sshrecovery",
   "name": "SSH 恢复",
   "id": 19098,
-  "version": "1.1.27",
+  "version": "1.1.28",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "手动开启 SSH、恢复主机密钥与登录公钥",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "下拉菜单改为控件原位置展开的无背景遮罩浮层，支持搜索、窗口边缘避让、滚动与缩放定位",
+  "changelog": "参照官方设置页统一 MiSans 优先字体、14px 正文、字重与行距，调整标题/按钮/辅助文字层级，保留代码和日志等宽显示及手机输入字号",
   "system": false,
-  "size": 90938,
+  "size": 96311,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

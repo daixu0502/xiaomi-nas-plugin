@@ -1,6 +1,7 @@
 """Bound parameters through system SQLite; retain the firmware's FTS tokenizer."""
 import ctypes as C
 import ctypes.util
+import contextlib
 from pathlib import Path
 
 LIBRARY = None
@@ -21,6 +22,7 @@ def library():
         'sqlite3_step': ([ptr], integer),
         'sqlite3_bind_text': ([ptr, integer, text, integer, ptr], integer),
         'sqlite3_bind_int64': ([ptr, integer, C.c_longlong], integer),
+        'sqlite3_bind_double': ([ptr, integer, C.c_double], integer),
         'sqlite3_bind_null': ([ptr, integer], integer),
         'sqlite3_column_count': ([ptr], integer),
         'sqlite3_column_name': ([ptr, integer], text),
@@ -74,6 +76,7 @@ class Database:
             for index, value in enumerate(values, 1):
                 if value is None: rc = self.lib.sqlite3_bind_null(statement, index)
                 elif isinstance(value, (int, bool)): rc = self.lib.sqlite3_bind_int64(statement, index, int(value))
+                elif isinstance(value, float): rc = self.lib.sqlite3_bind_double(statement, index, value)
                 elif isinstance(value, str):
                     raw = value.encode()
                     rc = self.lib.sqlite3_bind_text(statement, index, raw, len(raw), C.c_void_p(-1))
@@ -104,6 +107,18 @@ class Database:
     def one(self, sql, values=()):
         rows = self.query(sql, values)
         return rows[0] if rows else None
+
+    @contextlib.contextmanager
+    def restoration_triggers(self):
+        """Only exact, guarded undo suppresses triggers; forward edits use firmware triggers."""
+        fn = self.lib.sqlite3_db_config
+        fn.argtypes = [C.c_void_p, C.c_int, C.c_int, C.POINTER(C.c_int)]; fn.restype = C.c_int
+        previous = C.c_int(); result = C.c_int()
+        if fn(self.handle, 1003, -1, C.byref(previous)) or fn(self.handle, 1003, 0, C.byref(result)):
+            raise ValueError('系统 SQLite 不支持受保护的关联回退')
+        try: yield
+        finally:
+            if fn(self.handle, 1003, previous.value, C.byref(result)): raise ValueError('恢复数据库触发器状态失败')
 
     def close(self):
         if getattr(self, 'handle', None):

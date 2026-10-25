@@ -1,5 +1,6 @@
 """Synchronize shared scoped form controls; generated blocks stay last in each asset."""
 import argparse
+import re
 from pathlib import Path
 from version_catalog import ROOT, load
 
@@ -9,18 +10,27 @@ END = '/* END SHARED FORM CONTROLS */'
 def planned():
     result = {}
     for plugin in load()['plugins']:
-        for target, template in [('style.css', 'form-controls.css'), ('client-bridge.js', 'form-controls.js')]:
+        base = ROOT / plugin / 'src/ui'
+        # Some plugins load palette after style, others do the reverse. The
+        # typography contract belongs in the last local stylesheet in either case.
+        sheets = re.findall(r'href="([^"?:/]+\.css)(?:\?[^"<>]*)?"', (base/'index.html').read_text(encoding='utf-8'))
+        if not sheets: raise ValueError('No local stylesheet: '+plugin)
+        targets = {'style.css':[('SHARED FORM CONTROLS','form-controls.css')],
+                   'client-bridge.js':[('SHARED FORM CONTROLS','form-controls.js')]}
+        targets.setdefault(sheets[-1],[]).append(('SHARED TYPOGRAPHY','typography.css'))
+        for target, templates in targets.items():
             path = ROOT / plugin / 'src/ui' / target
             text = path.read_text(encoding='utf-8').replace('\r\n', '\n')
-            if START in text:
-                before, rest = text.split(START, 1)
-                _, after = rest.split(END, 1)
-                if after.strip():
-                    raise ValueError('Shared controls must be the final block: ' + str(path))
-                text = before.rstrip() + '\n'
-            block = (ROOT / 'workspace-tools/ui' / template).read_text(encoding='utf-8')
-            block = block.replace('@ROOT@', '[data-minas-plugin="' + plugin + '"]')
-            value = text.rstrip() + '\n\n' + START + '\n' + block.rstrip() + '\n' + END + '\n'
+            for marker in ('SHARED FORM CONTROLS','SHARED TYPOGRAPHY'):
+                start='/* BEGIN '+marker+' */';end='/* END '+marker+' */'
+                if start in text:
+                    before,rest=text.split(start,1);_,after=rest.split(end,1)
+                    text=before.rstrip()+'\n'+after.lstrip('\n')
+            value=text.rstrip()+'\n'
+            for marker,template in templates:
+                block=(ROOT/'workspace-tools/ui'/template).read_text(encoding='utf-8')
+                block=block.replace('@ROOT@','[data-minas-plugin="'+plugin+'"]')
+                value+='\n/* BEGIN '+marker+' */\n'+block.rstrip()+'\n/* END '+marker+' */\n'
             if value != path.read_text(encoding='utf-8').replace('\r\n', '\n'):
                 result[path] = value
     return result
