@@ -187,3 +187,17 @@
 [data-minas-plugin="taskcenter"] .minas-plugin-body .ui-choice-option[aria-selected=true] .ui-choice-copy{font-weight:500}
 @media(max-width:600px){[data-minas-plugin="taskcenter"] .minas-plugin-body :is(input,select,textarea):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not(.code):not(#configEditor){font-size:16px!important;line-height:24px!important}}
 /* END SHARED TYPOGRAPHY */
+
+/* BEGIN SHARED MOBILE NAVIGATION */
+/* One-row mobile navigation; desktop sidebars retain their existing layout. */
+[data-minas-plugin="taskcenter"]:not(.desktop-client),[data-minas-plugin="taskcenter"]:not(.desktop-client) .minas-plugin-body,[data-minas-plugin="taskcenter"]:not(.desktop-client) .shell{overflow:visible}
+@supports(overflow-x:clip){[data-minas-plugin="taskcenter"]:not(.desktop-client),[data-minas-plugin="taskcenter"]:not(.desktop-client) .minas-plugin-body,[data-minas-plugin="taskcenter"]:not(.desktop-client) .shell{overflow-x:clip;overflow-y:visible}}
+[data-minas-plugin="taskcenter"]:not(.desktop-client) .tabs{position:sticky!important;top:max(8px,env(safe-area-inset-top))!important;bottom:auto!important;left:auto!important;right:auto!important;z-index:15;display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:stretch;gap:4px;width:100%;max-width:100%;min-height:52px;height:auto;max-height:none;padding:5px;margin:0 0 14px;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;scroll-padding-inline:6px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;border:1px solid var(--line);border-radius:14px;background:var(--surface);box-shadow:0 4px 16px rgba(20,35,55,.09);isolation:isolate}
+[data-minas-plugin="taskcenter"]:not(.desktop-client) .tabs::-webkit-scrollbar{display:none}
+[data-minas-plugin="taskcenter"]:not(.desktop-client) .tabs::before{display:none}
+[data-minas-plugin="taskcenter"]:not(.desktop-client) .tabs .tab{flex:1 0 auto!important;min-width:max-content;width:auto!important;min-height:40px;height:auto;margin:0;padding:9px 12px;white-space:nowrap!important;overflow:visible;text-overflow:clip;text-align:center;border:0;border-radius:10px;background:transparent;color:var(--muted);box-shadow:none}
+[data-minas-plugin="taskcenter"]:not(.desktop-client) .tabs .tab.active,[data-minas-plugin="taskcenter"]:not(.desktop-client) .tabs .tab[aria-current=page]{color:var(--accent);background:var(--soft);box-shadow:none}
+[data-minas-plugin="taskcenter"]:not(.desktop-client) .tabs .tab:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+[data-minas-plugin="taskcenter"]:not(.desktop-client) .tabs .tab[hidden]{display:none!important}
+@media(prefers-reduced-motion:reduce){[data-minas-plugin="taskcenter"]:not(.desktop-client) .tabs{scroll-behavior:auto}}
+/* END SHARED MOBILE NAVIGATION */

@@ -2,7 +2,7 @@
   "plugin": "mediaeditor",
   "name": "影视编辑",
   "id": 19100,
-  "version": "1.1.1",
+  "version": "1.1.2",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "官方影视代码搜索、系列归属修正与批量集数编辑",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "参照官方设置页统一 MiSans 优先字体、14px 正文、字重与行距，调整标题/按钮/辅助文字层级，保留代码和日志等宽显示及手机输入字号",
+  "changelog": "手机菜单统一为单行吸顶浮层，支持左右滑动、当前项自动显示及键盘切换；保留完整菜单名称和桌面侧栏，无新增后台轮询",
   "system": false,
-  "size": 206221,
+  "size": 213627,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

@@ -1,0 +1,11 @@
+/* One-row mobile navigation; desktop sidebars retain their existing layout. */
+@ROOT@:not(.desktop-client),@ROOT@:not(.desktop-client) .minas-plugin-body,@ROOT@:not(.desktop-client) .shell{overflow:visible}
+@supports(overflow-x:clip){@ROOT@:not(.desktop-client),@ROOT@:not(.desktop-client) .minas-plugin-body,@ROOT@:not(.desktop-client) .shell{overflow-x:clip;overflow-y:visible}}
+@ROOT@:not(.desktop-client) .tabs{position:sticky!important;top:max(8px,env(safe-area-inset-top))!important;bottom:auto!important;left:auto!important;right:auto!important;z-index:15;display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:stretch;gap:4px;width:100%;max-width:100%;min-height:52px;height:auto;max-height:none;padding:5px;margin:0 0 14px;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;scroll-padding-inline:6px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;border:1px solid var(--line);border-radius:14px;background:var(--surface);box-shadow:0 4px 16px rgba(20,35,55,.09);isolation:isolate}
+@ROOT@:not(.desktop-client) .tabs::-webkit-scrollbar{display:none}
+@ROOT@:not(.desktop-client) .tabs::before{display:none}
+@ROOT@:not(.desktop-client) .tabs .tab{flex:1 0 auto!important;min-width:max-content;width:auto!important;min-height:40px;height:auto;margin:0;padding:9px 12px;white-space:nowrap!important;overflow:visible;text-overflow:clip;text-align:center;border:0;border-radius:10px;background:transparent;color:var(--muted);box-shadow:none}
+@ROOT@:not(.desktop-client) .tabs .tab.active,@ROOT@:not(.desktop-client) .tabs .tab[aria-current=page]{color:var(--accent);background:var(--soft);box-shadow:none}
+@ROOT@:not(.desktop-client) .tabs .tab:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+@ROOT@:not(.desktop-client) .tabs .tab[hidden]{display:none!important}
+@media(prefers-reduced-motion:reduce){@ROOT@:not(.desktop-client) .tabs{scroll-behavior:auto}}

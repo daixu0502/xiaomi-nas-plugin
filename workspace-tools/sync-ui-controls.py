@@ -18,10 +18,13 @@ def planned():
         targets = {'style.css':[('SHARED FORM CONTROLS','form-controls.css')],
                    'client-bridge.js':[('SHARED FORM CONTROLS','form-controls.js')]}
         targets.setdefault(sheets[-1],[]).append(('SHARED TYPOGRAPHY','typography.css'))
+        if re.search(r'class="[^"<>]*\btabs\b[^"<>]*"',(base/'index.html').read_text(encoding='utf-8')):
+            targets[sheets[-1]].append(('SHARED MOBILE NAVIGATION','mobile-navigation.css'))
+            targets['client-bridge.js'].append(('SHARED MOBILE NAVIGATION','mobile-navigation.js'))
         for target, templates in targets.items():
             path = ROOT / plugin / 'src/ui' / target
             text = path.read_text(encoding='utf-8').replace('\r\n', '\n')
-            for marker in ('SHARED FORM CONTROLS','SHARED TYPOGRAPHY'):
+            for marker in ('SHARED FORM CONTROLS','SHARED TYPOGRAPHY','SHARED MOBILE NAVIGATION'):
                 start='/* BEGIN '+marker+' */';end='/* END '+marker+' */'
                 if start in text:
                     before,rest=text.split(start,1);_,after=rest.split(end,1)
