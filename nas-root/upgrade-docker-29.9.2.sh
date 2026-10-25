@@ -45,6 +45,7 @@ MAINTENANCE = BASE / 'maintenance'
 UNIT_ROOT = Path('/etc/systemd/system')
 DROPIN = UNIT_ROOT / 'docker.service.d/80-minas-runtime.conf'
 GUARDS = [UNIT_ROOT / (name + '.d/79-minas-upgrade-guard.conf') for name in ('docker.service', 'docker.socket')]
+BOOT_CRON = Path('/etc/cron.d/minas-docker-runtime')
 PROGRAMS = {'docker', 'dockerd', 'containerd', 'containerd-shim-runc-v2', 'ctr', 'runc', 'docker-proxy', 'docker-init'}
 GO_PROGRAMS = PROGRAMS - {'docker-init'}
 ID_PATTERN = re.compile(r'[0-9]{8}-[0-9]{6}-[a-f0-9]{8}')
@@ -848,6 +849,108 @@ def owned_files_valid():
         require(not path.exists() or (not path.is_symlink() and path.read_bytes() == data), '本工具配置被修改，拒绝覆盖或删除：'+str(path))
 
 
+def startup_cron_bytes(ident):
+    require(ID_PATTERN.fullmatch(ident) is not None,'事务编号格式错误')
+    return ('# Managed by minas Docker runtime upgrade\nSHELL=/bin/sh\n'
+            'PATH=/usr/sbin:/usr/bin:/sbin:/bin\nMAILTO=""\n'
+            '@reboot root /usr/bin/timeout -k 10 360 /usr/bin/python3 -B '+str(WORKER)+
+            ' --boot-reconcile '+ident+'\n').encode()
+
+
+def startup_hook_valid(ident):
+    plain(BOOT_CRON)
+    require(not BOOT_CRON.exists() or (stat.S_ISREG(BOOT_CRON.stat().st_mode) and
+            BOOT_CRON.stat().st_uid==0 and not BOOT_CRON.stat().st_mode&0o022 and
+            BOOT_CRON.read_bytes()==startup_cron_bytes(ident)),
+            'Docker 开机校正配置被修改或属于其他事务，拒绝覆盖：'+str(BOOT_CRON))
+
+
+def startup_hook(ident,enable):
+    startup_hook_valid(ident)
+    if enable:
+        secure(BOOT_CRON.parent);atomic(BOOT_CRON,startup_cron_bytes(ident),0o644)
+    else:BOOT_CRON.unlink(missing_ok=True)
+    run(['systemctl','reload','crond.service'])
+
+
+def runtime_selection():
+    """Report the real process and API separately from systemd's loaded config."""
+    configured=run(['systemctl','show','docker.service','-p','ExecStart','--value'],check=False).stdout
+    result=dict(configuredForTarget=str(RUNTIME/'dockerd') in configured,
+                serviceActive=active('docker.service'),executable=None,serverVersion=None)
+    pid=run(['systemctl','show','docker.service','-p','MainPID','--value'],check=False).stdout.strip()
+    if pid.isdigit() and int(pid):
+        try:result['executable']=os.readlink('/proc/'+pid+'/exe')
+        except OSError:pass
+    try:response=docker('info','--format','{{json .}}',check=False,timeout=10)
+    except (OSError,subprocess.SubprocessError):response=None
+    if response is not None and response.returncode==0:
+        try:result['serverVersion']=json.loads(response.stdout).get('ServerVersion')
+        except (ValueError,AttributeError):pass
+    result['runningTarget']=result['executable']==str(RUNTIME/'dockerd') and result['serverVersion']==VERSION
+    return result
+
+
+def repair_startup(folder,state,automatic=False):
+    """Reconcile cached factory units; never restore or roll back Docker data."""
+    require(state['phase']=='installed','仅已成功安装的升级事务允许开机校正')
+    require(not Path('/data/minas/migration/maintenance').exists(),'目录迁移正在进行')
+    owned_files_valid();startup_hook_valid(state['id'])
+    require(DROPIN.is_file(),'升级启动配置缺失，拒绝猜测安装状态')
+    require_data_environment(state);verify_runtime(RUNTIME)
+    plan_file=BASE/'startup-repair.json'
+    plan=read(plan_file) if plan_file.exists() else None
+    pending=plan is not None and plan.get('phase')!='complete'
+    if pending:
+        require(plan.get('id')==state['id'],'未完成的开机校正属于其他事务')
+        require(not automatic or plan.get('bootId')==Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                '上次开机校正未完成，需要显式修复，不能自动重放旧容器状态')
+    require(not MAINTENANCE.exists() or (pending and not automatic),
+            'Docker 处于维护状态；开机校正不会解除安装或回退的保护锁')
+    run(['systemctl','daemon-reload'])
+    selection=runtime_selection()
+    if selection['runningTarget'] and not pending:
+        require(all(exe.startswith(str(RUNTIME)+'/') for _,exe in runtime_processes()),'新旧容器运行时混用')
+        return dict(changed=False,**selection)
+    require(pending or (selection['serviceActive'] and selection['executable']==str(FACTORY/'dockerd') and
+                       selection['serverVersion']=='20.10.17'),
+            '当前引擎不是已评估的原厂 20.10.17 或目标运行时，停止自动切换')
+    if pending and selection['serviceActive']:
+        require(selection['executable'] in (str(FACTORY/'dockerd'),str(RUNTIME/'dockerd')) and
+                selection['serverVersion'] in ('20.10.17',VERSION),'未完成校正期间引擎已改变，拒绝重放旧状态')
+    if selection['serviceActive']:
+        rows=containers()
+        if pending:
+            require({row['Id'] for row in rows}=={row['id'] for row in plan['before']['containers']},
+                    '未完成校正后的容器集合已改变，请先评估状态')
+        else:
+            plan=dict(id=state['id'],phase='captured',bootId=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),before=dict(containers=[
+                dict(id=row['Id'],running=row['State']['Running'],restart=row['HostConfig']['RestartPolicy']) for row in rows]))
+    else:
+        ids={p.name for p in (DATA/'containers').iterdir() if p.is_dir()}
+        require(pending and ids=={row['id'] for row in plan['before']['containers']},'离线校正的容器集合已改变')
+    render_config()
+    if not pending:atomic(plan_file,plan)
+    try:
+        guards(True)
+        plan['phase']='switching';atomic(plan_file,plan)
+        if selection['serviceActive']:
+            for row in plan['before']['containers']:docker('update','--restart=no',row['id'])
+            running=docker('ps','-q','--no-trunc').stdout.split()
+            if running:docker('stop','--time','30',*running,timeout=180)
+        stop_engine();require_data_environment(state)
+        start_engine(new=True);verify_engine(plan)
+        plan['phase']='complete';atomic(plan_file,plan)
+        return dict(changed=True,**runtime_selection())
+    except BaseException:
+        # Preserve data and desired container states for explicit retry.
+        # rollback() must never run here: it would restore old engine metadata.
+        plan['phase']='failed';atomic(plan_file,plan)
+        guards(True)
+        run(['systemctl','stop','docker.socket','docker.service'],check=False,timeout=180)
+        raise
+
+
 def guards(enable):
     if enable:
         atomic(MAINTENANCE, b'maintenance\n')
@@ -1086,6 +1189,7 @@ def rollback(folder, state, restore_all=False, automatic=False):
     source,plan=rollback_check(folder,state,restore_all,automatic)
     if plan is not None:
         state['rollbackPlan']=plan;save(folder,state)
+    startup_hook_valid(state['id'])
     guards(True)
     try:
         # Stop containers gracefully before stopping the engine, even if the new
@@ -1095,6 +1199,7 @@ def rollback(folder, state, restore_all=False, automatic=False):
             ids = docker('ps','-q','--no-trunc',new=cli_new,check=False).stdout.split()
             if ids: docker('stop','--time','30',*ids,new=cli_new,timeout=180)
         stop_engine()
+        if BOOT_CRON.exists():startup_hook(state['id'],False)
         if source is not None:
             save(folder,state,'restoring-data')
             if restore_all:
@@ -1206,6 +1311,7 @@ def install(args):
     before=inspect_system()
     require(before['version']=='20.10.17', '此迁移脚本仅针对已评估的原厂 20.10.17；其他版本先单独评估')
     require(not DROPIN.exists() and not MAINTENANCE.exists() and not any(p.exists() for p in GUARDS), '已有切换或维护配置，先查看状态/完成回退')
+    require(not BOOT_CRON.exists(),'已有开机校正配置，先查看原事务状态')
     require(args.bind_backups_confirmed or not before['externalWritableBinds'], '存在外部可写挂载，请备份后添加 --bind-backups-confirmed；--check 会列出路径')
     owned_files_valid()
     size=int(run(['du','-skx',DATA],timeout=300).stdout.split()[0])*1024
@@ -1236,6 +1342,7 @@ def install(args):
         require_data_environment(state)
         start_engine(new=True);restore_running(state,new=True);verify_engine(state)
         save(folder,state,'installed')
+        startup_hook(state['id'],True)
         print('Docker '+VERSION+' 已切换并通过基础校验。请继续验证网络、Portainer、智能中枢和重启。\n'
               '手动回退：python3 -B '+str(WORKER)+' --rollback '+ident+'\n'
               '默认回退保留本地卷数据，恢复升级前镜像、容器层和引擎元数据；外部挂载不作还原。',flush=True)
@@ -1261,8 +1368,39 @@ def locks():
         yield
 
 
+def boot_reconcile(ident):
+    # Cron reads /etc after the overlay is mounted, unlike PID 1's initial
+    # unit transaction. Wait only for boot mounts/API/operation locks, bounded
+    # by both this deadline and the outer timeout in the fixed Cron command.
+    deadline=time.monotonic()+300
+    while True:
+        try:
+            with locks():
+                folder,state=transaction(ident)
+                if MAINTENANCE.exists():
+                    run(['systemctl','daemon-reload'])
+                    run(['systemctl','stop','docker.socket','docker.service'],timeout=180)
+                    raise RuntimeError('维护保护仍在，已停止开机误启动的引擎；请完成原安装或回退事务')
+                require_data_environment(state)
+                if not active('docker.service'):
+                    raise RuntimeError('等待 Docker 开机服务')
+                selection=runtime_selection()
+                if selection['serverVersion'] is None:raise RuntimeError('等待 Docker 开机接口')
+                result=repair_startup(folder,state,automatic=True)
+                atomic(BASE/'startup-last.json',dict(id=ident,ok=True,time=int(time.time()),
+                       bootId=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),**result))
+                print(json.dumps(result,ensure_ascii=False));return
+        except (RuntimeError,OSError,ValueError,subprocess.SubprocessError) as error:
+            retry=any(text in str(error) for text in ('正在操作，请稍后重试','外部数据挂载未恢复','等待 Docker 开机'))
+            if retry and time.monotonic()<deadline:
+                time.sleep(2);continue
+            atomic(BASE/'startup-last.json',dict(id=ident,ok=False,time=int(time.time()),error=str(error)))
+            raise
+
+
 def status():
-    result=dict(targetVersion=VERSION,defaultRollbackMode='keep-volumes',runtimePrepared=RUNTIME.exists(),maintenance=MAINTENANCE.exists(),transactions=[])
+    result=dict(targetVersion=VERSION,defaultRollbackMode='keep-volumes',runtimePrepared=RUNTIME.exists(),maintenance=MAINTENANCE.exists(),
+                startupHookInstalled=BOOT_CRON.is_file(),runtimeSelection=runtime_selection(),transactions=[])
     directory=BASE/'transactions'
     if directory.exists():
         secure(directory)
@@ -1271,7 +1409,10 @@ def status():
                 _,state=transaction(path.name)
                 item={k:state.get(k) for k in ('id','phase','backup','targetVersion')}
                 if state.get('backup'):item['backupResolved']=str(remap_data_path(state['backup']))
+                item['startupHookMatches']=BOOT_CRON.is_file() and not BOOT_CRON.is_symlink() and BOOT_CRON.read_bytes()==startup_cron_bytes(state['id'])
                 result['transactions'].append(item)
+    last=BASE/'startup-last.json'
+    if last.exists():result['lastStartupRepair']=read(last)
     print(json.dumps(result,ensure_ascii=False,indent=2))
 
 
@@ -1285,18 +1426,21 @@ def main(argv=None):
     group.add_argument('--rollback',metavar='ID',help='恢复原厂引擎及旧元数据，默认保留当前本地卷数据')
     group.add_argument('--rollback-check',metavar='ID',help='只读校验备份及回退兼容性，不停止服务或写入事务')
     group.add_argument('--status',action='store_true',help='只读查看事务与维护状态')
+    group.add_argument('--repair-startup',metavar='ID',help='为成功升级事务补装开机一次性校正；必要时短暂停止容器切回目标引擎，不还原数据')
+    group.add_argument('--boot-reconcile',metavar='ID',help=argparse.SUPPRESS)
     group.add_argument('--render-config',action='store_true',help=argparse.SUPPRESS)
     parser.add_argument('--backup-dir',type=Path,help='已存在、由 root 管理的 ext4/btrfs/xfs 备份父目录')
     parser.add_argument('--archive',type=Path,help='离线官方 ARM64 包，仍核对固定 SHA-256')
     parser.add_argument('--proxy',help='仅下载使用的 HTTP/HTTPS 代理，例如 http://127.0.0.1:7890')
     parser.add_argument('--bind-backups-confirmed',action='store_true',help='明确确认已备份外部可写挂载数据')
     parser.add_argument('--restore-all-data',action='store_true',help='与回退参数合用，明确将本地卷也覆盖为升级前数据')
-    parser.add_argument('--yes',action='store_true',help='明确允许安装/回退中断容器，跳过交互输入')
+    parser.add_argument('--yes',action='store_true',help='明确允许安装/回退/开机修复中断容器，跳过交互输入')
     args=parser.parse_args(argv)
     if args.install and args.backup_dir is None:parser.error('--install 必须指定 --backup-dir')
-    if args.yes and not (args.install or args.rollback):parser.error('--yes 仅用于安装或回退')
+    if args.yes and not (args.install or args.rollback or args.repair_startup):parser.error('--yes 仅用于安装、回退或开机修复')
     if args.restore_all_data and not (args.rollback or args.rollback_check):parser.error('--restore-all-data 仅用于回退或回退检查')
     host_namespace()
+    if args.boot_reconcile:boot_reconcile(args.boot_reconcile);return
     if args.render_config:
         require(not MAINTENANCE.exists(),'Docker 处于维护状态');render_config();return
     if args.status:status();return
@@ -1305,7 +1449,7 @@ def main(argv=None):
         _,plan=rollback_check(folder,state,args.restore_all_data)
         print(json.dumps(dict(id=state['id'],backupVerified=bool(state.get('dataTouched')),mode=plan['mode'] if plan else 'untouched',
                               preservedVolumes=sorted(plan.get('payloads',{})) if plan else [],servicesChanged=False),ensure_ascii=False,indent=2));return
-    if not (args.prepare or args.probe or args.install or args.rollback):
+    if not (args.prepare or args.probe or args.install or args.rollback or args.repair_startup):
         print(json.dumps(inspect_system(),ensure_ascii=False,indent=2));return
     if str(BASE)=='/data/minas/docker/runtime':ensure_data_layout()
     if args.backup_dir is not None:args.backup_dir=remap_data_path(args.backup_dir)
@@ -1313,6 +1457,21 @@ def main(argv=None):
     require(not Path('/data/minas/migration/maintenance').exists(),'目录迁移正在进行')
     with locks():
         if args.install:install(args)
+        elif args.repair_startup:
+            folder,state=transaction(args.repair_startup)
+            require(state['phase']=='installed','需要已成功安装的升级事务')
+            if MAINTENANCE.exists():
+                plan=read(BASE/'startup-repair.json') if (BASE/'startup-repair.json').exists() else {}
+                require(plan.get('id')==state['id'] and plan.get('phase') in ('captured','switching','failed'),
+                        '维护锁属于其他操作，不能用开机修复解除')
+            owned_files_valid();startup_hook_valid(state['id']);require_data_environment(state);verify_runtime(RUNTIME)
+            require(DROPIN.is_file(),'升级启动配置缺失')
+            if not args.yes:
+                require(sys.stdin.isatty(),'非交互开机修复需 --yes')
+                require(input('将保留当前数据并校正 Docker 启动，可能短暂停止容器。输入 REPAIR 继续：').strip()=='REPAIR','已取消')
+            atomic(WORKER,Path(__file__).read_bytes(),0o700)
+            startup_hook(state['id'],True)
+            print(json.dumps(repair_startup(folder,state),ensure_ascii=False,indent=2))
         elif args.rollback:
             folder,state=transaction(args.rollback)
             if not args.yes:

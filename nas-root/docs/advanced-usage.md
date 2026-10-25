@@ -287,7 +287,8 @@ python3 -B /data/minas/docker/runtime/upgrade.py --rollback "$DOCKER_TXN"
 | --- | --- |
 | `--archive /path/to/docker-29.9.2.tgz` | 准备运行时时使用离线官方 ARM64 包，仍检查固定摘要 |
 | `--proxy http://127.0.0.1:7890` | 仅为运行时下载指定 HTTP/HTTPS 代理 |
-| `--yes` | 仅用于安装或回退，明确允许中断容器并跳过交互输入 |
+| `--yes` | 用于安装、回退或开机修复，明确允许中断容器并跳过交互输入 |
+| `--repair-startup ID` | 为已有成功升级补装开机一次性校正；必要时按当前容器状态切回 29.9.2，不还原数据 |
 | `--help` | 显示参数帮助 |
 
 详细的备份范围、精确恢复、旧事务兼容性及验证边界见 [Docker 29.9.2 安装与回退](docker-upgrade-29.9.2.md)。
