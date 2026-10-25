@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='quickshare'
 PLUGIN_LABEL='文件快传'
-PLUGIN_VERSION='1.1.43'
+PLUGIN_VERSION='1.1.44'
 UNINSTALL_NOTE='停止该用户的分享服务，现有分享链接失效；分享记录先备份，已上传的用户文件保留。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -460,7 +460,6 @@ SPEC_WAS_RUNNING=true
 if [ -x "$NAS_HOME/scripts/control" ]; then
     if "$NAS_HOME/scripts/control" status >/dev/null 2>&1; then SPEC_WAS_RUNNING=true; else SPEC_WAS_RUNNING=false; fi
 fi
-fail() { nas_fail "$@"; }
 nas_require jq python3 sha256sum plugincenter flock runuser ss systemctl
 BUNDLE=$(CDPATH= cd "$(dirname "$0")" && pwd); PACKAGE="$BUNDLE/$PLUGIN_NAME"
 ROOT="/home/$PLUGIN_USER/plugin"; HOME_DIR="$ROOT/$PLUGIN_NAME"; VAR="$HOME_DIR/var"; SCRIPTS="$HOME_DIR/scripts"

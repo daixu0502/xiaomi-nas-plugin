@@ -2,7 +2,6 @@
 """Install/remove shared component registrations. Called only by root installers."""
 import argparse
 import contextlib
-import datetime
 import fcntl
 import importlib.machinery
 import importlib.util

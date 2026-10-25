@@ -1,6 +1,5 @@
 """Registered-user monitoring and fixed maintenance operations."""
 import json
-import os
 from pathlib import Path
 import subprocess
 import privileged_runtime as runtime

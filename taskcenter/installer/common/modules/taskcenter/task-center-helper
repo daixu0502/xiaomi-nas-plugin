@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Root-owned scheduler; JSON API is restricted to the invoking NAS account."""
 import contextlib
-import datetime as dt
 import fcntl
 import json
 import os
@@ -9,7 +8,6 @@ from pathlib import Path
 import pwd
 import re
 import selectors
-import shutil
 import signal
 import subprocess
 import sys

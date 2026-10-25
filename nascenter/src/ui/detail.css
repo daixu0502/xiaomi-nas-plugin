@@ -82,8 +82,8 @@
 }
 [data-minas-plugin="nascenter"]:not(.desktop-client){background-color: var(--bg);}
 [data-minas-plugin="nascenter"] .minas-plugin-body button:disabled{color: var(--disabled-text) !important; background: var(--disabled-bg) !important; border-color: var(--disabled-border) !important; box-shadow: none !important; opacity: 1 !important; cursor: not-allowed !important;}
-[data-minas-plugin="nascenter"] .minas-plugin-body button:disabled.button-loading, [data-minas-plugin="nascenter"] .minas-plugin-body button:disabled[aria-busy="true"]{cursor: progress !important;}
-[data-minas-plugin="nascenter"] .section-heading.section-toolbar{min-width: 0px; margin: 0px 0px 14px; padding: 12px 14px; flex-wrap: wrap; gap: 10px 14px; border: 1px solid var(--line); border-radius: 16px; color: var(--text); background: var(--surface);}
+[data-minas-plugin="nascenter"] .minas-plugin-body button:disabled[aria-busy="true"]{cursor: progress !important;}
+[data-minas-plugin="nascenter"] .section-heading.section-toolbar{min-width: 0px; margin: 0px 0px 14px; padding: 12px 14px; flex-wrap: wrap; gap: 10px 14px; border: 1px solid var(--line); border-radius: 16px;}
 [data-minas-plugin="nascenter"] .section-toolbar > div{min-width: 0px; flex: 1 1 150px;}
 [data-minas-plugin="nascenter"] .section-heading.section-toolbar p{margin: 0px; color: var(--text); line-height: 1.6; overflow-wrap: anywhere;}
 [data-minas-plugin="nascenter"] .section-toolbar h2{margin: 0px 0px 4px;}

@@ -1,6 +1,5 @@
 """Narrow registered-user Docker proxy API; never accepts arbitrary ports/commands."""
 import json
-import os
 from pathlib import Path
 import subprocess
 import privileged_runtime as runtime

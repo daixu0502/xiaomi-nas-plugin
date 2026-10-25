@@ -10,7 +10,7 @@ import stat
 import subprocess
 import time
 
-VERSION = '1.2.2'
+VERSION = '1.2.3'
 LAYOUT_VERSION = 3
 API_VERSION = 1
 BASE = Path('/data/minas/privileged')

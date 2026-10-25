@@ -2,13 +2,12 @@
 """qBittorrent for new BT tasks, aria2 for direct URLs and retained legacy jobs."""
 import base64
 import json
-import os
 import re
 import secrets
 import time
 from pathlib import Path, PurePosixPath
 from urllib.parse import parse_qs, urlsplit, quote
-from download_lib import Manager, DownloadError, LIVE, MAX_TORRENT, atomic_json, torrent_info, valid_url
+from download_lib import Manager, DownloadError, LIVE, atomic_json, torrent_info, valid_url
 from qb_client import QB, QB_DEFAULTS, QBAPIError
 
 

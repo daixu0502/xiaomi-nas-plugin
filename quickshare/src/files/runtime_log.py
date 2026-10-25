@@ -1,7 +1,5 @@
 """Bounded user-owned logs; rotate writers while the service keeps running."""
 import os
-import signal
-import subprocess
 import sys
 import threading
 from pathlib import Path

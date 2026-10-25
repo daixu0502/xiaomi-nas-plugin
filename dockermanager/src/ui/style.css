@@ -1,8 +1,8 @@
 /* Plugin-specific components. Shared chrome/theme live in palette.css. */
-[data-minas-plugin="dockermanager"]{color-scheme: light; --navy: #071827; --navy-soft: #102b40; --cyan: #67e8f9;}
+[data-minas-plugin="dockermanager"]{ --navy: #071827; --navy-soft: #102b40; --cyan: #67e8f9;}
 [data-minas-plugin="dockermanager"] *{box-sizing: border-box; -webkit-tap-highlight-color: transparent;}
 [data-minas-plugin="dockermanager"], [data-minas-plugin="dockermanager"] .minas-plugin-body{min-height: 100%; margin: 0px; overflow-x: hidden; background: var(--background);}
-[data-minas-plugin="dockermanager"] .minas-plugin-body{color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif; background: radial-gradient(circle at 110% -5%, rgba(14,165,233,.25), transparent 34%),
+[data-minas-plugin="dockermanager"] .minas-plugin-body{ font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif; background: radial-gradient(circle at 110% -5%, rgba(14,165,233,.25), transparent 34%),
     linear-gradient(180deg, #071827 0, #0b2638 170px, var(--background) 340px);}
 [data-minas-plugin="dockermanager"] button, [data-minas-plugin="dockermanager"] input, [data-minas-plugin="dockermanager"] select, [data-minas-plugin="dockermanager"] textarea{font: inherit;}
 [data-minas-plugin="dockermanager"] button{cursor: pointer;}
@@ -12,7 +12,7 @@
 [data-minas-plugin="dockermanager"] h1{font-size: 25px; line-height: 1.15;}
 [data-minas-plugin="dockermanager"] h2{font-size: 21px;}
 [data-minas-plugin="dockermanager"] h3{font-size: 16px;}
-[data-minas-plugin="dockermanager"] p{color: var(--muted); font-size: 13px; line-height: 1.5;}
+[data-minas-plugin="dockermanager"] p{ font-size: 13px; line-height: 1.5;}
 [data-minas-plugin="dockermanager"] .icon-button{display: flex; align-items: center; justify-content: center; width: 43px; height: 43px; flex: 0 0 43px; padding: 0px; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 14px; color: rgb(255, 255, 255); background: rgba(255, 255, 255, 0.1); line-height: 1;}
 [data-minas-plugin="dockermanager"] .icon-button svg{display: block; width: 22px; height: 22px; fill: none; stroke: currentcolor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;}
 [data-minas-plugin="dockermanager"] .icon-button:active{transform: rotate(45deg);}
@@ -133,7 +133,7 @@
 }
 [data-minas-plugin="dockermanager"] .minas-plugin-body button:disabled{color: var(--disabled-text) !important; background: var(--disabled-bg) !important; border-color: var(--disabled-border) !important; box-shadow: none !important; opacity: 1 !important; cursor: not-allowed !important;}
 [data-minas-plugin="dockermanager"] .minas-plugin-body button:disabled.button-loading, [data-minas-plugin="dockermanager"] .minas-plugin-body button:disabled[aria-busy="true"]{cursor: progress !important;}
-[data-minas-plugin="dockermanager"] .section-heading.section-toolbar{min-width: 0px; margin: 0px 0px 14px; padding: 12px 14px; flex-wrap: wrap; gap: 10px 14px; border: 1px solid var(--line); border-radius: 16px; color: var(--text); background: var(--surface);}
+[data-minas-plugin="dockermanager"] .section-heading.section-toolbar{min-width: 0px; margin: 0px 0px 14px; padding: 12px 14px; flex-wrap: wrap; gap: 10px 14px; border: 1px solid var(--line); border-radius: 16px;}
 [data-minas-plugin="dockermanager"] .section-toolbar > div{min-width: 0px; flex: 1 1 150px;}
 [data-minas-plugin="dockermanager"] .section-heading.section-toolbar p{margin: 0px; color: var(--text); line-height: 1.6; overflow-wrap: anywhere;}
 [data-minas-plugin="dockermanager"] .section-toolbar h2{margin: 0px 0px 4px;}

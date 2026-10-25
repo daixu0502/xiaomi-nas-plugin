@@ -5,14 +5,17 @@
 !/.gitattributes
 .git/
 
-# Local distribution, maintenance workspace and generated package catalog.
+# Local distribution, instance data and generated package catalogs.
 /dist/
 /local/
-/workspace-tools/
 /package-manifest.json
+/workspace-tools/package-manifest.json
+/workspace-tools/history/
 
-# Tools, tests and generated artifacts at any depth stay local.
+# Standalone NAS maintenance sources are part of this repository.
 tools/
+!/nas-root/tools/
+# Tests and generated artifacts at any depth stay local.
 tests/
 __tests__/
 test_*

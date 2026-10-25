@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.request import build_opener, ProxyHandler, Request
 from urllib.error import HTTPError, URLError
 sys.dont_write_bytecode = True
-from download_lib import Manager, DownloadError, atomic_json, parse_tracker_subscription, tracker_cache, merged_trackers, core_path
+from download_lib import DownloadError, atomic_json, parse_tracker_subscription, tracker_cache, merged_trackers, core_path
 from dual_engine import DualManager
 
 

@@ -8,7 +8,6 @@ import json
 import mimetypes
 import os
 import re
-import socket
 import sys
 import threading
 import time

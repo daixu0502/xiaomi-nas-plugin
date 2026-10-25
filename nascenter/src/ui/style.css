@@ -1,7 +1,7 @@
 /* Plugin-specific components. Shared chrome/theme live in palette.css. */
 [data-minas-plugin="nascenter"] *{box-sizing: border-box; -webkit-tap-highlight-color: transparent;}
-[data-minas-plugin="nascenter"]{overflow-x: hidden; text-size-adjust: 100%;}
-[data-minas-plugin="nascenter"] .minas-plugin-body{min-height: 100dvh; margin: 0px; overflow-x: hidden; color: var(--text); background: radial-gradient(circle at 105% -8%,rgba(139,92,246,.3),transparent 34rem),linear-gradient(180deg,#21164f 0,#3d2a8a 175px,var(--bg) 350px); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;}
+[data-minas-plugin="nascenter"]{overflow-x: hidden;}
+[data-minas-plugin="nascenter"] .minas-plugin-body{min-height: 100dvh; margin: 0px; overflow-x: hidden; background: radial-gradient(circle at 105% -8%,rgba(139,92,246,.3),transparent 34rem),linear-gradient(180deg,#21164f 0,#3d2a8a 175px,var(--bg) 350px); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;}
 [data-minas-plugin="nascenter"] button{font: inherit; cursor: pointer;}
 [data-minas-plugin="nascenter"] [hidden]{display: none !important;}
 [data-minas-plugin="nascenter"] .shell{width: min(100%, 850px); margin: 0px auto; padding: max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(30px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));}
@@ -9,7 +9,7 @@
 [data-minas-plugin="nascenter"] h1{font-size: 25px;}
 [data-minas-plugin="nascenter"] h2{font-size: 22px;}
 [data-minas-plugin="nascenter"] h3{font-size: 16px;}
-[data-minas-plugin="nascenter"] p{color: var(--muted); font-size: 13px; line-height: 1.55;}
+[data-minas-plugin="nascenter"] p{ font-size: 13px; line-height: 1.55;}
 [data-minas-plugin="nascenter"] .icon-button{display: grid; place-items: center; width: 43px; height: 43px; padding: 0px; border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 14px; color: rgb(255, 255, 255); background: rgba(255, 255, 255, 0.1); font-size: 24px;}
 [data-minas-plugin="nascenter"] .status-pill{display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; color: rgb(89, 96, 110); background: rgb(233, 234, 240); font-size:13px; font-weight: 800;}
 [data-minas-plugin="nascenter"] .status-pill i{width: 7px; height: 7px; border-radius: 50%; background: currentcolor;}

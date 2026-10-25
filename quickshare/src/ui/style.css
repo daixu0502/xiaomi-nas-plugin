@@ -4,8 +4,8 @@
 [data-minas-plugin="quickshare"]:not(.desktop-client){--navy: #071b17;}
 }
 [data-minas-plugin="quickshare"] *{box-sizing: border-box; -webkit-tap-highlight-color: transparent;}
-[data-minas-plugin="quickshare"]{width: 100%; overflow-x: hidden; text-size-adjust: 100%;}
-[data-minas-plugin="quickshare"] .minas-plugin-body{width: 100%; min-height: 100dvh; margin: 0px; overflow-x: hidden; color: var(--text); background: radial-gradient(circle at 105% -5%,rgba(52,211,153,.28),transparent 33rem),linear-gradient(180deg,#073f35 0,#0b5b4d 170px,var(--bg) 340px); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;}
+[data-minas-plugin="quickshare"]{width: 100%; overflow-x: hidden;}
+[data-minas-plugin="quickshare"] .minas-plugin-body{width: 100%; min-height: 100dvh; margin: 0px; overflow-x: hidden; background: radial-gradient(circle at 105% -5%,rgba(52,211,153,.28),transparent 33rem),linear-gradient(180deg,#073f35 0,#0b5b4d 170px,var(--bg) 340px); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;}
 [data-minas-plugin="quickshare"] button, [data-minas-plugin="quickshare"] input, [data-minas-plugin="quickshare"] textarea{font: inherit;}
 [data-minas-plugin="quickshare"] button{cursor: pointer;}
 [data-minas-plugin="quickshare"] [hidden]{display: none !important;}
@@ -15,7 +15,7 @@
 [data-minas-plugin="quickshare"] h1{font-size: 25px;}
 [data-minas-plugin="quickshare"] h2{font-size: 21px;}
 [data-minas-plugin="quickshare"] h3{font-size: 16px;}
-[data-minas-plugin="quickshare"] p{color: var(--muted); font-size: 13px; line-height: 1.55;}
+[data-minas-plugin="quickshare"] p{ font-size: 13px; line-height: 1.55;}
 [data-minas-plugin="quickshare"] .icon-button{display: grid; place-items: center; width: 43px; height: 43px; padding: 0px; border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 14px; color: rgb(255, 255, 255); background: rgba(255, 255, 255, 0.11); font-size: 24px; line-height: 1;}
 [data-minas-plugin="quickshare"] .status-pill{display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; color: rgb(89, 109, 104); background: rgb(233, 240, 238); font-size:13px; font-weight: 800;}
 [data-minas-plugin="quickshare"] .status-pill i{width: 7px; height: 7px; border-radius: 50%; background: currentcolor;}
@@ -124,8 +124,8 @@
 }
 [data-minas-plugin="quickshare"]:not(.desktop-client){background-color: var(--bg);}
 [data-minas-plugin="quickshare"] .minas-plugin-body button:disabled{color: var(--disabled-text) !important; background: var(--disabled-bg) !important; border-color: var(--disabled-border) !important; box-shadow: none !important; opacity: 1 !important; cursor: not-allowed !important;}
-[data-minas-plugin="quickshare"] .minas-plugin-body button:disabled.button-loading, [data-minas-plugin="quickshare"] .minas-plugin-body button:disabled[aria-busy="true"]{cursor: progress !important;}
-[data-minas-plugin="quickshare"] .section-heading.section-toolbar{min-width: 0px; margin: 0px 0px 14px; padding: 12px 14px; flex-wrap: wrap; gap: 10px 14px; border: 1px solid var(--line); border-radius: 16px; color: var(--text); background: var(--surface);}
+[data-minas-plugin="quickshare"] .minas-plugin-body button:disabled[aria-busy="true"]{cursor: progress !important;}
+[data-minas-plugin="quickshare"] .section-heading.section-toolbar{min-width: 0px; margin: 0px 0px 14px; padding: 12px 14px; flex-wrap: wrap; gap: 10px 14px; border: 1px solid var(--line); border-radius: 16px;}
 [data-minas-plugin="quickshare"] .section-toolbar > div{min-width: 0px; flex: 1 1 150px;}
 [data-minas-plugin="quickshare"] .section-heading.section-toolbar p{margin: 0px; color: var(--text); line-height: 1.6; overflow-wrap: anywhere;}
 [data-minas-plugin="quickshare"] .section-toolbar h2{margin: 0px 0px 4px;}

@@ -1,8 +1,8 @@
 /* Plugin-specific components. Shared chrome/theme live in palette.css. */
 [data-minas-plugin="mihomo"] *{box-sizing: border-box;}
 [data-minas-plugin="mihomo"] [hidden]{display: none !important;}
-[data-minas-plugin="mihomo"]{width: 100%; max-width: 100%; overflow-x: hidden; text-size-adjust: 100%;}
-[data-minas-plugin="mihomo"] .minas-plugin-body{width: 100%; max-width: 100%; margin: 0px; min-height: 100dvh; overflow-x: hidden; overscroll-behavior-x: none; color: var(--text); background: radial-gradient(circle at 8% -12%, rgba(39, 188, 174, 0.22), transparent 32rem),
+[data-minas-plugin="mihomo"]{width: 100%; max-width: 100%; overflow-x: hidden;}
+[data-minas-plugin="mihomo"] .minas-plugin-body{width: 100%; max-width: 100%; margin: 0px; min-height: 100dvh; overflow-x: hidden; overscroll-behavior-x: none; background: radial-gradient(circle at 8% -12%, rgba(39, 188, 174, 0.22), transparent 32rem),
     var(--bg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;}
 [data-minas-plugin="mihomo"] button, [data-minas-plugin="mihomo"] input, [data-minas-plugin="mihomo"] select, [data-minas-plugin="mihomo"] textarea{font: inherit;}
 [data-minas-plugin="mihomo"] button{-webkit-tap-highlight-color: transparent;}
@@ -124,7 +124,7 @@
 [data-minas-plugin="mihomo"] .mi-confirm-dialog h2{margin: 0px 0px 9px; font-size: 19px;}
 [data-minas-plugin="mihomo"] .mi-confirm-dialog p{margin: 0px; color: var(--muted); font-size: 14px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere;}
 [data-minas-plugin="mihomo"] .mi-confirm-actions{display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;}
-[data-minas-plugin="mihomo"] .mi-confirm-button{min-height: 44px; border: 0px; border-radius: 13px; font-weight: 750; -webkit-tap-highlight-color: transparent;}
+[data-minas-plugin="mihomo"] .mi-confirm-button{ border: 0px; border-radius: 13px; font-weight: 750; -webkit-tap-highlight-color: transparent;}
 [data-minas-plugin="mihomo"] .mi-confirm-button.cancel{color: var(--text); background: var(--bg);}
 [data-minas-plugin="mihomo"] .mi-confirm-button.accept{color: rgb(255, 255, 255); background: var(--teal);}
 [data-minas-plugin="mihomo"] .mi-confirm-dialog.danger .mi-confirm-button.accept{background: var(--red);}
@@ -168,7 +168,7 @@
 }
 [data-minas-plugin="mihomo"]:not(.desktop-client){background-color: var(--bg);}
 [data-minas-plugin="mihomo"] .minas-plugin-body button:disabled{color: var(--disabled-text) !important; background: var(--disabled-bg) !important; border-color: var(--disabled-border) !important; box-shadow: none !important; opacity: 1 !important; cursor: not-allowed !important;}
-[data-minas-plugin="mihomo"] .minas-plugin-body button:disabled.button-loading, [data-minas-plugin="mihomo"] .minas-plugin-body button:disabled[aria-busy="true"]{cursor: progress !important;}
+[data-minas-plugin="mihomo"] .minas-plugin-body button:disabled[aria-busy="true"]{cursor: progress !important;}
 @media (prefers-color-scheme: dark){
 [data-minas-plugin="mihomo"]:not(.desktop-client) .mi-picker-option.selected .mi-picker-option-check{color: rgb(8, 43, 41);}
 }
