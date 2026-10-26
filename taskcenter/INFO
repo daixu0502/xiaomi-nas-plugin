@@ -2,7 +2,7 @@
   "plugin": "taskcenter",
   "name": "定时任务",
   "id": 19094,
-  "version": "1.0.26",
+  "version": "1.0.27",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "可视化任务计划与执行记录",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "电脑客户端正文、菜单和输入框增至16px，辅助文字14px，优化行距、文字对比度和字体平滑；手机端保持原有文字指标",
+  "changelog": "统一电脑端业务文字层级：代码输入、只读值、公钥指纹和说明段落16px，元信息14px，修正遗留小字号与侧栏标题，保留日志及图标层级",
   "system": false,
-  "size": 131630,
+  "size": 134597,
   "port": "",
   "type": "standard",
   "forceupgrade": false,
