@@ -14,8 +14,17 @@ import sys
 import tempfile
 import time
 
-PLUGIN, VERSION = 'sshrecovery', '1.1.32'
+PLUGIN, VERSION = 'sshrecovery', '1.1.33'
 SYSTEM = Path('/data/minas/privileged')
+
+def initialize_layout(payload):
+    """Use the already-bundled initializer; no separate layout program."""
+    import importlib.util
+    spec=importlib.util.spec_from_file_location('installer_layout',payload/'installer/recovery/recovery.py')
+    recovery=importlib.util.module_from_spec(spec);spec.loader.exec_module(recovery)
+    recovery.ensure_data_layout()
+    return recovery
+
 
 def system_install(user, payload):
     host=Path('/etc/dropbear/dropbear_rsa_host_key')
@@ -145,9 +154,7 @@ def install(p, payload):
         os.chown(stage, *owner); stage.chmod(0o700)
         if src.exists(): os.replace(src, previous_src); src_moved = True
         os.replace(stage, src); switched = True
-        import importlib.util
-        spec=importlib.util.spec_from_file_location('direct_state',payload/'installer/recovery/recovery.py')
-        recovery=importlib.util.module_from_spec(spec);spec.loader.exec_module(recovery)
+        recovery=initialize_layout(payload)
         recovery.persist_state(p['user'],PLUGIN,home,src,owner,False)
         for name in ('scripts', 'var', 'etc'):
             directory = home / name
@@ -241,7 +248,7 @@ def main(args):
         return
     require(action in ('install','uninstall') and len(args)==2, '操作参数无效')
     require(bool(re.fullmatch('u[0-9]+',args[1])), '无效用户')
-    if action=='install':subprocess.run([sys.executable,'-B',str(Path(__file__).parent/'data_layout.py')],check=True)
+    if action=='install':initialize_layout(Path(__file__).resolve().parents[1])
     with contextlib.ExitStack() as stack:
         for path in ('/data/plugin/.local-plugin-installer.lock', '/data/plugin/.'+args[1]+'.plugins.lock'):
             lock=stack.enter_context(open(path,'a'));fcntl.flock(lock,fcntl.LOCK_EX)

@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='dockermanager'
 PLUGIN_LABEL='docker'
-PLUGIN_VERSION='1.1.28'
+PLUGIN_VERSION='1.1.29'
 UNINSTALL_NOTE='保留 Docker 引擎、容器、镜像、网络和存储卷。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -365,6 +365,7 @@ import importlib.util,os,pwd,sys
 from pathlib import Path
 spec=importlib.util.spec_from_file_location('direct_state',sys.argv[1]);r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r)
 user,plugin,home=sys.argv[2],sys.argv[3],Path(sys.argv[4]);owner=pwd.getpwnam(user)
+r.ensure_data_layout()
 r.plain(home);home.mkdir(mode=0o700,parents=True,exist_ok=True)
 r.persist_state(user,plugin,home,None,(owner.pw_uid,owner.pw_gid),False)
 MINAS_DIRECT_STATE

@@ -2,7 +2,7 @@
   "plugin": "mihomo",
   "name": "Mihomo",
   "id": 19090,
-  "version": "1.7.52",
+  "version": "1.7.53",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "Mihomo 代理管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "移除旧目录自动迁移与探测，直接初始化新持久目录；更新公共权限及恢复组件，配合检查清理卸载入口",
+  "changelog": "目录初始化合并进安装入口，移除冗余 data_layout.py；修正全新安装在严格 umask 下的公共目录权限",
   "system": false,
   "size": 300502,
   "port": "",

@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='quickshare'
 PLUGIN_LABEL='文件快传'
-PLUGIN_VERSION='1.1.53'
+PLUGIN_VERSION='1.1.54'
 UNINSTALL_NOTE='停止该用户的分享服务，现有分享链接失效；分享记录先备份，已上传的用户文件保留。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -365,6 +365,7 @@ import importlib.util,os,pwd,sys
 from pathlib import Path
 spec=importlib.util.spec_from_file_location('direct_state',sys.argv[1]);r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r)
 user,plugin,home=sys.argv[2],sys.argv[3],Path(sys.argv[4]);owner=pwd.getpwnam(user)
+r.ensure_data_layout()
 r.plain(home);home.mkdir(mode=0o700,parents=True,exist_ok=True)
 r.persist_state(user,plugin,home,None,(owner.pw_uid,owner.pw_gid),False)
 MINAS_DIRECT_STATE

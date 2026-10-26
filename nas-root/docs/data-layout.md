@@ -20,3 +20,5 @@
 安装包直接初始化新目录，不再探测、搬移或清理旧布局。已安装账号的 etc/var 使用固定持久链接；protected 保存 root 专用的影视计划、参考和备份。运行缓存继续使用官方 tmp。
 
 旧目录、历史测试和部署备份统一交给[检查清理卸载工具](cleanup-and-uninstall.md)处理。该工具区分现用与卸载后保留数据，并保留 Docker 升级备份及恢复所需事务。
+
+各插件不再携带独立 installer/data_layout.py。Shell 安装入口和 SSH Python 安装器复用既有恢复组件中的初始化函数，先建立并校验公共根目录，再创建账号的持久链接。共有函数仍由 workspace-tools/data-layout/scoped_common.py 统一维护并在构建时嵌入，避免复制维护。

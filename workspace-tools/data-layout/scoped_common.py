@@ -37,7 +37,8 @@ def _layout_initialize():
     from pathlib import Path
     if os.geteuid()!=0:raise ValueError('root required for layout')
     root=Path(DATA_LAYOUT_ROOT);_layout_secure(root.parent)
-    if not root.exists():root.mkdir(mode=0o755)
+    if not root.exists():
+        root.mkdir(mode=0o755);root.chmod(0o755)
     _layout_secure(root)
     if not root.stat().st_mode&0o001:raise ValueError('layout root must allow traversal')
     marker=root/'layout.json'

@@ -29,7 +29,7 @@ PLUGINS = {'mihomo', 'dockermanager', 'taskcenter', 'nascenter', 'sshrecovery', 
 SERVERS = {'mihomo', 'quickshare', 'downloadcenter'}
 MANAGED = SERVERS | {'taskcenter'}
 UNIT = 'minas-plugin-recovery-v2'
-VERSION = '1.6.4'
+VERSION = '1.6.6'
 WATCH_UNIT = UNIT + '-watch.service'
 RUNTIME = Path('/run/minas-plugin-recovery-v2')
 
@@ -73,7 +73,8 @@ def _layout_initialize():
     from pathlib import Path
     if os.geteuid()!=0:raise ValueError('root required for layout')
     root=Path(DATA_LAYOUT_ROOT);_layout_secure(root.parent)
-    if not root.exists():root.mkdir(mode=0o755)
+    if not root.exists():
+        root.mkdir(mode=0o755);root.chmod(0o755)
     _layout_secure(root)
     if not root.stat().st_mode&0o001:raise ValueError('layout root must allow traversal')
     marker=root/'layout.json'
@@ -904,6 +905,13 @@ def restore_locked_record(directory, intents=None, check_source=True):
             atomic(icon, expected_icon, 0o644, owner)
         port_registry(user, plugin, expected_info['port'])
         # Merge exactly one entry; all official/other-user entries remain intact.
+        if repair:
+            # A reconstructed installation is registered enabled, like a fresh
+            # install. Its separately saved daemon/scheduler intent is retained.
+            record['enabled'] = True
+            record['entry'].update(enable=True, status='running', changetime=int(time.time()))
+            record['intent_time'] = max(record.get('intent_time', 0), time.time())
+            save(saved / 'record.json', record)
         entry = dict(record['entry'], enable=record['enabled'])
         if data.get(plugin) != entry:
             backup = directory / 'registry-before-repair.json'

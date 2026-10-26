@@ -2,7 +2,7 @@
   "plugin": "mediaeditor",
   "name": "影视编辑",
   "id": 19100,
-  "version": "1.1.7",
+  "version": "1.1.8",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "官方影视代码搜索、系列归属修正与批量集数编辑",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "移除旧目录自动迁移与探测，直接初始化新持久目录；更新公共权限及恢复组件，配合检查清理卸载入口",
+  "changelog": "目录初始化合并进安装入口，移除冗余 data_layout.py；修正全新安装在严格 umask 下的公共目录权限",
   "system": false,
   "size": 218441,
   "port": "",
