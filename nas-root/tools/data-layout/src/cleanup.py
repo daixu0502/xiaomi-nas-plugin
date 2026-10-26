@@ -3,7 +3,7 @@
 import argparse,contextlib,ctypes,fcntl,hashlib,json,os,pwd,re,shutil,stat,subprocess,sys,tempfile
 from pathlib import Path
 
-VERSION='1.0.0'
+VERSION='1.0.1'
 ROOT=Path('/data/minas')
 PLUGINS=('dockermanager','mihomo','taskcenter','nascenter','sshrecovery','quickshare','downloadcenter','mediaeditor')
 LABELS=dict(zip(PLUGINS,('Docker 管理','Mihomo','计划任务','控制中心','SSH 恢复','文件快传','下载中心','影视编辑')))
@@ -117,7 +117,12 @@ def scan():
         if not re.fullmatch(r'u[0-9]+',u):continue
         for plugin in PLUGINS:
             home=Path('/home')/u/'plugin'/plugin;present=installed(u,plugin)
-            if present:plugins.append({'user':u,'plugin':plugin,'name':LABELS[plugin],'enabled':regs[u][plugin].get('enable'),'home':str(home)})
+            if present:
+                service=None
+                if plugin in ('mihomo','quickshare','downloadcenter'):
+                    name='minas-plugin-'+plugin+'-'+u+'.service'
+                    service={'name':name,'definitionExists':(Path('/etc/systemd/system')/name).is_file()}
+                plugins.append({'user':u,'plugin':plugin,'name':LABELS[plugin],'enabled':regs[u][plugin].get('enable'),'home':str(home),'service':service})
             add(ROOT/'plugins/data'/u/plugin,u+'/'+LABELS[plugin],'新',keep=present,reason='现用配置、任务或保护数据' if present else '卸载后的持久数据，手动选择才删除')
             add(Path('/data/.minas-plugin-data')/u/plugin,u+'/'+LABELS[plugin],'旧',automatic=True)
             add(Path('/data/.minas-privileged/modules')/plugin,LABELS[plugin]+'旧权限模块','旧',automatic=True)
@@ -129,7 +134,8 @@ def scan():
             add(Path('/data/plugin')/('.'+plugin+'-system'),'旧权限模块 '+plugin,'旧',automatic=True)
             add(Path('/data')/('.'+plugin+'-system'),'旧权限模块 '+plugin,'旧',automatic=True)
         reserve=Path('/home')/u/'plugin/.reserve'
-        for p in reserve.glob('*/*'):add(p,'历次安装卸载备份','备份',automatic=True)
+        for p in reserve.glob('*/*'):
+            if p.parent.name in PLUGINS:add(p,'自定义插件安装卸载备份','备份',automatic=True)
     add(ROOT/'plugins/mediaeditor','影视编辑旧保护数据','旧',automatic=True)
     add(ROOT/'privileged/modules/mediaeditor/var/storage-layout.json','已完成的影视迁移记录','旧',automatic=True)
     for pattern in ('.registry-before-install.*','*.before-local-*'):
@@ -295,7 +301,11 @@ def atomic(path,text,mode=0o600):
 
 def display(data):
     print('\n已安装自定义插件：')
-    for i,p in enumerate(data['plugins'],1):print(f"  P{i}  {p['user']}  {p['name']}  {'启用' if p['enabled'] else '停用（不代表已卸载）'}")
+    for i,p in enumerate(data['plugins'],1):
+        print(f"  P{i}  {p['user']}  {p['name']}  {'启用' if p['enabled'] else '停用（不代表已卸载）'}")
+        service=p.get('service')
+        if service:print('      '+service['name']+'：'+('服务定义存在' if service['definitionExists'] else '服务定义已删除'))
+        else:print('      无独立常驻服务')
     print('\n脚本状态：')
     for key,t in data['tools'].items():print('  '+key+'  '+t['name']+'  '+('已安装' if t['installed'] else '已恢复／未安装')+'  '+', '.join(x['id']+':'+str(x['phase']) for x in t['transactions']))
     print('\n目录／文件（ID 用于选择删除；使用中项目不可删除）：')
