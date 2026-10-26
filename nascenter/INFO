@@ -2,7 +2,7 @@
   "plugin": "nascenter",
   "name": "控制中心",
   "id": 19093,
-  "version": "1.1.50",
+  "version": "1.1.51",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "性能、硬盘健康、网络和服务管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "SMART 属性 ID 和原始值改为十六进制，补充中文属性名及 SATA/NVMe SSD 健康数据显示，避免厂商复用 ID 被误计为坏扇区",
+  "changelog": "电脑客户端正文、菜单和输入框增至16px，辅助文字14px，优化行距、文字对比度和字体平滑；手机端保持原有文字指标",
   "system": false,
-  "size": 149738,
+  "size": 151990,
   "port": "",
   "type": "standard",
   "forceupgrade": false,
