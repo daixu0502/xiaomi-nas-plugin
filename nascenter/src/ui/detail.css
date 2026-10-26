@@ -64,6 +64,8 @@
 [data-minas-plugin="nascenter"] .smart-table th{position: sticky; top: 0px; color: var(--muted); background: var(--bg);}
 [data-minas-plugin="nascenter"] .smart-table tr:last-child td{border-bottom: 0px;}
 [data-minas-plugin="nascenter"] .smart-table .failed{color: var(--red); font-weight: 800;}
+[data-minas-plugin="nascenter"] .smart-table .smart-id,
+[data-minas-plugin="nascenter"] .smart-table .smart-raw{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-variant-numeric:tabular-nums;}
 [data-minas-plugin="nascenter"] .empty-detail{padding: 12px; color: var(--muted); font-size:13px; text-align: center;}
 [data-minas-plugin="nascenter"] .backdrop{backdrop-filter: none; animation: 0.14s ease-out 0s 1 normal both running nas-overlay-in;}
 [data-minas-plugin="nascenter"] .dialog{width: min(380px, -28px + 100vw); max-height: calc(100dvh - 28px); animation: 0.16s cubic-bezier(0.2, 0.7, 0.2, 1) 0s 1 normal both running nas-dialog-in;}
