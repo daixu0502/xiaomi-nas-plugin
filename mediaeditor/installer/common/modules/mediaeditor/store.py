@@ -22,7 +22,6 @@ import privileged_runtime as runtime
 DB_PATH = Path('/nas/sys/video/mediacenter.db')
 TOKENIZER = Path('/usr/lib/libmitrigram.so')
 STATE = Path('/data/minas/plugins/data')
-LEGACY_STATE = Path('/data/minas/plugins/mediaeditor')
 LOCK_STATE = runtime.BASE/'modules/mediaeditor/var'
 LABELS = {'midb_id':'影片代码','trans_name':'片名','season_number':'影片季号','season_name':'季名称',
           'collection_id':'系列归属','session':'文件季号','episode':'文件集号'}
@@ -70,7 +69,6 @@ def fingerprint(value):
 
 def storage(user):
     runtime.account(user)
-    if os.path.lexists(LEGACY_STATE/user): raise ValueError('影视编辑旧记录尚未迁移，请完成插件更新')
     if not STATE.parent.exists():runtime.secure_directory(STATE.parent,create=True)
     for parent in (STATE,STATE/user,STATE/user/'mediaeditor'):
         runtime.secure_directory(parent,create=True,mode=0o711)
@@ -112,7 +110,6 @@ def token(value):
 
 @contextlib.contextmanager
 def editing_lock():
-    if os.path.lexists(LEGACY_STATE/'write.lock'): raise ValueError('影视编辑全局写锁尚未迁移，请完成插件更新')
     runtime.secure_directory(LOCK_STATE,create=True,mode=0o700)
     fd=os.open(LOCK_STATE/'write.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
     try:

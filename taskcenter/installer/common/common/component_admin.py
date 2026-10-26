@@ -25,7 +25,6 @@ PLUGIN_DATA = Path('/data/plugin')
 BACKUPS = Path('/data/minas/backups/privileged')
 SUDOERS = Path('/etc/sudoers.d')
 CRON = Path('/etc/cron.d')
-LEGACY = [Path('/data/plugin/.taskcenter-system'), Path('/data/.taskcenter-system')]
 CORE_FILES = ('minas-helper', 'component_admin.py', 'common/privileged_runtime.py', 'common/component_admin.py', 'common/user_state_io.py', 'common/telemetry_cache.py')
 PRIVATE_FILES = {
  'dockermanager': ('docker-manager-helper',),
@@ -35,9 +34,7 @@ PRIVATE_FILES = {
  'nascenter': ('api.py','nas-center-helper','process_metrics.py'),
  'mediaeditor': ('api.py','store.py','sqlite_native.py','provider.py'),
 }
-FLAT_FILES = {'dockermanager':('docker-manager-helper',),'taskcenter':('task-center-helper','task_schedule.py','task_maintenance.py'),'sshrecovery':('ssh-recovery-helper','ssh-recovery-boot.sh')}
 
-MIGRATION_MARK = 'MIGRATED_TO_COMMON'
 
 
 def atomic(path, data, mode=0o600):
@@ -69,7 +66,7 @@ def validate_tree(directory):
 
 def check_idle():
     # The component exclusive lock already excludes current shared workers.
-    for directory in [BASE] + LEGACY:
+    for directory in [BASE]:
         users = directory / 'users'
         if not users.is_dir(): continue
         for file in users.glob('u*/state.json'):
@@ -90,44 +87,7 @@ def check_idle():
             raise ValueError('Docker 正在升级或批量操作，稍后再安装')
 
 
-@contextlib.contextmanager
-def migration(user, backup):
-    target = BASE / 'users' / user
-    source = next((d / 'users' / user for d in reversed(LEGACY)
-                   if (d / 'users' / user / 'state.json').is_file()
-                   and not (d / 'users' / user / MIGRATION_MARK).exists()
-                   and not (d / 'users' / user / 'MIGRATED_TO_V02').exists()), None)
-    if target.exists() or source is None:
-        yield
-        return
-    validate_tree(source)
-    fd = os.open(str(source / 'lock'), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-    old = None
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        old = (source / 'state.json').read_bytes()
-        state = json.loads(old)
-        if any(r.get('state') == 'running' for r in state.get('runs', [])):
-            raise ValueError('旧版任务记录仍处于执行中，请先确认任务结束')
-        shutil.copytree(str(source), str(backup / 'legacy-state'))
-        atomic(backup / 'legacy-source.json', {'path': str(source)})
-        runtime.secure_directory(BASE / 'users', create=True, mode=0o700)
-        # Target name becomes visible only after old scheduler has been disabled.
-        staging = Path(tempfile.mkdtemp(prefix='.' + user + '-', dir=str(BASE / 'users')))
-        staging.rmdir()
-        shutil.copytree(str(source), str(staging))
-        state['scheduler'] = False
-        atomic(source / 'state.json', state)
-        os.replace(str(staging), str(target))
-        try:
-            yield
-            atomic(source / MIGRATION_MARK, str(target) + '\n')
-        except BaseException:
-            atomic(source / 'state.json', old)
-            if target.exists(): shutil.rmtree(str(target))
-            raise
-    finally:
-        os.close(fd)
+
 
 
 def install_sudo(user, plugin):
@@ -142,36 +102,12 @@ def install_sudo(user, plugin):
         if temp.exists(): temp.unlink()
 
 
-def migrate_docker_status(data, backup):
-    """Preserve old display state; exclusive component lock excludes workers."""
-    import user_state_io
-    users=[u for u,grants in data['users'].items() if 'dockermanager' in grants]
-    files=[]
-    for old,name in ((Path('/run/dockermanager-upgrade-status.json'),'docker-upgrade-status.json'),
-                     (Path('/run/dockermanager-bulk-status.json'),'docker-bulk-status.json')):
-        if not old.exists():continue
-        st=old.lstat()
-        if not stat.S_ISREG(st.st_mode) or st.st_uid!=0 or st.st_mode&0o022:
-            raise ValueError('旧 Docker 状态文件权限异常')
-        raw=old.read_bytes();value=json.loads(raw)
-        if not isinstance(value,dict):raise ValueError('旧 Docker 状态无效')
-        saved=backup/'legacy-docker-status';saved.mkdir(mode=0o700,exist_ok=True)
-        atomic(saved/old.name,raw)
-        for user in users:
-            if user_state_io.read_state(user,'dockermanager',name) is None:
-                user_state_io.write_state(user,'dockermanager',name,value)
-        files.append(old)
-    for old in files:old.unlink()
+
 
 
 def update_cron(data):
     plugins = {p for grants in data['users'].values() for p in grants}
     file = CRON / 'minas-privileged-v2'
-    previous = CRON / 'minas-privileged'
-    if previous.is_file():
-        text = previous.read_text()
-        if str(BASE)+'/minas-helper ' in text and '/data/.minas-privileged' not in text:
-            previous.unlink()
     if plugins:
         text = 'SHELL=/bin/sh\nPATH=/usr/sbin:/usr/bin:/sbin:/bin:/data/docker\nMAILTO=""\n'
         if 'taskcenter' in plugins:
@@ -182,17 +118,11 @@ def update_cron(data):
             text += '@reboot root %s/minas-helper boot >/dev/null 2>&1\n' % BASE
         atomic(file, text, 0o644)
     elif file.exists(): file.unlink()
-    # Retain legacy cron only when an unmigrated account still needs it.
-    remaining = any(not (f.parent / MIGRATION_MARK).exists() and not (f.parent / 'MIGRATED_TO_V02').exists()
-                    for d in LEGACY for f in (d / 'users').glob('u*/state.json'))
-    old = CRON / 'taskcenter'
-    if not remaining and old.is_file() and 'task-center-helper' in old.read_text(): old.unlink()
 
 
 def bundle(payload, plugin):
     import hashlib
     source = payload / 'installer/common'
-    if not source.exists(): source = payload / 'common'  # legacy protected recovery generations
     manifest = json.loads((source/'manifest.json').read_bytes())
     if manifest['version'] != runtime.VERSION or manifest['apiVersion'] != runtime.API_VERSION or manifest['plugin'] != plugin:
         raise ValueError('安装包公共组件版本或插件身份不一致')
@@ -220,20 +150,11 @@ def install_code(relative, value):
     atomic(target, value, 0o755 if executable else 0o644)
 
 
-def ssh_lock_stub(directory):
-    """A retired helper may recreate only its empty operations lock."""
-    if not directory.exists(): return False
-    validate_tree(directory)
-    nodes = list(directory.iterdir())
-    return len(nodes) == 1 and nodes[0].name == 'operations.lock' and nodes[0].is_file() and nodes[0].stat().st_size == 0
+
 
 
 def ssh_state():
-    current, legacy = BASE/'modules/sshrecovery/var', BASE/'sshrecovery'
-    if current.exists() and legacy.exists():
-        if ssh_lock_stub(legacy): return current
-        raise ValueError('新旧 SSH 恢复数据同时存在，请先核对，拒绝自动合并密钥')
-    return legacy if legacy.exists() else current
+    return BASE/'modules/sshrecovery/var'
 
 
 @contextlib.contextmanager
@@ -243,11 +164,6 @@ def ssh_state_lock(plugin):
         return
     directory = ssh_state()
     directories = [directory] if directory.exists() else []
-    legacy = BASE/'sshrecovery'
-    if legacy.exists() and legacy != directory: directories.append(legacy)
-    if str(BASE)=='/data/minas/privileged':
-        for node in (Path('/data/.minas-privileged/modules/sshrecovery/var'),Path('/data/.minas-privileged/sshrecovery')):
-            if node.is_dir():directories.append(node)
     descriptors = []
     try:
         for node in directories:
@@ -264,35 +180,7 @@ def ssh_state_lock(plugin):
         for fd in descriptors: os.close(fd)
 
 
-def migrate_ssh_state():
-    legacy, target = BASE/'sshrecovery', BASE/'modules/sshrecovery/var'
-    # Standalone tools do not use the shared API lock. After replacing their
-    # entry points, refuse retirement if an old process may still hold/wait on
-    # the legacy lock. Never remove an unknown legacy file or real key material.
-    if legacy.exists():
-        workers = {b'/data/minas/ssh/recover-ssh.py',
-                   b'/data/minas/ssh/restore-ssh.sh',
-                   os.fsencode(BASE/'ssh-recovery-helper'),
-                   os.fsencode(BASE/'ssh-recovery-boot.sh'),
-                   os.fsencode(BASE/'modules/sshrecovery/restore-ssh.sh')}
-        for process in Path('/proc').glob('[0-9]*/cmdline'):
-            try: arguments = process.read_bytes().split(b'\0')
-            except (OSError, ProcessLookupError): continue
-            if workers.intersection(arguments):
-                raise ValueError('独立 SSH 恢复工具正在运行，请结束后再更新')
-        if target.exists() and not ssh_lock_stub(legacy):
-            raise ValueError('新旧 SSH 恢复数据同时存在，拒绝覆盖')
-        if not target.exists():
-            validate_tree(legacy)
-            runtime.secure_directory(target.parent,create=True)
-            os.rename(legacy,target)  # Preserve key permissions and lock inode.
-        else:
-            # The current lock inode stays intact; the retired legacy lock is
-            # already held by ssh_state_lock and no old standalone writer lives.
-            (legacy/'operations.lock').unlink()
-            legacy.rmdir()
-    for path in (target,target/'keys',target/'host',target/'tmp'):
-        runtime.secure_directory(path,create=True,mode=0o700)
+
 
 
 def restore_tree(current, saved):
@@ -317,93 +205,14 @@ def restore_tree(current, saved):
         except OSError:pass
 
 
-def retire_legacy(plugin, user):
-    # A module update owns only its own former flat files.
-    for name in FLAT_FILES.get(plugin, ()):
-        path = BASE/name
-        if path.exists():
-            if path.is_symlink() or not path.is_file() or path.stat().st_uid != 0:
-                raise ValueError('旧权限模块文件异常')
-            path.unlink()
-    if plugin not in ('mihomo','nascenter'): return
-    if plugin == 'mihomo':
-        old_rule = SUDOERS/('mihomo-docker-proxy-'+user)
-        if old_rule.is_file() and '/data/plugin/.mihomo-system/' in old_rule.read_text(): old_rule.unlink()
-        names = ('mihomo-docker-proxy','docker_proxy_status.py')
-    else: names = ('nas-center-helper','process_metrics.py','telemetry_cache.py','user_state_io.py')
-    legacy = PLUGIN_DATA/('.'+plugin+'-system')
-    # Other accounts may still have old CGI/control entry points.
-    for rule in SUDOERS.iterdir():
-        if rule.is_file() and str(legacy) in rule.read_text(errors='replace'): return
-    for home in HOME.glob('u*/plugin/'+plugin):
-        for relative in ('ui/'+plugin+'.cgi', 'scripts/control'):
-            path = (home/'src'/relative) if relative.startswith('ui/') else home/relative
-            if path.is_file() and str(legacy) in path.read_text(errors='replace'): return
-    if legacy.is_dir():
-        runtime.secure_directory(legacy)
-        for name in names:
-            file = legacy/name
-            if file.is_file() and not file.is_symlink() and file.stat().st_uid == 0: file.unlink()
-        try: legacy.rmdir()
-        except OSError: pass
 
 
-def migrate_component_state(plugin,user):
-    """Copy only this plugin/user; keep legacy peers running until finalization."""
-    import hashlib,base64
-    legacy=Path('/data/.minas-privileged')
-    if str(BASE)!='/data/minas/privileged' or not legacy.exists():return
-    runtime.secure_directory(legacy)
-    receipts=BASE/'migration'/plugin;runtime.secure_directory(BASE/'migration',create=True,mode=0o700)
-    runtime.secure_directory(receipts,create=True,mode=0o700)
-    receipt=receipts/(user+'.json');state=json.loads(receipt.read_text()) if receipt.exists() else {'files':{}}
-    def ensure(path):
-        if not path.exists():ensure(path.parent)
-        runtime.secure_directory(path,create=True,mode=0o700)
-    def copy(source,target,prefer_current=False):
-        if not source.is_file() or source.is_symlink():return
-        validate_tree(source)
-        if str(source) in state['files'] and target.is_file():return
-        raw=source.read_bytes()
-        if not target.exists():
-            ensure(target.parent)
-            atomic(target,raw,source.stat().st_mode&0o777)
-        elif target.read_bytes()!=raw and not prefer_current:
-            raise ValueError('当前插件的新旧状态不同，保留两边文件：'+str(source))
-        state['files'][str(source)]={'target':str(target),'sha256':hashlib.sha256(raw).hexdigest()}
-        atomic(receipt,state)
-    if plugin=='taskcenter':
-        directory=legacy/'users'/user
-        if directory.is_dir():
-            for source in directory.rglob('*'):
-                if source.is_file() and not source.is_symlink() and source.name!='lock':copy(source,BASE/'users'/user/source.relative_to(directory))
-            task=directory/'state.json'
-            if task.is_file() and not state.get('paused'):
-                original=task.read_bytes();value=json.loads(original)
-                if any(run.get('state')=='running' for run in value.get('runs',[])):raise ValueError('当前用户仍有旧版任务执行中，请等待其结束')
-                state['originalTask']=base64.b64encode(original).decode();state['pendingScheduler']=bool(value.get('scheduler'));atomic(receipt,state)
-                target=BASE/'users'/user/'state.json';pending=json.loads(target.read_text())
-                pending['scheduler']=False;atomic(target,pending)
-                value['scheduler']=False;atomic(task,value)
-                state['paused']=hashlib.sha256(task.read_bytes()).hexdigest();state['files'][str(task)]['sha256']=state['paused'];atomic(receipt,state)
-    if plugin=='sshrecovery':
-        for directory in (legacy/'modules/sshrecovery/var',legacy/'sshrecovery'):
-            if not directory.is_dir():continue
-            target=BASE/'modules/sshrecovery/var'
-            for source in directory.rglob('*'):
-                relative=source.relative_to(directory)
-                if relative.parts[0]=='keys' and relative.as_posix() not in ('keys/'+user+'.pub','keys/'+user+'.settings.json'):continue
-                if relative.parts[0]=='tmp' and (len(relative.parts)<2 or relative.parts[1]!='generated-'+user):continue
-                if source.name.endswith('.lock'):
-                    target_lock=target/relative
-                    if not target_lock.exists():ensure(target_lock.parent);os.link(source,target_lock)
-                    continue
-                if source.is_file() and not source.is_symlink():copy(source,target/relative,prefer_current=True)
+
+
 
 
 def install(payload, plugin, user, plugin_version, backup):
     values = bundle(payload, plugin)
-    migrate_component_state(plugin,user)
     old = runtime.registry() if (BASE/'registry.json').exists() else {'apiVersion':1,'version':'0.0.0','users':{},'modules':{}}
     if old.get('apiVersion') != runtime.API_VERSION:
         raise ValueError('公共权限组件 API 不兼容，拒绝升级')
@@ -427,6 +236,9 @@ def install(payload, plugin, user, plugin_version, backup):
                 raise ValueError('同版本共有组件内容不一致，拒绝静默覆盖')
     for name in PRIVATE_FILES.get(plugin, ()):
         install_code('modules/'+plugin+'/'+name, values['modules/'+plugin+'/'+name])
+    if plugin == 'sshrecovery':
+        for relative in ('var','var/keys','var/host','var/tmp'):
+            runtime.secure_directory(BASE/'modules/sshrecovery'/relative,create=True,mode=0o700)
     # Distributors without privileged operations receive no sudo grant/module.
     data.setdefault('packages',{})[plugin] = plugin_version
     if plugin in runtime.MODULES:
@@ -438,33 +250,8 @@ def install(payload, plugin, user, plugin_version, backup):
         match = re.search(r'^MIXED_PORT=([0-9]+)$',text,re.M)
         if not match or not 1024 <= int(match[1]) <= 65535: raise ValueError('Mihomo 端口未配置')
         data.setdefault('settings',{}).setdefault(user,{})['mihomo'] = {'proxyPort':int(match[1])}
-    if plugin == 'sshrecovery':
-        worker = Path('/data/minas/ssh/recover-ssh.py')
-        old_helper = BASE/'ssh-recovery-helper'
-        if worker.is_file():
-            # Preserve standalone emergency recovery when the flat asset retires.
-            previous = worker.read_bytes()
-            # Change only the retired asset lookup, preserving standalone fixes.
-            updated = previous.replace(b"BASE/'ssh-recovery-boot.sh'", b"Path('/data/minas/ssh/restore-ssh.sh')")
-            updated = updated.replace(b"if not STATE.exists() and (BASE/'sshrecovery').exists():\n    STATE = BASE/'sshrecovery'\n", b'')
-            updated = updated.replace(b"STATE = BASE/'sshrecovery'", b"STATE = BASE/'modules/sshrecovery/var'")
-            if updated != previous:
-                compile(updated, str(worker), 'exec')
-                atomic(backup/'standalone-ssh-worker', previous, 0o600)
-                atomic(worker, updated, worker.stat().st_mode & 0o777)
-        shell_worker = Path('/data/minas/ssh/restore-ssh.sh')
-        if shell_worker.is_file():
-            validate_tree(shell_worker)
-            previous = shell_worker.read_bytes()
-            updated = previous.replace(b'STATE=/data/minas/privileged/sshrecovery\n',
-                                       b'STATE=/data/minas/privileged/modules/sshrecovery/var\n')
-            if updated != previous:
-                subprocess.run(['/bin/sh','-n'],input=updated,check=True,capture_output=True)
-                atomic(backup/'standalone-ssh-shell-worker',previous,0o600)
-                atomic(shell_worker,updated,shell_worker.stat().st_mode & 0o777)
-        migrate_ssh_state()
     atomic(BASE/'registry.json', data)
-    with migration(user, backup) if plugin == 'taskcenter' else contextlib.nullcontext():
+    with contextlib.nullcontext():
         if plugin == 'taskcenter':
             sys.path.insert(0,str(BASE/'modules/taskcenter'))
             loader=importlib.machinery.SourceFileLoader('install_tasks',str(BASE/'modules/taskcenter/task-center-helper'))
@@ -473,23 +260,10 @@ def install(payload, plugin, user, plugin_version, backup):
                 module.initialize(user)
             state=json.loads((BASE/'users'/user/'state.json').read_text())
             for task in state['tasks']: module.validate_task(task)
-            # Historical output is a display cache, not privileged scheduler state.
-            logs=BASE/'users'/user/'logs'
-            if logs.is_dir():
-                import user_state_io
-                for log in logs.iterdir():
-                    if not re.fullmatch(r'[a-f0-9]{32}\.log',log.name):raise ValueError('未知旧任务日志，未迁移')
-                    validate_tree(log)
-                    value={'text':log.read_text()[:module.MAX_LOG]}
-                    user_state_io.write_state(user,'taskcenter','log-'+log.stem+'.json',value)
-                    log.unlink()
-                logs.rmdir()
         if plugin in runtime.MODULES: install_sudo(user,plugin)
     obsolete = CRON/('dockermanager-'+user)
     if plugin == 'dockermanager' and obsolete.exists(): obsolete.unlink()
     update_cron(data)
-    if plugin == 'dockermanager': migrate_docker_status(data,backup)
-    retire_legacy(plugin,user)
     return data
 
 
@@ -557,11 +331,6 @@ def main():
         else: backup = Path(tempfile.mkdtemp(prefix='minas-component-'))
         saved = backup / 'component'
         shutil.copytree(str(BASE), str(saved), ignore=shutil.ignore_patterns('*.lock','backups'))
-        legacy = PLUGIN_DATA/('.'+args.plugin+'-system')
-        if legacy.is_dir():
-            validate_tree(legacy);shutil.copytree(legacy,backup/'legacy-helper')
-        old_mihomo_rule=SUDOERS/('mihomo-docker-proxy-'+args.user)
-        if args.plugin=='mihomo' and old_mihomo_rule.is_file():shutil.copy2(old_mihomo_rule,backup/'legacy-mihomo-sudoers')
         rule = SUDOERS / (args.plugin + '-' + args.user)
         if rule.exists(): shutil.copy2(str(rule), str(backup / 'sudoers'))
         for file in CRON.glob('*'):
@@ -571,29 +340,12 @@ def main():
             data = install(args.payload, args.plugin, args.user, args.plugin_version, backup) if args.action == 'install' else remove(args.plugin, args.user, backup)
         except BaseException:
             # Restore grouped code and protected state, preserving live lock inodes.
-            migrated=BASE/'modules/sshrecovery/var'
-            if (saved/'sshrecovery').exists() and not (saved/'modules/sshrecovery/var').exists() and not (BASE/'sshrecovery').exists() and migrated.exists():
-                os.rename(migrated,BASE/'sshrecovery')
-            for name in ('common','modules','users','sshrecovery'):
+            for name in ('common','modules','users'):
                 restore_tree(BASE/name,saved/name)
             for file in BASE.iterdir():
                 if file.is_file() and file.name not in {'component.lock','docker.lock'} and not (saved/file.name).exists(): file.unlink()
             for file in saved.iterdir():
                 if file.is_file():atomic(BASE/file.name,file.read_bytes(),file.stat().st_mode&0o777)
-            if (backup/'legacy-helper').exists():
-                if legacy.exists():validate_tree(legacy);shutil.rmtree(legacy)
-                shutil.copytree(backup/'legacy-helper',legacy)
-            if (backup/'legacy-mihomo-sudoers').exists():atomic(old_mihomo_rule,(backup/'legacy-mihomo-sudoers').read_bytes(),0o440)
-            if (backup/'standalone-ssh-worker').exists():
-                atomic(Path('/data/minas/ssh/recover-ssh.py'),(backup/'standalone-ssh-worker').read_bytes(),0o700)
-            if (backup/'standalone-ssh-shell-worker').exists():
-                atomic(Path('/data/minas/ssh/restore-ssh.sh'),(backup/'standalone-ssh-shell-worker').read_bytes(),0o700)
-            if (backup / 'legacy-source.json').exists():
-                legacy = Path(json.loads((backup / 'legacy-source.json').read_text())['path'])
-                if legacy not in [p / 'users' / args.user for p in LEGACY]:
-                    raise ValueError('无效恢复路径')
-                atomic(legacy / 'state.json', (backup / 'legacy-state/state.json').read_bytes())
-                if (legacy / MIGRATION_MARK).exists(): (legacy / MIGRATION_MARK).unlink()
             if (backup / 'sudoers').exists(): atomic(rule, (backup / 'sudoers').read_bytes(), 0o440)
             elif rule.exists(): rule.unlink()
             for name in ['minas-privileged', 'minas-privileged-v2', 'taskcenter', 'dockermanager-' + args.user]:
@@ -601,10 +353,6 @@ def main():
                 if saved_cron.exists(): atomic(CRON / name, saved_cron.read_bytes(), 0o644)
                 elif (CRON / name).exists(): (CRON / name).unlink()
             raise
-        else:
-            receipt=BASE/'migration'/args.plugin/(args.user+'.json')
-            if args.action=='install' and receipt.is_file():
-                state=json.loads(receipt.read_text());state['activated']=True;atomic(receipt,state)
         finally:
             if args.action == 'install': shutil.rmtree(backup)
     subprocess.run(['/usr/bin/systemctl', 'reload', 'crond.service'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

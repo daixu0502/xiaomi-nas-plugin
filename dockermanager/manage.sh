@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='dockermanager'
 PLUGIN_LABEL='docker'
-PLUGIN_VERSION='1.1.27'
+PLUGIN_VERSION='1.1.28'
 UNINSTALL_NOTE='保留 Docker 引擎、容器、镜像、网络和存储卷。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -358,6 +358,17 @@ nas_prepare() {
     flock -w 60 -x 7 || nas_fail "另一个安装或卸载任务仍在执行，请稍后重试。"
     trap 'flock -u 7 2>/dev/null || true' 0
     nas_check_user "$2"
+    if [ "$NAS_ACTION" = install ]; then
+        python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" --help >/dev/null
+        python3 -B - "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" "$NAS_USER" "$NAS_PLUGIN" "$NAS_HOME" <<'MINAS_DIRECT_STATE'
+import importlib.util,os,pwd,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('direct_state',sys.argv[1]);r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r)
+user,plugin,home=sys.argv[2],sys.argv[3],Path(sys.argv[4]);owner=pwd.getpwnam(user)
+r.plain(home);home.mkdir(mode=0o700,parents=True,exist_ok=True)
+r.persist_state(user,plugin,home,None,(owner.pw_uid,owner.pw_gid),False)
+MINAS_DIRECT_STATE
+    fi
     nas_log "$NAS_LABEL：已校验用户 $NAS_USER、插件目录和存储池。"
 }
 nas_remove_entry() {
@@ -418,13 +429,6 @@ nas_uninstall() {
     nas_pool_path "$NAS_SRC" pluginsrc; nas_pool_path "$NAS_TMP" plugintmp
     rm -rf "$NAS_SRC" "$NAS_TMP" "$NAS_HOME"
     if ! nas_other_users; then
-        case "$NAS_PLUGIN" in
-            dockermanager)
-                if ! ls /etc/sudoers.d/dockermanager-u* >/dev/null 2>&1; then
-                    rm -f /data/plugin/.dockermanager-system/docker-manager-helper
-                    rmdir /data/plugin/.dockermanager-system 2>/dev/null || true
-                fi;;
-        esac
         rm -f "/data/plugin/www/icon/$NAS_PLUGIN.icon"
     fi
     systemctl reload crond.service >/dev/null 2>&1 || true
@@ -456,17 +460,8 @@ installer_emit_install() {
     installer_emit_probe
     cat <<'NAS_INSTALL_SCRIPT'
 INSTALLER_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
-python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" || nas_fail "统一目录检查失败"
 nas_prepare install "${1:-}"
 
-nas_layout_exit() {
-    nas_layout_rc=$?
-    trap - 0
-    if [ "$nas_layout_rc" != 0 ]; then python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" --abort --user "$NAS_USER" || true; fi
-    flock -u 7 2>/dev/null || true
-    exit "$nas_layout_rc"
-}
-trap nas_layout_exit 0
 PLUGIN_USER=$NAS_USER
 fail() { nas_fail "$@"; }
 BUNDLE_DIR=$INSTALLER_DIR
@@ -595,7 +590,6 @@ echo "APP 插件清单：$LIST_FILE"
 runuser -u "$PLUGIN_USER" -- env PLUG_USER="$PLUGIN_USER" PLUG_NAME="$PLUGIN_NAME" PLUG_HOME_DIR="$PLUGIN_HOME" PLUG_SRC_DIR="$SRC_DIR" PLUG_TMP_DIR="$TMP_DIR" PLUG_STATUS=unverified /usr/bin/plugin.sh verify || nas_fail "系统完整性校验失败"
 rm -f "$backup_file"
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture --user "$PLUGIN_USER" --plugin "$PLUGIN_NAME" --package "$INSTALLER_DIR/$PLUGIN_NAME" || nas_fail "规范校验或恢复登记失败"
-python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" --finish --user "$NAS_USER" || nas_fail "当前插件旧文件清理未完成，已保留旧数据"
 NAS_INSTALL_SCRIPT
 }
 installer_emit_uninstall() {

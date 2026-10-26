@@ -13,7 +13,7 @@
 | 已有 root SSH，需要开机自动恢复 SSH | [install-ssh-autostart-fix.sh](../install-ssh-autostart-fix.sh) | 电脑的 WSL / Linux |
 | 容器无法出网，或需要默认 bridge 的 IPv6 出口 | [fix-docker-bridge.sh](../fix-docker-bridge.sh) | NAS 的 root SSH 终端 |
 | 升级 Docker 到 29.9.2，或回退已有升级事务 | [upgrade-docker-29.9.2.sh](../upgrade-docker-29.9.2.sh) | NAS 的 root SSH 终端 |
-| 手动迁移旧目录，或恢复未完成的目录迁移 | [migrate-minas-data.sh](../migrate-minas-data.sh) | NAS 的 root SSH 终端 |
+| 检查遗留、选择清理、卸载插件或撤销脚本 | [migrate-minas-data.sh](../migrate-minas-data.sh) | NAS 的 root SSH 终端 |
 
 新版插件安装包和独立 SSH、Docker 工具已支持自动迁移旧目录。常规安装、更新直接使用相应入口即可，通常不需要手动运行迁移脚本。
 
@@ -293,50 +293,20 @@ python3 -B /data/minas/docker/runtime/upgrade.py --rollback "$DOCKER_TXN"
 
 详细的备份范围、精确恢复、旧事务兼容性及验证边界见 [Docker 29.9.2 安装与回退](docker-upgrade-29.9.2.md)。
 
-## 6. 自定义目录迁移与失败恢复
+## 6. 检查、清理、卸载与恢复
 
-### 常规安装采用自动迁移
-
-新版插件安装包、SSH 开机恢复安装器及 Docker 工具，执行安装、更新或修改操作时只检查自己所需的旧文件：
-
-- 全新设备直接建立 `/data/minas/` 布局。
-- 旧设备只接管当前插件或工具的数据；其他插件可继续使用旧目录。
-- 共用目录中先清理已迁移插件自己的文件，最后一个使用者迁走后才清理已无用途的公共文件；不认识的文件保留。
-- 保留配置、任务、密钥、插件版本和服务原启停意图；镜像与卷数据不参与目录搬迁。
-- 涉及旧自定义 Docker 运行目录时，会协调短暂停止 Docker 和容器。
-- 只读检查和状态查询不会启动自动迁移；新旧目录冲突时停止，不自动合并覆盖。
-
-首次开启 SSH 的两个脚本不含目录迁移。各工具具体负责的范围见[数据目录说明](data-layout.md)。
-
-### 手动迁移
-
-`migrate-minas-data.sh` 是维护入口，**手动检查和执行均需要 `--bundle` 指向与当前 NAS 匹配的迁移包目录**，其中包含 `plan.json` 和校验过的配套文件。它不是插件安装包 `.tar.gz`，只复制此 sh 文件不能完成手动迁移；常规使用应选择上面的自动迁移流程。
-
-已准备好匹配材料时，在 NAS root 终端执行：
+安装包与脚本直接使用新目录，不再探测或迁移旧布局。`migrate-minas-data.sh` 保留原下载文件名，内容已替换为检查清理卸载工具，无需额外迁移包。
 
 ```sh
-BUNDLE='/data/已准备好的迁移包目录'
-
-# 只读预检迁移计划
-sh /home/rootx/migrate-minas-data.sh --check --bundle "$BUNDLE"
-
-# 执行迁移，按提示输入 MIGRATE
-sh /home/rootx/migrate-minas-data.sh --apply --bundle "$BUNDLE"
-
-# 已有迁移事务时查看状态
-sh /home/rootx/migrate-minas-data.sh --status
+sh migrate-minas-data.sh --scan
+sh migrate-minas-data.sh --delete 选择ID
+sh migrate-minas-data.sh --uninstall mediaeditor --user u103868178
+sh migrate-minas-data.sh --restore ssh
+sh migrate-minas-data.sh --restore network --transaction 事务编号
+sh migrate-minas-data.sh --restore docker --transaction 事务编号
 ```
 
-`--yes` 可与 `--apply` 配合跳过交互确认。迁移未完成、需要恢复原布局时，使用该迁移事务的编号：
-
-```sh
-LAYOUT_TXN='替换为未完成的迁移事务编号'
-python3 -B /data/minas/migration/migrate.py --rollback "$LAYOUT_TXN"
-```
-
-手动全局迁移失败通常会自动恢复；中断后应继续使用这个手动维护入口处理其事务。普通安装器和独立工具只处理自己的迁移记录，不会接管全局事务。保留维护保护和恢复材料，按错误提示处理，不能手动启动受保护服务。状态已经是 `committed` 的成功迁移不能用旧事务回滚覆盖后续数据。
-
-目录迁移、Docker 网络修复、Docker 升级分别管理事务，编号不能混用。完整布局和兼容策略见 [自定义持久目录](data-layout.md)。
+默认只读。删除、卸载、恢复均先展示影响并确认；脚本不会代为卸载现用插件或恢复三个脚本。目录识别会标注新旧归属及使用状态，拒绝删除使用中的目录和 Docker 升级备份。详见[完整说明](cleanup-and-uninstall.md)。
 
 ## 运行文件与备份保留
 
@@ -347,9 +317,8 @@ python3 -B /data/minas/migration/migrate.py --rollback "$LAYOUT_TXN"
 | `/data/minas/docker/network/` | 网络修复程序、IPv6 运行库、规则摘要和网络事务 |
 | `/data/minas/docker/runtime/` | Docker 独立运行时、升级／回退程序及升级事务 |
 | `/data/minas/backups/docker/` | 按上述示例保存的 Docker 升级前备份 |
-| `/data/minas/migration/` | 迁移程序、事务及失败恢复材料 |
 | `/run/minas-docker-ipv6/` | 内存中的 IPv6 监听状态与运行锁 |
 
-运行目录中的配置、凭据、锁和恢复材料不能整体当作缓存删除。Docker 升级备份、对应事务，以及中断回退时数据根内的 `.minas-rollback-volumes-*` 暂存应保留，后者可能包含唯一的当前卷数据。旧备份路径由新版程序映射到迁移后的位置，无需手动修改旧事务 JSON。
+运行目录中的配置、凭据、锁和恢复材料不能整体当作缓存删除。Docker 升级备份、对应事务，以及中断回退时数据根内的 `.minas-rollback-volumes-*` 暂存应保留，后者可能包含唯一的当前卷数据。升级备份和恢复所需事务使用当前规范路径，不能作为普通遗留清理。
 
 [原厂插件管理脚本](firmware-reference/README.md) 仅供核对行为，不用于覆盖系统文件。

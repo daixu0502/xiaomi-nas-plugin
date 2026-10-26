@@ -29,7 +29,7 @@ PLUGINS = {'mihomo', 'dockermanager', 'taskcenter', 'nascenter', 'sshrecovery', 
 SERVERS = {'mihomo', 'quickshare', 'downloadcenter'}
 MANAGED = SERVERS | {'taskcenter'}
 UNIT = 'minas-plugin-recovery-v2'
-VERSION = '1.6.3'
+VERSION = '1.6.4'
 WATCH_UNIT = UNIT + '-watch.service'
 RUNTIME = Path('/run/minas-plugin-recovery-v2')
 
@@ -37,8 +37,6 @@ RUNTIME = Path('/run/minas-plugin-recovery-v2')
 """Small standalone layout primitives; generated constants select one owner."""
 DATA_LAYOUT_VERSION = 1
 DATA_LAYOUT_ROOT = '/data/minas'
-DATA_LAYOUT_SCOPE = 'recovery'
-DATA_LAYOUT_PATHS = {}
 
 
 def _layout_secure(path):
@@ -88,28 +86,18 @@ def _layout_initialize():
 
 
 def ensure_data_layout():
-    # Shared runtimes initialize their own parents; migration is installer-owned.
-    # No plugin, SSH or Docker migration archive is embedded here.
+    """Initialize only the current layout; never inspect or move former paths."""
     _layout_initialize()
 
 
 def remap_data_path(value):
-    import os
     from pathlib import Path
     path=Path(value)
-    if not path.is_absolute() or '..' in path.parts:raise ValueError('invalid historical path')
-    for old,new in DATA_LAYOUT_PATHS.items():
-        if path==Path(old) or path.is_relative_to(old):
-            target=Path(new)/path.relative_to(old)
-            if os.path.lexists(target):
-                _layout_secure(DATA_LAYOUT_ROOT)
-                if os.path.lexists(path):raise ValueError('conflicting historical file: '+str(path))
-                return target
+    if not path.is_absolute() or '..' in path.parts:raise ValueError('invalid state path')
     return path
 
 
 def rebase_data_text(text):
-    for old,new in sorted(DATA_LAYOUT_PATHS.items(),key=lambda pair:len(pair[0]),reverse=True):text=text.replace(old,new)
     return text
 # END MINAS DATA LAYOUT
 
@@ -252,19 +240,6 @@ if not stat.S_ISDIR(s.st_mode) or s.st_uid!=os.geteuid() or s.st_mode&0o077:rais
 fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
 buf=ctypes.create_string_buffer(256)
 if ctypes.CDLL(None).fstatfs(fd,buf):raise OSError('fstatfs failed')
-if ctypes.c_long.from_buffer(buf).value!=0x01021994:
-    # Pending bulk commands are tasks, not disposable memory state.
-    old=directory/'job.json';target=home/'var/job.json'
-    if old.is_symlink() or target.is_symlink():raise ValueError('redirected operation queue')
-    if old.exists():
-        with old.open('rb') as source:raw=source.read(4194305)
-        if len(raw)>4194304 or not isinstance(json.loads(raw),dict):raise ValueError('invalid operation queue')
-        if target.exists() and target.read_bytes()!=raw:raise ValueError('conflicting operation queues')
-        if not target.exists():
-            tmpf,tmp=tempfile.mkstemp(prefix='.job-',dir=target.parent)
-            with os.fdopen(tmpf,'wb') as f:f.write(raw);f.flush();os.fsync(f.fileno())
-            os.replace(tmp,target)
-        old.unlink()
 sock.sendmsg([b'runtime'],[(socket.SOL_SOCKET,socket.SCM_RIGHTS,array.array('i',[fd]))])
 '''
 
@@ -601,74 +576,21 @@ def normalize(user, plugin, payload):
 
 
 def persist_state(user, plugin, home, src, owner, enabled):
-    """Stop user services, move data once, preserve inode when on one filesystem."""
-    protected(DATA, 0o711)
-    protected(DATA / user, 0o711)
-    destination = DATA / user / plugin
-    protected(destination, 0o711)
-    running = plugin in SERVERS and control(user, plugin, home, src, 'status', False).returncode == 0
-    pending = any(not (home/name).is_symlink() or os.readlink(home/name)!=str(destination/name) for name in ('etc','var'))
-    enabled_file = home / 'var/enabled'
-    download_enabled = plugin == 'downloadcenter' and enabled_file.is_file()
-    if running and pending:
-        control(user, plugin, home, src, 'stop')
-    try:
-        for name in ('etc', 'var'):
-            current, target = home / name, destination / name
-            if current.is_symlink():
-                legacy=Path('/data/.minas-plugin-data')/user/plugin/name
-                if os.readlink(current)==str(legacy):
-                    _layout_secure(legacy.parent)
-                    require(legacy.is_dir() and not legacy.is_symlink(),'legacy plugin state missing')
-                    require(not os.path.lexists(target),'new plugin state already exists; legacy retained')
-                    require(legacy.stat().st_dev==destination.stat().st_dev,'legacy plugin state requires the same filesystem')
-                    os.rename(legacy,target)
-                    temporary=current.with_name('.'+name+'.layout-'+os.urandom(6).hex())
-                    try:
-                        temporary.symlink_to(target);os.lchown(temporary,*owner)
-                        require(current.is_symlink() and os.readlink(current)==str(legacy),'legacy state link changed')
-                        os.replace(temporary,current)
-                    except BaseException:
-                        temporary.unlink(missing_ok=True);os.rename(target,legacy);raise
-                    continue
-                require(os.readlink(current) == str(target), 'unmanaged state symlink')
-                plain(target)
-                require(target.is_dir(), 'persistent state missing')
-                continue
+    """Install directly into the current persistent layout; never move old data."""
+    protected(DATA,0o711);protected(DATA/user,0o711)
+    destination=DATA/user/plugin;protected(destination,0o711)
+    for name in ('etc','var'):
+        target=destination/name;current=home/name
+        if current.is_symlink():
+            require(os.readlink(current)==str(target),'unmanaged state symlink')
+        elif current.exists():
             plain(current)
-            require(not target.exists(), 'persistent state already exists; refuse overwrite: ' + str(target))
-            if not current.exists():
-                target.mkdir(mode=0o700)
-                os.chown(target, *owner)
-            elif current.stat().st_dev == destination.stat().st_dev:
-                os.replace(current, target)
-            else:
-                # Copy as the owner; do not follow links to user caches as root.
-                target.mkdir(mode=0o700)
-                os.chown(target, *owner)
-                try:
-                    call(['runuser', '-u', user, '--', 'cp', '-a', str(current) + '/.', target])
-                except BaseException:
-                    shutil.rmtree(target)
-                    raise
-                # Keep a migration rollback directory until the link is installed.
-                old = current.with_name('.' + name + '.pre-persistence')
-                require(not old.exists(), 'unfinished data migration')
-                os.replace(current, old)
-                try:
-                    linked(current, target, owner)
-                except BaseException:
-                    os.replace(old, current)
-                    raise
-                shutil.rmtree(old)
-            target.chmod(0o700)
-            linked(current, target, owner)
-        if download_enabled:
-            # stop removed this flag; persistence must retain its prior meaning.
-            atomic(destination / 'var/enabled', b'', 0o600, owner)
-    finally:
-        if running and pending:
-            control(user, plugin, home, src, 'start')
+            require(current.is_dir() and not any(current.iterdir()),'非空本地状态目录不自动搬移，请先用清理工具检查')
+            current.rmdir()
+        if not target.exists():
+            target.mkdir(mode=0o700);os.chown(target,*owner)
+        plain(target);require(target.is_dir() and target.stat().st_uid==owner[0],'invalid persistent owner')
+        target.chmod(0o700);linked(current,target,owner)
 
 
 def port_registry(user, plugin, port, remove=False):
@@ -742,14 +664,6 @@ UMask=0077
 WantedBy=multi-user.target
 '''
     root = Path('/etc/systemd/system')
-    # A legacy coordinator must keep supervising unmigrated plugins. Retire the
-    # former names only when they already point to this new data root.
-    for previous in ('minas-plugin-recovery-watch.service','minas-plugin-recovery.service','minas-plugin-recovery.timer'):
-        old=root/previous
-        if old.is_file() and str(BASE) in old.read_text() and '/data/.minas-plugin-recovery' not in old.read_text():
-            call(['systemctl','disable','--now',previous],check=False);old.unlink()
-    old_cron=Path('/etc/cron.d/minas-plugin-recovery')
-    if old_cron.is_file() and str(BASE) in old_cron.read_text() and '/data/.minas-plugin-recovery' not in old_cron.read_text():old_cron.unlink()
     for name, content in ((UNIT + '.service', service), (WATCH_UNIT, watcher)):
         path = root / name
         if not path.exists() or path.read_text() != content:
@@ -1302,16 +1216,15 @@ def main():
     args = parser.parse_args()
     require(os.geteuid() == 0, 'root required')
     if args.action=='status':
-        directory=BASE if BASE.exists() else Path('/data/.minas-plugin-recovery')
+        directory=BASE
         if not directory.exists():return
         _layout_secure(directory)
         records=directory/'records'
         for item in sorted(records.iterdir()) if records.exists() else []:
             print(item.name+(' removed' if (item/'removed').exists() else ' registered'))
         return
+    if Path('/run/minas-plugin-maintenance').exists() and args.action in ('watch','reconcile','bootstrap','service'):return
     if str(BASE)=='/data/minas/plugins/recovery':ensure_data_layout()
-    if Path('/data/minas/migration/maintenance').exists() and args.action in ('watch','reconcile','bootstrap','service'):
-        raise RuntimeError('目录迁移正在进行，请稍后重试')
     protected(BASE)
     # Install/uninstall already owns this lock; their child coordinator must not
     # reacquire it. Timer/Cron use a nonblocking lock and retry on the next tick.

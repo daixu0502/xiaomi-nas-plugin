@@ -551,8 +551,6 @@ def audit(ipv6=False, subnet=None):
 """Small standalone layout primitives; generated constants select one owner."""
 DATA_LAYOUT_VERSION = 1
 DATA_LAYOUT_ROOT = '/data/minas'
-DATA_LAYOUT_SCOPE = 'docker-network'
-DATA_LAYOUT_PATHS = {'/data/docker-bridge-repair': '/data/minas/docker/network'}
 
 
 def _layout_secure(path):
@@ -602,192 +600,19 @@ def _layout_initialize():
 
 
 def ensure_data_layout():
-    # Shared runtimes initialize their own parents; migration is installer-owned.
-    # No plugin, SSH or Docker migration archive is embedded here.
+    """Initialize only the current layout; never inspect or move former paths."""
     _layout_initialize()
 
 
 def remap_data_path(value):
-    import os
     from pathlib import Path
     path=Path(value)
-    if not path.is_absolute() or '..' in path.parts:raise ValueError('invalid historical path')
-    for old,new in DATA_LAYOUT_PATHS.items():
-        if path==Path(old) or path.is_relative_to(old):
-            target=Path(new)/path.relative_to(old)
-            if os.path.lexists(target):
-                _layout_secure(DATA_LAYOUT_ROOT)
-                if os.path.lexists(path):raise ValueError('conflicting historical file: '+str(path))
-                return target
+    if not path.is_absolute() or '..' in path.parts:raise ValueError('invalid state path')
     return path
 
 
 def rebase_data_text(text):
-    for old,new in sorted(DATA_LAYOUT_PATHS.items(),key=lambda pair:len(pair[0]),reverse=True):text=text.replace(old,new)
     return text
-
-
-"""One tool's transactional directory handover; no packaged foreign programs."""
-DATA_LAYOUT_COPY_PATHS = {}
-DATA_LAYOUT_PROGRAM = 'docker/network/repair.py'
-
-
-def _layout_tool_migrate():
-    import contextlib,fcntl,hashlib,json,os,stat
-    from pathlib import Path
-    root=Path(DATA_LAYOUT_ROOT);work=root/'migration'/DATA_LAYOUT_SCOPE
-    for directory in (root/'migration',work):
-        if not directory.exists():directory.mkdir(mode=0o700)
-        _layout_secure(directory)
-    pointer=work/'state.json'
-    fd=os.open('/run/minas-layout-'+DATA_LAYOUT_SCOPE+'.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
-    def save(state):_layout_atomic(pointer,json.dumps(state,ensure_ascii=False,indent=2)+'\n')
-    def snapshot(state,path):
-        key=str(path)
-        if key in state['files']:return
-        if not os.path.lexists(path):state['files'][key]=None;save(state);return
-        s=path.lstat()
-        if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or s.st_mode&0o022:raise ValueError('unsafe tool entry: '+key)
-        name=hashlib.sha256(key.encode()).hexdigest();_layout_atomic(work/name,path.read_bytes())
-        state['files'][key]=dict(blob=name,mode=stat.S_IMODE(s.st_mode),owner=[s.st_uid,s.st_gid],times=[s.st_atime_ns,s.st_mtime_ns]);save(state)
-    def rollback(state):
-        globals().get('_layout_remove_compat',lambda:None)()
-        for old,item in reversed(list(state['moves'].items())):
-            old,new=Path(old),Path(item['new']);present=new if new.exists() else old
-            if [present.stat().st_dev,present.stat().st_ino]!=item['inode']:raise ValueError('tool directory identity changed')
-            if present==new:
-                if old.exists():raise ValueError('conflicting rollback directory')
-                os.rename(new,old)
-        for name,item in reversed(list(state['files'].items())):
-            path=Path(name)
-            if item is None:path.unlink(missing_ok=True);continue
-            _layout_atomic(path,(work/item['blob']).read_bytes(),item['mode'])
-            os.chown(path,*item['owner']);os.utime(path,ns=tuple(item['times']))
-        _layout_run(['systemctl','daemon-reload'])
-        callback=globals().get('_layout_runtime_restart')
-        if callback and state.get('runtime'):callback(state['runtime'],False)
-        for unit,wanted in state.get('services',{}).items():
-            if wanted:_layout_run(['systemctl','start',unit])
-        state['phase']='rolled-back';save(state)
-    locks=contextlib.ExitStack();cooperating=[]
-    try:
-        s=os.fstat(fd)
-        if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or s.st_mode&0o022:raise ValueError('unsafe tool migration lock')
-        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        for name in globals().get('_layout_lock_paths',lambda:[])():
-            path=Path(name)
-            if not path.parent.exists():continue
-            _layout_secure(path.parent)
-            other=os.open(path,os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
-            locks.callback(os.close,other);s=os.fstat(other)
-            if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or s.st_mode&0o022:raise ValueError('unsafe cooperating operation lock')
-            if not any(os.fstat(previous).st_dev==s.st_dev and os.fstat(previous).st_ino==s.st_ino for previous in cooperating):
-                fcntl.flock(other,fcntl.LOCK_EX|fcntl.LOCK_NB)
-            cooperating.append(other)
-        if pointer.exists():
-            previous=json.loads(pointer.read_text())
-            if previous.get('scope')!=DATA_LAYOUT_SCOPE:raise ValueError('migration scope mismatch')
-            if previous['phase'] not in ('committed','rolled-back'):rollback(previous)
-        moves={}
-        for old,new in DATA_LAYOUT_PATHS.items():
-            if not os.path.lexists(old):continue
-            _layout_secure(old)
-            if os.path.lexists(new):
-                if globals().get('_layout_is_compat',lambda p:False)(old):continue
-                raise ValueError('同一工具的新旧目录同时存在，未覆盖：'+old)
-            parent=Path(new).parent
-            while not parent.exists():parent=parent.parent
-            _layout_secure(parent)
-            if Path(old).stat().st_dev!=parent.stat().st_dev or os.path.ismount(old):raise ValueError('tool migration requires the same filesystem')
-            moves[old]=dict(new=new,inode=[Path(old).stat().st_dev,Path(old).stat().st_ino])
-        if not moves:
-            _layout_copy_shared_state()
-            if DATA_LAYOUT_SCOPE=='ssh':globals().get('_layout_after_commit',lambda:None)()
-            return
-        state=dict(scope=DATA_LAYOUT_SCOPE,phase='prepared',moves=moves,files={},services={},runtime=None)
-        # Journal only programs/configuration referring to this tool's paths.
-        entries=[]
-        for old in moves:
-            if Path(old).name.endswith('backups'):continue
-            for p in Path(old).rglob('*'):
-                relative=p.relative_to(old)
-                if any(part in ('transactions','keys','host','backups','__pycache__') for part in relative.parts):continue
-                if p.is_file() and not p.is_symlink() and (p.suffix in ('.py','.sh') or p.name=='daemon.json'):entries.append(p)
-        for directory in ('/etc/systemd/system','/etc/cron.d'):
-            for p in Path(directory).rglob('*'):
-                if not p.is_file() or p.is_symlink():continue
-                data=p.read_bytes()
-                if any(old.encode() in data for old in moves):
-                    entries.append(p)
-                    if directory.endswith('system'):
-                        unit=p.relative_to(directory).parts[0]
-                        if unit.endswith('.d'):unit=unit[:-2]
-                        if unit in globals().get('DATA_LAYOUT_SERVICES',()):state['services'][unit]=_layout_run(['systemctl','is-active','--quiet',unit],False).returncode==0
-        program=root/DATA_LAYOUT_PROGRAM if DATA_LAYOUT_PROGRAM else None
-        if program:
-            original=next((Path(old)/program.relative_to(item['new']) for old,item in moves.items() if program.is_relative_to(item['new'])),program)
-            snapshot(state,original)
-        for p in globals().get('_layout_journal_paths',lambda:[])():snapshot(state,Path(p))
-        for p in entries:snapshot(state,p)
-        save(state)
-        try:
-            capture=globals().get('_layout_runtime_capture')
-            if capture:state['runtime']=capture(moves);save(state)
-            prepare=globals().get('_layout_runtime_pause')
-            if prepare and state.get('runtime'):prepare(state['runtime'])
-            else:
-                for unit in state['services']:_layout_run(['systemctl','stop',unit])
-            state['phase']='stopped';save(state)
-            for old,item in moves.items():
-                target=Path(item['new']);target.parent.mkdir(mode=0o755,parents=True,exist_ok=True);_layout_secure(target.parent)
-                os.rename(old,target);save(state)
-            state['phase']='moved';save(state)
-            for name,item in state['files'].items():
-                if item is None:continue
-                target=Path(rebase_data_text(name));data=(work/item['blob']).read_bytes()
-                if b'\0' not in data:
-                    for old,new in DATA_LAYOUT_PATHS.items():data=data.replace(old.encode(),new.encode())
-                _layout_atomic(target,data,item['mode']);os.chown(target,*item['owner'])
-            # Install only this entry's own current Python worker. No unrelated
-            # Docker/network/SSH installer is carried in an archive.
-            source=globals().get('__file__','')
-            if not source or not Path(source).is_file():source=os.environ.get('MINAS_LAYOUT_SHELL_SOURCE','')
-            program=root/DATA_LAYOUT_PROGRAM if DATA_LAYOUT_PROGRAM else None
-            if program and source and Path(source).is_file() and any(program.is_relative_to(item['new']) for item in moves.values()):
-                s=Path(source).lstat()
-                if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or s.st_mode&0o022:raise ValueError('unsafe current tool worker')
-                _layout_atomic(program,Path(source).read_bytes(),0o700)
-            _layout_copy_shared_state()
-            _layout_run(['systemctl','daemon-reload'])
-            restart=globals().get('_layout_runtime_restart')
-            if restart and state.get('runtime'):restart(state['runtime'],True)
-            else:
-                for unit,wanted in state['services'].items():
-                    if wanted:_layout_run(['systemctl','start',unit])
-            globals().get('_layout_after_commit',lambda:None)()
-            state['phase']='committed';save(state)
-        except BaseException:
-            rollback(state);raise
-    finally:locks.close();os.close(fd)
-
-
-def _layout_run(args,check=True):
-    import subprocess
-    return subprocess.run(args,check=check,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=180)
-
-
-def _layout_copy_shared_state():
-    return
-
-
-def ensure_data_layout():
-    _layout_initialize()
-    _layout_tool_migrate()
-
-DATA_LAYOUT_SERVICES = ('minas-docker-ipv6.service','minas-docker-ipv6-events.service')
-def _layout_lock_paths():
-    from pathlib import Path
-    return [Path('/data/docker-bridge-repair/lock')]
 # END MINAS DATA LAYOUT
 
 def secure_dir(path):
@@ -1023,6 +848,7 @@ def main(argv=None):
     group.add_argument('--apply', action='store_true', help='修复并设置 10 分钟自动回退；会重启 Docker')
     group.add_argument('--confirm', metavar='ID', help='用户验证联网后确认事务，取消回退')
     group.add_argument('--rollback', metavar='ID', help='回退尚未确认的事务')
+    group.add_argument('--restore', metavar='ID', help='撤销已确认的网络修复；会重启 Docker')
     group.add_argument('--sync-ipv6', action='store_true', help=argparse.SUPPRESS)
     group.add_argument('--watch-ipv6', action='store_true', help=argparse.SUPPRESS)
     group.add_argument('--install-ipv6-events', action='store_true', help='将已启用的 IPv6 维护改为纯事件驱动，不重启 Docker')
@@ -1030,9 +856,9 @@ def main(argv=None):
     parser.add_argument('--ipv6-subnet', help='默认 bridge 使用的 ULA /64；仅适用于 --ipv6')
     parser.add_argument('--yes', action='store_true', help='明确允许 --apply 中断 Docker，跳过交互确认')
     args = parser.parse_args(argv)
-    if args.yes and not args.apply:
-        parser.error('--yes 只能与 --apply 同时使用')
-    if (args.ipv6 or args.ipv6_subnet) and (args.confirm or args.rollback or args.sync_ipv6 or args.watch_ipv6 or args.install_ipv6_events):
+    if args.yes and not (args.apply or args.restore):
+        parser.error('--yes 只能与 --apply 或 --restore 同时使用')
+    if (args.ipv6 or args.ipv6_subnet) and (args.confirm or args.rollback or args.restore or args.sync_ipv6 or args.watch_ipv6 or args.install_ipv6_events):
         parser.error('--ipv6 仅用于 --check 或 --apply')
     if args.ipv6_subnet and not args.ipv6:
         parser.error('--ipv6-subnet 需要 --ipv6')
@@ -1052,10 +878,8 @@ def main(argv=None):
     if os.geteuid() != 0:
         raise RuntimeError('需要 NAS root 命令行；本工具不负责获取 root')
     if args.watch_ipv6:
-        if str(BASE)=='/data/minas/docker/network' and Path('/data/docker-bridge-repair').exists():ensure_data_layout()
-        if Path('/data/minas/migration/maintenance').exists():raise RuntimeError('目录迁移正在进行')
         watch_ipv6(); return 0
-    if not (args.apply or args.confirm or args.rollback or args.sync_ipv6 or args.install_ipv6_events):
+    if not (args.apply or args.confirm or args.rollback or args.restore or args.sync_ipv6 or args.install_ipv6_events):
         report = audit(args.ipv6, subnet)
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0 if not report['needsChange'] else 2
@@ -1063,7 +887,6 @@ def main(argv=None):
     if args.apply and not audit(args.ipv6, subnet)['needsChange']:
         print('当前原生 bridge 网络正常，无需修复；未重启 Docker、未写入文件。')
         return 0
-    if Path('/data/minas/migration/maintenance').exists():raise RuntimeError('目录迁移正在进行')
     secure_dir(BASE / 'transactions')
     lock_fd = os.open(BASE / 'lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     with os.fdopen(lock_fd, 'r+') as lock:
@@ -1089,8 +912,13 @@ def main(argv=None):
         elif args.sync_ipv6:
             sync_ipv6()
         else:
-            folder, state = transaction(args.confirm or args.rollback)
-            if args.confirm:
+            folder, state = transaction(args.confirm or args.rollback or args.restore)
+            if args.restore:
+                if state['phase'] not in ('pending','confirmed'):raise ValueError('该事务不能恢复')
+                if not args.yes and (not sys.stdin.isatty() or input('会重启 Docker。输入 RESTORE：')!='RESTORE'):raise ValueError('未确认恢复')
+                state['phase']='pending';save(folder,state)
+                rollback(folder,state)
+            elif args.confirm:
                 confirm(folder, state)
             else:
                 rollback(folder, state)

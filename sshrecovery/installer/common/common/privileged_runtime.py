@@ -10,7 +10,7 @@ import stat
 import subprocess
 import time
 
-VERSION = '1.2.4'
+VERSION = '1.2.5'
 LAYOUT_VERSION = 3
 API_VERSION = 1
 BASE = Path('/data/minas/privileged')
@@ -26,8 +26,6 @@ class DockerBusyError(ValueError):
 """Small standalone layout primitives; generated constants select one owner."""
 DATA_LAYOUT_VERSION = 1
 DATA_LAYOUT_ROOT = '/data/minas'
-DATA_LAYOUT_SCOPE = 'privileged'
-DATA_LAYOUT_PATHS = {}
 
 
 def _layout_secure(path):
@@ -77,28 +75,18 @@ def _layout_initialize():
 
 
 def ensure_data_layout():
-    # Shared runtimes initialize their own parents; migration is installer-owned.
-    # No plugin, SSH or Docker migration archive is embedded here.
+    """Initialize only the current layout; never inspect or move former paths."""
     _layout_initialize()
 
 
 def remap_data_path(value):
-    import os
     from pathlib import Path
     path=Path(value)
-    if not path.is_absolute() or '..' in path.parts:raise ValueError('invalid historical path')
-    for old,new in DATA_LAYOUT_PATHS.items():
-        if path==Path(old) or path.is_relative_to(old):
-            target=Path(new)/path.relative_to(old)
-            if os.path.lexists(target):
-                _layout_secure(DATA_LAYOUT_ROOT)
-                if os.path.lexists(path):raise ValueError('conflicting historical file: '+str(path))
-                return target
+    if not path.is_absolute() or '..' in path.parts:raise ValueError('invalid state path')
     return path
 
 
 def rebase_data_text(text):
-    for old,new in sorted(DATA_LAYOUT_PATHS.items(),key=lambda pair:len(pair[0]),reverse=True):text=text.replace(old,new)
     return text
 # END MINAS DATA LAYOUT
 
@@ -127,8 +115,6 @@ def lock(name, exclusive=False, wait=0):
     try:
         deadline = time.monotonic() + wait
         roots=[BASE]
-        legacy=Path('/data/.minas-privileged')
-        if str(BASE)=='/data/minas/privileged' and legacy.exists():roots.append(secure_directory(legacy))
         for directory in roots:
             fd=os.open(str(directory/name),os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600);descriptors.append(fd)
             s=os.fstat(fd)
@@ -149,8 +135,6 @@ def lock(name, exclusive=False, wait=0):
 
 
 def component_use():
-    if (Path('/data/minas/migration/maintenance').exists()):
-        raise ValueError('目录迁移正在进行，请稍后重试')
     # A worker may start just as an installer checks its reserved run. Give the
     # installer time to reject the update rather than losing that queued worker.
     return lock('component.lock', wait=10)

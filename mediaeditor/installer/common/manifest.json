@@ -1,18 +1,18 @@
 {
   "apiVersion": 1,
   "layoutVersion": 3,
-  "version": "1.2.4",
+  "version": "1.2.5",
   "plugin": "mediaeditor",
   "files": {
-    "common/component_admin.py": "363a43d96182e7611d03528cb8d66fc569f4024d1deef77c068d4f82cca86fb9",
-    "common/privileged_runtime.py": "0ecbff65b9d353ae1a1991573f00eee1bdf4a51942de33ba5e22d2b3068c4a5e",
+    "common/component_admin.py": "d6c5b59bf454807d771828698fc51bb2ccaa4309151d88db2d9e1028e0f813e0",
+    "common/privileged_runtime.py": "a2d9891adc70d1d6443bb69e46f516d9a2483a77067ed0f80ce0b5db4fa91da5",
     "common/telemetry_cache.py": "8e7c762862af1253a1464ebc41281952a5d7374c889202e3aacaf630af90e80b",
     "common/user_state_io.py": "de65b4d964c403e9bd4cf7c7b0bfe18ba3dc551f610db928ab4e4fcc015a350f",
     "component_admin.py": "8d4832b4794f552ab2bf0a5d2d17ce44e614d28497f7f54c3efa620856ec9257",
-    "minas-helper": "f6e858adb112512f7caf2a885cb6a72e2ae16e0608935362c3968240edf94fc5",
+    "minas-helper": "df07fa4df8844405e28becc15351154a98e39b8115ee27d18bacb8cbb9639c85",
     "modules/mediaeditor/api.py": "9dbc45c8035cbd55cee926414f8ae8ad6eaf82e4e5e918736287764ed5a6969d",
     "modules/mediaeditor/provider.py": "7d3a0b68f4067b4ceac17e02350011b8e7668579471a41f893e8e7f5f3aab243",
     "modules/mediaeditor/sqlite_native.py": "77da46bd7ac20bdaa12903bfe87810f22d141c085fe52481300c424780029cf7",
-    "modules/mediaeditor/store.py": "f16b9e4629fd3fcf3a4c9d03159defe3dc392d6bfb66c55bb4d22ff8d24b9364"
+    "modules/mediaeditor/store.py": "9d56fca736e4179787f1f023d6711cb1831ce4330bea5f71f309af89dec511da"
   }
 }

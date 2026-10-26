@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='quickshare'
 PLUGIN_LABEL='文件快传'
-PLUGIN_VERSION='1.1.52'
+PLUGIN_VERSION='1.1.53'
 UNINSTALL_NOTE='停止该用户的分享服务，现有分享链接失效；分享记录先备份，已上传的用户文件保留。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -358,6 +358,17 @@ nas_prepare() {
     flock -w 60 -x 7 || nas_fail "另一个安装或卸载任务仍在执行，请稍后重试。"
     trap 'flock -u 7 2>/dev/null || true' 0
     nas_check_user "$2"
+    if [ "$NAS_ACTION" = install ]; then
+        python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" --help >/dev/null
+        python3 -B - "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" "$NAS_USER" "$NAS_PLUGIN" "$NAS_HOME" <<'MINAS_DIRECT_STATE'
+import importlib.util,os,pwd,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('direct_state',sys.argv[1]);r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r)
+user,plugin,home=sys.argv[2],sys.argv[3],Path(sys.argv[4]);owner=pwd.getpwnam(user)
+r.plain(home);home.mkdir(mode=0o700,parents=True,exist_ok=True)
+r.persist_state(user,plugin,home,None,(owner.pw_uid,owner.pw_gid),False)
+MINAS_DIRECT_STATE
+    fi
     nas_log "$NAS_LABEL：已校验用户 $NAS_USER、插件目录和存储池。"
 }
 nas_remove_entry() {
@@ -443,17 +454,8 @@ installer_emit_install() {
     installer_emit_probe
     cat <<'NAS_INSTALL_SCRIPT'
 INSTALLER_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
-python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" || nas_fail "统一目录检查失败"
 nas_prepare install "${1:-}"
 
-nas_layout_exit() {
-    nas_layout_rc=$?
-    trap - 0
-    if [ "$nas_layout_rc" != 0 ]; then python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" --abort --user "$NAS_USER" || true; fi
-    flock -u 7 2>/dev/null || true
-    exit "$nas_layout_rc"
-}
-trap nas_layout_exit 0
 PLUGIN_USER=$NAS_USER
 SPEC_WAS_ENABLED=$(jq -c --arg p "$PLUGIN_NAME" 'if (.[$p].enable|type)=="boolean" then .[$p].enable else true end' "$NAS_LIST")
 SPEC_WAS_RUNNING=true
@@ -510,7 +512,6 @@ systemctl reload crond.service >/dev/null 2>&1 || true
 chown "$PLUGIN_USER:$(id -gn "$PLUGIN_USER")" "$TMP"
 chown -R "$PLUGIN_USER:$PLUGIN_USER" "$HOME_DIR" "$SRC"; chown -h "$PLUGIN_USER:$PLUGIN_USER" "$HOME_DIR/src" "$HOME_DIR/tmp" "$WEB_LINK"
 chmod 0700 "$HOME_DIR" "$VAR" "$SRC" "$TMP"; chmod 0755 "$SRC/ui"
-runuser -u "$PLUGIN_USER" -- python3 -B "$HOME_DIR/src/files/plugin_paths.py" --migrate "$HOME_DIR" || nas_fail "旧缓存迁移失败，未启动新服务"
 # Register supervision before the first service start, also on a clean NAS.
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture --user "$PLUGIN_USER" --plugin "$PLUGIN_NAME" --package "$INSTALLER_DIR/$PLUGIN_NAME" || nas_fail "规范校验或恢复登记失败"
 if [ "$SPEC_WAS_RUNNING" = true ]; then
@@ -534,7 +535,6 @@ jq --arg p "$PLUGIN_NAME" --argjson enabled "$SPEC_WAS_ENABLED" '.[$p].enable=$e
 chmod --reference="$NAS_LIST" "$entry_next"; chown --reference="$NAS_LIST" "$entry_next"; mv -f "$entry_next" "$NAS_LIST"
 flock -u 9
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture --user "$PLUGIN_USER" --plugin "$PLUGIN_NAME" --package "$INSTALLER_DIR/$PLUGIN_NAME" || nas_fail "规范校验或恢复登记失败"
-python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/data_layout.py" --finish --user "$NAS_USER" || nas_fail "当前插件旧文件清理未完成，已保留旧数据"
 NAS_INSTALL_SCRIPT
 }
 installer_emit_uninstall() {

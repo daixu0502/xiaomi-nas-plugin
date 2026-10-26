@@ -9,12 +9,12 @@
 | SSH 已能登录，让开机后自动恢复 SSH | [install-ssh-autostart-fix.sh](install-ssh-autostart-fix.sh) |
 | Docker 容器连不上网 | [fix-docker-bridge.sh](fix-docker-bridge.sh) |
 | 升级 Docker 到 29.9.2，或退回旧版 | [upgrade-docker-29.9.2.sh](upgrade-docker-29.9.2.sh) |
-| 手动处理旧目录迁移 | [migrate-minas-data.sh](migrate-minas-data.sh)，一般用不到，安装器会自动处理 |
+| 检查遗留、选择清理、卸载插件或撤销脚本 | [migrate-minas-data.sh](migrate-minas-data.sh)，默认只读检查 |
 
 ## 先分清在哪里运行
 
 - **SSH 开启、开机恢复安装器**：在电脑的 Ubuntu（WSL）或 Linux 终端运行。
-- **Docker 网络修复、Docker 升级、手动迁移**：把脚本传到 NAS 的 `/home/rootx/`，再在 NAS 的 root SSH 终端运行。NAS 上需要 Python 3。
+- **Docker 网络修复、Docker 升级、检查清理卸载**：把脚本传到 NAS 的 `/home/rootx/`，再在 NAS 的 root SSH 终端运行。NAS 上需要 Python 3。
 
 下面的电脑端命令都在存放脚本的文件夹中运行。例如文件在 Windows 的 `D:\NAS工具`，先在 WSL 输入 `cd "/mnt/d/NAS工具"`。示例中的 `192.168.31.100` 请换成自己的 NAS IP。
 
@@ -98,7 +98,7 @@ sh /home/rootx/fix-docker-bridge.sh --confirm 事务编号
 
 ## 升级 Docker 到 29.9.2
 
-先备份自己挂载给容器使用的文件夹；这些文件不包含在脚本自动备份里。升级和旧目录迁移可能暂时停止容器。
+先备份自己挂载给容器使用的文件夹；这些文件不包含在脚本自动备份里。升级和回退可能暂时停止容器。
 
 把 `upgrade-docker-29.9.2.sh` 放到 NAS 的 `/home/rootx/`，在 **NAS root 终端**依次执行：
 
@@ -135,11 +135,11 @@ sh /home/rootx/upgrade-docker-29.9.2.sh --rollback 事务编号
 
 默认保留数据卷里的当前内容，但旧镜像、容器配置和容器自身的文件会恢复到升级前。需要连数据卷也恢复到升级前时，先看[完整回退说明](docs/docker-upgrade-29.9.2.md#回退)，再决定是否执行。
 
-## 旧目录需要自己搬吗？
+## 检查旧目录与清理卸载
 
-通常不需要。新版安装器只把自己需要的文件接到 `/data/minas/`，保留配置和任务，其他插件可继续使用旧目录。最后一个使用者迁走后，再清理已无用途的公共文件。首次开启 SSH 的两个脚本不搬迁已有组件。
+安装器直接使用新目录，不再查找或搬移旧目录。已安装设备的持久数据保持在现有新布局；历史遗留由下面的工具独立检查和选择清理。
 
-`migrate-minas-data.sh` 是手动维护用的，需配套迁移资料才能执行；遇到迁移失败或目录冲突时，保留原数据和报错，按[详细说明](docs/advanced-usage.md#6-自定义目录迁移与失败恢复)处理。
+`migrate-minas-data.sh` 已替换为检查清理卸载工具，不再迁移。默认检查八个自定义插件、三个独立脚本及新旧目录；支持按 ID 删除已停用目录、按账号卸载自定义插件，以及撤销脚本更改。Docker 升级备份始终保留。详见[使用说明](docs/cleanup-and-uninstall.md)。
 
 ## 还想了解更多
 

@@ -47,8 +47,6 @@ ENV = {'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/da
 """Small standalone layout primitives; generated constants select one owner."""
 DATA_LAYOUT_VERSION = 1
 DATA_LAYOUT_ROOT = '/data/minas'
-DATA_LAYOUT_SCOPE = 'docker-runtime'
-DATA_LAYOUT_PATHS = {'/data/.minas-docker-runtime': '/data/minas/docker/runtime', '/data/docker-upgrade-backups': '/data/minas/backups/docker'}
 
 
 def _layout_secure(path):
@@ -98,249 +96,19 @@ def _layout_initialize():
 
 
 def ensure_data_layout():
-    # Shared runtimes initialize their own parents; migration is installer-owned.
-    # No plugin, SSH or Docker migration archive is embedded here.
+    """Initialize only the current layout; never inspect or move former paths."""
     _layout_initialize()
 
 
 def remap_data_path(value):
-    import os
     from pathlib import Path
     path=Path(value)
-    if not path.is_absolute() or '..' in path.parts:raise ValueError('invalid historical path')
-    for old,new in DATA_LAYOUT_PATHS.items():
-        if path==Path(old) or path.is_relative_to(old):
-            target=Path(new)/path.relative_to(old)
-            if os.path.lexists(target):
-                _layout_secure(DATA_LAYOUT_ROOT)
-                if os.path.lexists(path):raise ValueError('conflicting historical file: '+str(path))
-                return target
+    if not path.is_absolute() or '..' in path.parts:raise ValueError('invalid state path')
     return path
 
 
 def rebase_data_text(text):
-    for old,new in sorted(DATA_LAYOUT_PATHS.items(),key=lambda pair:len(pair[0]),reverse=True):text=text.replace(old,new)
     return text
-
-
-"""One tool's transactional directory handover; no packaged foreign programs."""
-DATA_LAYOUT_COPY_PATHS = {}
-DATA_LAYOUT_PROGRAM = 'docker/runtime/upgrade.py'
-
-
-def _layout_tool_migrate():
-    import contextlib,fcntl,hashlib,json,os,stat
-    from pathlib import Path
-    root=Path(DATA_LAYOUT_ROOT);work=root/'migration'/DATA_LAYOUT_SCOPE
-    for directory in (root/'migration',work):
-        if not directory.exists():directory.mkdir(mode=0o700)
-        _layout_secure(directory)
-    pointer=work/'state.json'
-    fd=os.open('/run/minas-layout-'+DATA_LAYOUT_SCOPE+'.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
-    def save(state):_layout_atomic(pointer,json.dumps(state,ensure_ascii=False,indent=2)+'\n')
-    def snapshot(state,path):
-        key=str(path)
-        if key in state['files']:return
-        if not os.path.lexists(path):state['files'][key]=None;save(state);return
-        s=path.lstat()
-        if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or s.st_mode&0o022:raise ValueError('unsafe tool entry: '+key)
-        name=hashlib.sha256(key.encode()).hexdigest();_layout_atomic(work/name,path.read_bytes())
-        state['files'][key]=dict(blob=name,mode=stat.S_IMODE(s.st_mode),owner=[s.st_uid,s.st_gid],times=[s.st_atime_ns,s.st_mtime_ns]);save(state)
-    def rollback(state):
-        globals().get('_layout_remove_compat',lambda:None)()
-        for old,item in reversed(list(state['moves'].items())):
-            old,new=Path(old),Path(item['new']);present=new if new.exists() else old
-            if [present.stat().st_dev,present.stat().st_ino]!=item['inode']:raise ValueError('tool directory identity changed')
-            if present==new:
-                if old.exists():raise ValueError('conflicting rollback directory')
-                os.rename(new,old)
-        for name,item in reversed(list(state['files'].items())):
-            path=Path(name)
-            if item is None:path.unlink(missing_ok=True);continue
-            _layout_atomic(path,(work/item['blob']).read_bytes(),item['mode'])
-            os.chown(path,*item['owner']);os.utime(path,ns=tuple(item['times']))
-        _layout_run(['systemctl','daemon-reload'])
-        callback=globals().get('_layout_runtime_restart')
-        if callback and state.get('runtime'):callback(state['runtime'],False)
-        for unit,wanted in state.get('services',{}).items():
-            if wanted:_layout_run(['systemctl','start',unit])
-        state['phase']='rolled-back';save(state)
-    locks=contextlib.ExitStack();cooperating=[]
-    try:
-        s=os.fstat(fd)
-        if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or s.st_mode&0o022:raise ValueError('unsafe tool migration lock')
-        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        for name in globals().get('_layout_lock_paths',lambda:[])():
-            path=Path(name)
-            if not path.parent.exists():continue
-            _layout_secure(path.parent)
-            other=os.open(path,os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
-            locks.callback(os.close,other);s=os.fstat(other)
-            if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or s.st_mode&0o022:raise ValueError('unsafe cooperating operation lock')
-            if not any(os.fstat(previous).st_dev==s.st_dev and os.fstat(previous).st_ino==s.st_ino for previous in cooperating):
-                fcntl.flock(other,fcntl.LOCK_EX|fcntl.LOCK_NB)
-            cooperating.append(other)
-        if pointer.exists():
-            previous=json.loads(pointer.read_text())
-            if previous.get('scope')!=DATA_LAYOUT_SCOPE:raise ValueError('migration scope mismatch')
-            if previous['phase'] not in ('committed','rolled-back'):rollback(previous)
-        moves={}
-        for old,new in DATA_LAYOUT_PATHS.items():
-            if not os.path.lexists(old):continue
-            _layout_secure(old)
-            if os.path.lexists(new):
-                if globals().get('_layout_is_compat',lambda p:False)(old):continue
-                raise ValueError('同一工具的新旧目录同时存在，未覆盖：'+old)
-            parent=Path(new).parent
-            while not parent.exists():parent=parent.parent
-            _layout_secure(parent)
-            if Path(old).stat().st_dev!=parent.stat().st_dev or os.path.ismount(old):raise ValueError('tool migration requires the same filesystem')
-            moves[old]=dict(new=new,inode=[Path(old).stat().st_dev,Path(old).stat().st_ino])
-        if not moves:
-            _layout_copy_shared_state()
-            if DATA_LAYOUT_SCOPE=='ssh':globals().get('_layout_after_commit',lambda:None)()
-            return
-        state=dict(scope=DATA_LAYOUT_SCOPE,phase='prepared',moves=moves,files={},services={},runtime=None)
-        # Journal only programs/configuration referring to this tool's paths.
-        entries=[]
-        for old in moves:
-            if Path(old).name.endswith('backups'):continue
-            for p in Path(old).rglob('*'):
-                relative=p.relative_to(old)
-                if any(part in ('transactions','keys','host','backups','__pycache__') for part in relative.parts):continue
-                if p.is_file() and not p.is_symlink() and (p.suffix in ('.py','.sh') or p.name=='daemon.json'):entries.append(p)
-        for directory in ('/etc/systemd/system','/etc/cron.d'):
-            for p in Path(directory).rglob('*'):
-                if not p.is_file() or p.is_symlink():continue
-                data=p.read_bytes()
-                if any(old.encode() in data for old in moves):
-                    entries.append(p)
-                    if directory.endswith('system'):
-                        unit=p.relative_to(directory).parts[0]
-                        if unit.endswith('.d'):unit=unit[:-2]
-                        if unit in globals().get('DATA_LAYOUT_SERVICES',()):state['services'][unit]=_layout_run(['systemctl','is-active','--quiet',unit],False).returncode==0
-        program=root/DATA_LAYOUT_PROGRAM if DATA_LAYOUT_PROGRAM else None
-        if program:
-            original=next((Path(old)/program.relative_to(item['new']) for old,item in moves.items() if program.is_relative_to(item['new'])),program)
-            snapshot(state,original)
-        for p in globals().get('_layout_journal_paths',lambda:[])():snapshot(state,Path(p))
-        for p in entries:snapshot(state,p)
-        save(state)
-        try:
-            capture=globals().get('_layout_runtime_capture')
-            if capture:state['runtime']=capture(moves);save(state)
-            prepare=globals().get('_layout_runtime_pause')
-            if prepare and state.get('runtime'):prepare(state['runtime'])
-            else:
-                for unit in state['services']:_layout_run(['systemctl','stop',unit])
-            state['phase']='stopped';save(state)
-            for old,item in moves.items():
-                target=Path(item['new']);target.parent.mkdir(mode=0o755,parents=True,exist_ok=True);_layout_secure(target.parent)
-                os.rename(old,target);save(state)
-            state['phase']='moved';save(state)
-            for name,item in state['files'].items():
-                if item is None:continue
-                target=Path(rebase_data_text(name));data=(work/item['blob']).read_bytes()
-                if b'\0' not in data:
-                    for old,new in DATA_LAYOUT_PATHS.items():data=data.replace(old.encode(),new.encode())
-                _layout_atomic(target,data,item['mode']);os.chown(target,*item['owner'])
-            # Install only this entry's own current Python worker. No unrelated
-            # Docker/network/SSH installer is carried in an archive.
-            source=globals().get('__file__','')
-            if not source or not Path(source).is_file():source=os.environ.get('MINAS_LAYOUT_SHELL_SOURCE','')
-            program=root/DATA_LAYOUT_PROGRAM if DATA_LAYOUT_PROGRAM else None
-            if program and source and Path(source).is_file() and any(program.is_relative_to(item['new']) for item in moves.values()):
-                s=Path(source).lstat()
-                if not stat.S_ISREG(s.st_mode) or s.st_uid!=0 or s.st_mode&0o022:raise ValueError('unsafe current tool worker')
-                _layout_atomic(program,Path(source).read_bytes(),0o700)
-            _layout_copy_shared_state()
-            _layout_run(['systemctl','daemon-reload'])
-            restart=globals().get('_layout_runtime_restart')
-            if restart and state.get('runtime'):restart(state['runtime'],True)
-            else:
-                for unit,wanted in state['services'].items():
-                    if wanted:_layout_run(['systemctl','start',unit])
-            globals().get('_layout_after_commit',lambda:None)()
-            state['phase']='committed';save(state)
-        except BaseException:
-            rollback(state);raise
-    finally:locks.close();os.close(fd)
-
-
-def _layout_run(args,check=True):
-    import subprocess
-    return subprocess.run(args,check=check,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=180)
-
-
-def _layout_copy_shared_state():
-    return
-
-
-def ensure_data_layout():
-    _layout_initialize()
-    _layout_tool_migrate()
-
-
-"""Docker runtime handover only; image and volume directories are untouched."""
-
-def _layout_lock_paths():
-    roots=('/data/.minas-privileged','/data/minas/privileged')
-    paths=[Path(root)/name for root in roots for name in ('component.lock','docker.lock')]
-    paths += [Path(root)/'lock' for root in ('/data/docker-bridge-repair','/data/minas/docker/network')]
-    paths += [Path(root)/'upgrade.lock' for root in ('/data/.minas-docker-runtime','/data/minas/docker/runtime')]
-    return [Path('/data/plugin/.local-plugin-installer.lock'),*paths]
-
-
-def _layout_journal_paths():
-    return [Path(DATA_LAYOUT_ROOT)/'migration/docker-runtime/maintenance',
-            *[UNIT_ROOT/(unit+'.d/98-minas-runtime-layout.conf') for unit in ('docker.service','docker.socket')]]
-
-
-def _layout_runtime_capture(moves):
-    old='/data/.minas-docker-runtime'
-    if old not in moves:return None
-    if any(json.loads(p.read_text()).get('phase') not in ('installed','rolled-back') for p in Path(old,'transactions').glob('*/state.json')):
-        raise ValueError('Docker 有未完成的升级事务，请先处理后再迁移目录')
-    if not DROPIN.is_file() or old not in DROPIN.read_text():return None
-    service=active('docker.service');sock=active('docker.socket')
-    if service!=sock:raise ValueError('Docker 服务与 socket 状态不一致，请先检查')
-    if not service:return None
-    info=json.loads(docker('info','--format','{{json .}}').stdout)
-    if info.get('LiveRestoreEnabled') or info.get('Swarm',{}).get('LocalNodeState','inactive')!='inactive':raise ValueError('不支持迁移 live-restore 或 swarm 运行时')
-    before=[dict(id=c['Id'],running=bool(c['State']['Running']),restart=c['HostConfig']['RestartPolicy']) for c in containers()]
-    return dict(before=dict(containers=before),version=info['ServerVersion'])
-
-
-def _layout_runtime_pause(state):
-    paths=_layout_journal_paths();gate=paths[0]
-    _layout_atomic(gate,b'maintenance\n')
-    for path in paths[1:]:
-        path.parent.mkdir(parents=True,exist_ok=True,mode=0o755)
-        _layout_atomic(path,'[Unit]\nConditionPathExists=!'+str(gate)+'\n',0o644)
-    _layout_run(['systemctl','daemon-reload'])
-    for item in state['before']['containers']:docker('update','--restart=no',item['id'])
-    ids=[c['id'] for c in state['before']['containers'] if c['running']]
-    if ids:docker('stop','--time','30',*ids,timeout=180)
-    _layout_run(['systemctl','stop','docker.socket','docker.service'])
-    for proc in Path('/proc').glob('[0-9]*/exe'):
-        try:exe=os.readlink(proc)
-        except OSError:continue
-        if exe.startswith('/data/.minas-docker-runtime/') and Path(exe).name in ('dockerd','containerd','containerd-shim-runc-v2','runc'):
-            raise ValueError('旧 Docker 运行时尚未退出，未移动目录')
-
-
-def _layout_runtime_restart(state,migrated):
-    for path in _layout_journal_paths():path.unlink(missing_ok=True)
-    _layout_run(['systemctl','daemon-reload'])
-    _layout_run(['systemctl','start','docker.socket','docker.service'])
-    deadline=time.monotonic()+60
-    while True:
-        result=docker('info','--format','{{json .}}',check=False,timeout=10)
-        if result.returncode==0:break
-        if time.monotonic()>=deadline:raise ValueError('迁移后 Docker 未能就绪')
-        time.sleep(1)
-    if json.loads(result.stdout)['ServerVersion']!=state['version']:raise ValueError('迁移前后 Docker 版本不一致')
-    restore_running(state)
 # END MINAS DATA LAYOUT
 
 def require(condition, message):
@@ -885,7 +653,6 @@ def runtime_selection():
 def repair_startup(folder,state,automatic=False):
     """Reconcile cached factory units; never restore or roll back Docker data."""
     require(state['phase']=='installed','仅已成功安装的升级事务允许开机校正')
-    require(not Path('/data/minas/migration/maintenance').exists(),'目录迁移正在进行')
     owned_files_valid();startup_hook_valid(state['id'])
     require(DROPIN.is_file(),'升级启动配置缺失，拒绝猜测安装状态')
     require_data_environment(state);verify_runtime(RUNTIME)
@@ -1445,7 +1212,6 @@ def main(argv=None):
     if str(BASE)=='/data/minas/docker/runtime':ensure_data_layout()
     if args.backup_dir is not None:args.backup_dir=remap_data_path(args.backup_dir)
     if args.archive is not None:args.archive=remap_data_path(args.archive)
-    require(not Path('/data/minas/migration/maintenance').exists(),'目录迁移正在进行')
     with locks():
         if args.install:install(args)
         elif args.repair_startup:

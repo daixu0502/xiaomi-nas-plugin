@@ -33,7 +33,7 @@ INSTALL_HELP
   --endpoint 数字         Portainer 环境 ID；只有一个环境时自动选择
   --container 名称       应急容器名称（默认 test）
   -h, --help              显示帮助
-默认安装开机修复；常规恢复使用 Shell，旧目录自动迁移使用 NAS 的 Python3。
+默认安装开机修复；常规恢复使用 Shell，直接使用 /data/minas/ssh/。
 证书及 Portainer 路径需要 curl、jq；现有 SSH 路径只需 Bash、OpenSSH 等基本命令。
 HELP
 }

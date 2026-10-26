@@ -2,7 +2,7 @@
   "plugin": "downloadcenter",
   "name": "下载中心",
   "id": 19096,
-  "version": "1.1.35",
+  "version": "1.1.36",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "直链、磁链、BT 与 Tracker 管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "修复持久 var 链接导致磁链缓存清理及删除报错，统一 BT 缓存安全入口，兼容核心规范路径并保护在用任务",
+  "changelog": "移除旧目录自动迁移与探测，直接初始化新持久目录；更新公共权限及恢复组件，配合检查清理卸载入口",
   "system": false,
-  "size": 392243,
+  "size": 391431,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

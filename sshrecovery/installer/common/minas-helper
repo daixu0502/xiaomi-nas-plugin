@@ -17,8 +17,6 @@ import privileged_runtime as runtime
 def load(name, filename):
     paths = {'docker-manager-helper':'modules/dockermanager/docker-manager-helper', 'task-center-helper':'modules/taskcenter/task-center-helper', 'ssh-recovery-helper':'modules/sshrecovery/ssh-recovery-helper', 'mihomo-api.py':'modules/mihomo/api.py', 'nascenter-api.py':'modules/nascenter/api.py', 'mediaeditor-api.py':'modules/mediaeditor/api.py'}
     file = runtime.BASE / paths[filename]
-    if not file.exists() and filename in ('docker-manager-helper','task-center-helper','ssh-recovery-helper'):
-        file = runtime.BASE / filename # API-v1 module not yet migrated by its own package.
     runtime.secure_directory(file.parent)
     metadata = file.lstat()
     if not __import__('stat').S_ISREG(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o022:

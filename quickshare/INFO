@@ -2,7 +2,7 @@
   "plugin": "quickshare",
   "name": "文件快传",
   "id": 19092,
-  "version": "1.1.52",
+  "version": "1.1.53",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "临时下载链接与文件上传入口",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "同步持久目录安全访问工具，兼容官方 etc/var 链接，运行行为不变",
+  "changelog": "移除旧目录自动迁移与探测，直接初始化新持久目录；更新公共权限及恢复组件，配合检查清理卸载入口",
   "system": false,
-  "size": 192100,
+  "size": 191288,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

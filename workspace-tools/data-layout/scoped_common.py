@@ -1,8 +1,6 @@
 """Small standalone layout primitives; generated constants select one owner."""
 DATA_LAYOUT_VERSION = 1
 DATA_LAYOUT_ROOT = '/data/minas'
-DATA_LAYOUT_SCOPE = 'unconfigured'
-DATA_LAYOUT_PATHS = {}
 
 
 def _layout_secure(path):
@@ -52,26 +50,16 @@ def _layout_initialize():
 
 
 def ensure_data_layout():
-    # Shared runtimes initialize their own parents; migration is installer-owned.
-    # No plugin, SSH or Docker migration archive is embedded here.
+    """Initialize only the current layout; never inspect or move former paths."""
     _layout_initialize()
 
 
 def remap_data_path(value):
-    import os
     from pathlib import Path
     path=Path(value)
-    if not path.is_absolute() or '..' in path.parts:raise ValueError('invalid historical path')
-    for old,new in DATA_LAYOUT_PATHS.items():
-        if path==Path(old) or path.is_relative_to(old):
-            target=Path(new)/path.relative_to(old)
-            if os.path.lexists(target):
-                _layout_secure(DATA_LAYOUT_ROOT)
-                if os.path.lexists(path):raise ValueError('conflicting historical file: '+str(path))
-                return target
+    if not path.is_absolute() or '..' in path.parts:raise ValueError('invalid state path')
     return path
 
 
 def rebase_data_text(text):
-    for old,new in sorted(DATA_LAYOUT_PATHS.items(),key=lambda pair:len(pair[0]),reverse=True):text=text.replace(old,new)
     return text

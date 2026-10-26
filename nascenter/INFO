@@ -2,7 +2,7 @@
   "plugin": "nascenter",
   "name": "控制中心",
   "id": 19093,
-  "version": "1.1.52",
+  "version": "1.1.53",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "性能、硬盘健康、网络和服务管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "统一电脑端业务文字层级：代码输入、只读值、公钥指纹和说明段落16px，元信息14px，修正遗留小字号与侧栏标题，保留日志及图标层级",
+  "changelog": "移除旧目录自动迁移与探测，直接初始化新持久目录；更新公共权限及恢复组件，配合检查清理卸载入口",
   "system": false,
   "size": 154947,
   "port": "",

@@ -80,20 +80,7 @@ def runtime_directory(home):
     return runtime
 
 
-def migrate(home):
-    """Installer-only; service and update workers must already be stopped."""
-    home = Path(home)
-    runtime = runtime_directory(home)
-    source = home / 'var'
-    names = DISPOSABLE.get(home.name, set())
-    for path in source.iterdir():
-        if path.name not in names and not (home.name == 'downloadcenter' and path.name.startswith('runtime-') and path.suffix == '.json'):
-            continue
-        destination = runtime / path.name
-        if path.is_symlink() or destination.exists():
-            raise RuntimeError('旧缓存有链接或新旧缓存同时存在，未覆盖：' + path.name)
-        # Paths can live on different filesystems. Copy completely before unlink.
-        shutil.move(str(path), str(destination))
+
 
 
 def publish(source, target):
@@ -116,5 +103,4 @@ def publish(source, target):
 if __name__ == '__main__':
     import sys
     if sys.argv[1] == '--publish':publish(sys.argv[2], sys.argv[3])
-    elif sys.argv[1] == '--migrate':migrate(sys.argv[2])
     else:print(runtime_directory(sys.argv[1]))

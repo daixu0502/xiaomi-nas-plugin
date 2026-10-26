@@ -2,7 +2,7 @@
   "plugin": "taskcenter",
   "name": "定时任务",
   "id": 19094,
-  "version": "1.0.28",
+  "version": "1.0.29",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "可视化任务计划与执行记录",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "修复插件 var 迁移后清理范围误判，继续限制当前账号 var，拒绝 etc、protected 与其他账号",
+  "changelog": "移除旧目录自动迁移与探测，直接初始化新持久目录；更新公共权限及恢复组件，配合检查清理卸载入口",
   "system": false,
   "size": 134597,
   "port": "",

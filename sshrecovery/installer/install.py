@@ -14,7 +14,7 @@ import sys
 import tempfile
 import time
 
-PLUGIN, VERSION = 'sshrecovery', '1.1.31'
+PLUGIN, VERSION = 'sshrecovery', '1.1.32'
 SYSTEM = Path('/data/minas/privileged')
 
 def system_install(user, payload):
@@ -145,11 +145,15 @@ def install(p, payload):
         os.chown(stage, *owner); stage.chmod(0o700)
         if src.exists(): os.replace(src, previous_src); src_moved = True
         os.replace(stage, src); switched = True
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('direct_state',payload/'installer/recovery/recovery.py')
+        recovery=importlib.util.module_from_spec(spec);spec.loader.exec_module(recovery)
+        recovery.persist_state(p['user'],PLUGIN,home,src,owner,False)
         for name in ('scripts', 'var', 'etc'):
             directory = home / name
             require(not directory.is_symlink() or os.readlink(directory) in (
                 '/data/minas/plugins/data/'+p['user']+'/'+PLUGIN+'/'+name,
-                '/data/.minas-plugin-data/'+p['user']+'/'+PLUGIN+'/'+name), '插件数据目录异常')
+), '插件数据目录异常')
             directory.mkdir(exist_ok=True); directory.chmod(0o700); os.chown(directory, *owner)
         atomic(control, (payload / 'scripts/control').read_bytes(), 0o755, owner)
         for name, target in (('src', src), ('tmp', tmp)):
@@ -248,7 +252,6 @@ def main(args):
             fcntl.flock(lock,fcntl.LOCK_UN)
             payload=Path(__file__).resolve().parents[1]
             subprocess.run([sys.executable,'-B',str(payload/'installer/recovery/recovery.py'),'capture','--user',args[1],'--plugin',PLUGIN,'--package',str(payload)],check=True)
-            subprocess.run([sys.executable,'-B',str(Path(__file__).parent/'data_layout.py'),'--finish','--user',args[1]],check=True)
 
 if __name__=='__main__':
     try: main(sys.argv[1:])
