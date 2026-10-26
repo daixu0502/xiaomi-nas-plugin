@@ -346,7 +346,7 @@
     panel.dataset.placement = up ? 'above' : 'below';
     panel.style.visibility = 'visible';
   }
-  function open(select, keyboard) {
+  function open(select) {
     sync(select); if (select.matches(':disabled') || select.hidden) return;
     if (current && current.select === select) { close(); return; }
     close(false);
@@ -357,8 +357,6 @@
     var layer = element('div', 'ui-choice-layer'), panel = element('section', 'ui-choice-panel');
     if (dialog || frame) layer.classList.add('ui-choice-local');
     panel.setAttribute('aria-label', label(select));
-    var search = element('input', 'ui-choice-search'); search.type = 'search'; search.placeholder = '搜索选项'; search.setAttribute('aria-label', '搜索选项');
-    search.autocomplete = 'off'; search.hidden = select.options.length < 8; panel.appendChild(search);
     var list = element('div', 'ui-choice-options'); list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', label(select));
     list.id = 'ui-choice-options-' + (++serial); control.trigger.setAttribute('aria-controls', list.id);
     if (select.multiple) list.setAttribute('aria-multiselectable', 'true');
@@ -385,10 +383,10 @@
       state.resize.observe(control.trigger); state.resize.observe(parent);
     }
     function render() {
-      var query = search.value.trim().toLocaleLowerCase(), group = null, visible = 0;
+      var group = null, visible = 0;
       list.replaceChildren();
       Array.from(select.options).forEach(function (option) {
-        if (option.hidden || option.parentElement.hidden || (query && !(option.textContent + ' ' + option.value + ' ' + (option.parentElement.label || '')).toLocaleLowerCase().includes(query))) return;
+        if (option.hidden || option.parentElement.hidden) return;
         if (option.parentElement.tagName === 'OPTGROUP' && group !== option.parentElement) {
           group = option.parentElement; list.appendChild(element('div', 'ui-choice-group', group.label));
         }
@@ -411,13 +409,12 @@
       schedule();
     }
     done.onclick = function () { close(); };
-    search.addEventListener('input', render);
     layer.addEventListener('keydown', function (event) {
       // Keep parent plugin shortcuts and other open dialogs from handling this key.
       event.stopPropagation();
       if (event.key === 'Escape') { event.preventDefault(); close(); return; }
       var options = Array.from(list.querySelectorAll('button:not(:disabled)'));
-      if (['ArrowDown','ArrowUp','Home','End'].includes(event.key) && (event.target !== search || event.key.startsWith('Arrow'))) {
+      if (['ArrowDown','ArrowUp','Home','End'].includes(event.key)) {
         event.preventDefault(); var index = options.indexOf(nativeDoc.activeElement), next;
         if (event.key === 'Home') next = 0;
         else if (event.key === 'End') next = options.length - 1;
@@ -432,7 +429,7 @@
     render();
     position(state);
     if (current !== state) return;
-    var initial = !search.hidden && !keyboard ? search : list.querySelector('[aria-selected="true"]:not(:disabled)') || list.querySelector('button:not(:disabled)') || control.trigger;
+    var initial = list.querySelector('[aria-selected="true"]:not(:disabled)') || list.querySelector('button:not(:disabled)') || control.trigger;
     initial.focus({preventScroll:true});
     if (list.contains(initial)) list.scrollTop = Math.max(0, initial.offsetTop - list.offsetTop - (list.clientHeight - initial.offsetHeight) / 2);
   }
@@ -458,7 +455,10 @@
     });
     select._miSync = function () { sync(select); };
     trigger.addEventListener('click', function (event) { event.preventDefault(); open(select); });
-    trigger.addEventListener('keydown', function (event) { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); open(select, true); } });
+    trigger.addEventListener('keydown', function (event) { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); open(select); } });
+    // Clicking a field's label activates its native select. Route that activation
+    // to the same menu instead of focusing an invisible native control.
+    select.addEventListener('click', function (event) { event.preventDefault(); open(select); });
     select.addEventListener('change', select._miSync); select.addEventListener('input', select._miSync);
     sync(select);
   }

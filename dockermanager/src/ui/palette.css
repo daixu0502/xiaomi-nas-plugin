@@ -192,6 +192,8 @@
 
 /* BEGIN SHARED MOBILE NAVIGATION */
 /* One-row mobile navigation; desktop sidebars retain their existing layout. */
+[data-minas-plugin="dockermanager"] .tabs .tab{-webkit-tap-highlight-color:transparent}
+[data-minas-plugin="dockermanager"] .tabs .tab:focus:not(:focus-visible){outline:none}
 [data-minas-plugin="dockermanager"]:not(.desktop-client),[data-minas-plugin="dockermanager"]:not(.desktop-client) .minas-plugin-body,[data-minas-plugin="dockermanager"]:not(.desktop-client) .shell{overflow:visible}
 @supports(overflow-x:clip){[data-minas-plugin="dockermanager"]:not(.desktop-client),[data-minas-plugin="dockermanager"]:not(.desktop-client) .minas-plugin-body,[data-minas-plugin="dockermanager"]:not(.desktop-client) .shell{overflow-x:clip;overflow-y:visible}}
 [data-minas-plugin="dockermanager"]:not(.desktop-client) .tabs{position:sticky!important;top:max(8px,env(safe-area-inset-top))!important;bottom:auto!important;left:auto!important;right:auto!important;z-index:15;display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:stretch;gap:4px;width:100%;max-width:100%;min-height:52px;height:auto;max-height:none;padding:5px;margin:0 0 14px;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;scroll-padding-inline:6px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;border:1px solid var(--line);border-radius:14px;background:var(--surface);box-shadow:0 4px 16px rgba(20,35,55,.09);isolation:isolate}

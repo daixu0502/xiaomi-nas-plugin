@@ -2,7 +2,7 @@
   "plugin": "dockermanager",
   "name": "docker",
   "id": 19091,
-  "version": "1.1.24",
+  "version": "1.1.25",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "容器、镜像与存储卷管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "手机菜单统一为单行吸顶浮层，支持左右滑动、当前项自动显示及键盘切换；保留完整菜单名称和桌面侧栏，无新增后台轮询",
+  "changelog": "修复长名称下拉选择框宽度与标签点击行为，取消下拉菜单搜索框，避免唤起手机键盘；调整计划任务时间字段与表单列宽",
   "system": false,
-  "size": 145511,
+  "size": 145094,
   "port": "",
   "type": "standard",
   "forceupgrade": false,
