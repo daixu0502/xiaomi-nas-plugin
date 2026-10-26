@@ -44,7 +44,9 @@ def main():
             assert bool(private)==(plugin not in ('quickshare','downloadcenter'))
             for name,value in included.items():assert (ROOT/folder/'installer/common'/name).read_bytes().replace(b'\r\n',b'\n')==value
             installer=package.extractfile(folder+'/manage.sh').read()
-            if plugin=='sshrecovery':installer=package.extractfile(folder+'/installer/install.py').read()
+            if plugin=='sshrecovery':
+                assert 'installer/install.py' not in members
+                assert b'nas_prepare install' in installer and b'nas_uninstall' in installer
             assert b'component_admin.py' in installer and b'install' in installer
             report['packages'][folder]={'version':entry['version'],'commonVersion':version,'privateFiles':len(private),'archiveVerified':True,'noForeignModules':True}
 

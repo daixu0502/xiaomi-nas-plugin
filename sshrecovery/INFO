@@ -2,7 +2,7 @@
   "plugin": "sshrecovery",
   "name": "SSH 恢复",
   "id": 19098,
-  "version": "1.1.33",
+  "version": "1.1.34",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "手动开启 SSH、恢复主机密钥与登录公钥",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "目录初始化合并进安装入口，移除冗余 data_layout.py；修正全新安装在严格 umask 下的公共目录权限",
+  "changelog": "安装与卸载改为 manage.sh 内 Shell 主流程；复用公共 Python 权限、目录及恢复组件，删除独立 install.py",
   "system": false,
   "size": 100954,
   "port": "",

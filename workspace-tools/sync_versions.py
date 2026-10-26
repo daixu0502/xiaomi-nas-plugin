@@ -46,8 +46,6 @@ def plan(root=ROOT):
             replace(cgi, r'(except Exception: version=")' + SEMVER + r'(")', version)
         elif plugin == 'downloadcenter':
             replace(base / 'src/files/download_lib.py', r'^(VERSION = ")' + SEMVER + r'(")$', version)
-        elif plugin == 'sshrecovery':
-            replace(base / 'installer/install.py', r"^(PLUGIN, VERSION = 'sshrecovery', ')" + SEMVER + r"(')$", version)
         info_path = base / 'INFO'
         info = json.loads(read(info_path))
         if info['plugin'] != plugin:
