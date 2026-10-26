@@ -4,8 +4,8 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='mediaeditor'
 PLUGIN_LABEL='影视编辑'
-PLUGIN_VERSION='1.1.5'
-UNINSTALL_NOTE='不修改官方影视库，受保护的编辑备份与历史保留在 /data/minas/plugins/mediaeditor/。'
+PLUGIN_VERSION='1.1.6'
+UNINSTALL_NOTE='不修改官方影视库，受保护的编辑备份与历史保留在 /data/minas/plugins/data/<账号>/mediaeditor/protected/。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
 set -Eeuo pipefail
@@ -490,6 +490,7 @@ python3 "$P/installer/common/component_admin.py" install --plugin "$name" --user
 
 chown "$u:$(id -gn "$u")" "$tmp"
 chown -R "$u:$u" "$home" "$src";chown -h "$u:$u" "$home/src" "$home/tmp" "$web";chmod 0700 "$home" "$src";chmod 0755 "$src/ui"
+python3 -B "$P/installer/state_layout.py"
 printf '{"action":"status","pluginUser":"%s"}' "$u"|runuser -u "$u" -- sudo -n "$helper" mediaeditor|jq -e '.ok==true'>/dev/null||{ echo '错误：影视编辑自检失败'>&2;exit 1;};if [ "$was_enabled" = true ];then plugincenter -u "$u" -p "$name" enable>/dev/null 2>&1||true;fi
 runuser -u "$u" -- env PLUG_USER="$u" PLUG_NAME="$name" PLUG_HOME_DIR="$home" PLUG_SRC_DIR="$src" PLUG_TMP_DIR="$tmp" PLUG_STATUS=unverified /usr/bin/plugin.sh verify || nas_fail "系统完整性校验失败"
 rm -f "$backup"

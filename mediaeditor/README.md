@@ -29,7 +29,8 @@ bash manage.sh uninstall --ip 你的NAS地址 --users 你的NAS账号
 - 源码：标准插件 `src/files`、`src/ui` 与 `scripts/control`，受原厂摘要校验。
 - 公共权限模块：`/data/minas/privileged/modules/mediaeditor/`，仅安装自身四个 Python 模块。
 - 用户配置/普通持久状态：插件 `etc/var`，由现有恢复组件归入 `/data/minas/plugins/data/<用户>/mediaeditor/`。
-- 编辑锁、受保护的修改计划、搜索参考、全库一致性备份和修改记录：`/data/minas/plugins/mediaeditor/<用户>/`；跨用户编辑锁位于该父目录。全部 root 私有，不放用户缓存，卸载后保留。
+- 受保护的修改计划、搜索参考、全库一致性备份和修改记录：`/data/minas/plugins/data/<用户>/mediaeditor/protected/`。目录 root:root 0700、文件 0600，与用户所属的 etc/var 平级，卸载后保留。
+- 所有账号共用的编辑锁：`/data/minas/privileged/modules/mediaeditor/var/write.lock`，root 私有。安装器在公共权限组件独占锁内迁移旧记录，保留写锁 inode；有冲突时拒绝覆盖，失败回退，断电后可按记录继续迁移。
 - 普通可重建缓存、日志和运行暂存：官方 `tmp` → `plugintmp/mediaeditor/`。本插件没有常驻端口、PID 或后台轮询，也不把 root 授权状态放入该缓存。
 
 备份在每次实际修改前创建，历史保留最近 100 条供查看；备份不自动删除。空间不足时拒绝继续编辑。结构操作先在受保护的数据库副本中运行真实官方触发器，生成记录变化预览；执行时持有写事务，数据库自预览后发生变化则要求重新预览。确认前可能发生的观看/收藏记录删除会明确显示；移走最后一个关联时，官方触发器也可能删除原影片记录。

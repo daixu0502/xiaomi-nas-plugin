@@ -2,7 +2,7 @@
   "plugin": "mediaeditor",
   "name": "影视编辑",
   "id": 19100,
-  "version": "1.1.5",
+  "version": "1.1.6",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "官方影视代码搜索、系列归属修正与批量集数编辑",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "统一电脑端业务文字层级：代码输入、只读值、公钥指纹和说明段落16px，元信息14px，修正遗留小字号与侧栏标题，保留日志及图标层级",
+  "changelog": "迁移保护数据到账号目录 protected，共享写锁归入权限模块 var；安装迁移可校验、回退和继续",
   "system": false,
   "size": 218441,
   "port": "",

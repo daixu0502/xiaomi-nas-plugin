@@ -21,12 +21,12 @@ def scoped_api(user,request):
     action=request.get('action')
     if action not in ACTIONS: raise ValueError('未知影视库编辑操作')
     if action=='status':
-        store.storage(user)
+        directory=store.storage(user)
         with store.database() as db:
             libs=store.libraries(db,user)
         with store.database(False,True) as db:
             structural = store.fingerprint(store.structural_schema(db)) in store.SUPPORTED_SCHEMAS
-        return {'officialSearch':provider.available(),'libraries':libs,'storage':str(store.STATE/user),
+        return {'officialSearch':provider.available(),'libraries':libs,'storage':str(directory),
             'scope':'当前账号自有媒体；管理员可切换跨账号全库模式','maxBatch':100,
             'isAdmin':store.ADMIN.get(),'structuralSupported':structural,'forceDuplicateSupported':False}
     if action=='list': return store.list_media(user,request)

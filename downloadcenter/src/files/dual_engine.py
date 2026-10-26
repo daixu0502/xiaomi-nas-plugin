@@ -2,6 +2,7 @@
 """qBittorrent for new BT tasks, aria2 for direct URLs and retained legacy jobs."""
 import base64
 import json
+import os
 import re
 import secrets
 import time
@@ -322,7 +323,11 @@ class DualManager(Manager):
             if existing:
                 if snap.get('metadataPending'):
                     expected = self.var / 'metadata' / ident
-                    if Path(existing[0]['save_path']) != expected:
+                    from plugin_paths import open_state_directory
+                    state_fd=open_state_directory(self.home)
+                    try:canonical=Path(os.readlink('/proc/self/fd/'+str(state_fd))) / 'metadata' / ident
+                    finally:os.close(state_fd)
+                    if Path(existing[0]['save_path']) not in (expected,canonical):
                         raise DownloadError('磁链缓存路径已改变，拒绝继续')
                     # No file list/export exists yet; resume metadata only.
                     self.qb.request('torrents/start', {'hashes': gid})

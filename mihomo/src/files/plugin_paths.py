@@ -6,6 +6,9 @@ import stat
 import tempfile
 import shutil
 
+HOME_ROOT=Path('/home')
+PERSISTENT_ROOT=Path('/data/minas/plugins/data')
+
 DISPOSABLE = {
     'mihomo': {'mihomo.pid', 'mihomo.log', 'mihomo.log.1', 'update-tasks',
         'update-operation.lock','geodata-update.lock','core-update.lock','network-access.lock',
@@ -17,6 +20,37 @@ DISPOSABLE = {
         'core-update.log', 'qb-update.json', 'qb-update.log','control.log','dht.dat','dht6.dat',
         'api.lock','lifecycle.lock','core-update.lock','tracker-update.lock','supervisor.lock'},
 }
+
+
+def open_state_directory(home, name='var'):
+    """Anchor trusted etc/var links, refusing redirection below their targets."""
+    home=Path(home)
+    if name not in ('etc','var'):raise ValueError('未知插件持久目录')
+    path=home/name
+    if not home.is_absolute() or '..' in home.parts:raise PermissionError('插件目录必须为明确的绝对路径')
+    if home.is_relative_to(HOME_ROOT):
+        match=re.fullmatch(r'(u[0-9]+)/plugin/([a-z]+)',str(home.relative_to(HOME_ROOT)))
+        if not match:raise PermissionError('插件目录身份无效')
+        expected=PERSISTENT_ROOT/match[1]/match[2]/name
+        if path.is_symlink():
+            if os.readlink(path)!=str(expected):raise PermissionError('插件持久目录链接异常')
+            path=expected
+    elif path.is_symlink():
+        raise PermissionError('非官方状态目录链接')
+    flags=os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW
+    # Root-owned layout parents are 0711: users may traverse but not list them.
+    # O_PATH needs only traversal; the final state directory is opened readable.
+    path_flags=os.O_PATH|os.O_DIRECTORY|os.O_NOFOLLOW
+    fd=os.open(path.anchor,path_flags)
+    try:
+        for index,part in enumerate(path.parts[1:],1):
+            child=os.open(part,flags if index==len(path.parts)-1 else path_flags,dir_fd=fd)
+            os.close(fd);fd=child
+        info=os.fstat(fd)
+        if info.st_uid!=os.geteuid() or info.st_mode&0o077:raise PermissionError('插件持久目录所属用户或权限异常')
+        result=fd;fd=-1;return result
+    finally:
+        if fd!=-1:os.close(fd)
 
 
 def runtime_directory(home):

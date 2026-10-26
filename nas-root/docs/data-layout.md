@@ -6,6 +6,8 @@
 | --- | --- |
 | `privileged/` | 公共权限入口、模块、授权、任务和跨插件锁 |
 | `plugins/data/<用户>/<插件>/` | 七插件的持久配置与状态 |
+| `plugins/data/<用户>/mediaeditor/protected/` | root 保护的影视修改计划、参考与数据库备份；与用户 etc/var 平级 |
+| `privileged/modules/mediaeditor/var/` | 跨账号影视编辑全局写锁及安装迁移记录，root 私有 |
 | `plugins/recovery/` | 独立恢复程序、登记和当前恢复快照 |
 | `ssh/` | 独立 SSH 开机修复、应急程序及登录材料 |
 | `docker/network/` | bridge/IPv6 事件维护、nft 运行库与网络事务 |

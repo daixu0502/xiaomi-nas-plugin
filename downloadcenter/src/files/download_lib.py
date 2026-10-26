@@ -19,7 +19,7 @@ from urllib.parse import urlsplit, parse_qs, unquote
 from urllib.request import Request, build_opener, ProxyHandler
 from urllib.error import HTTPError
 
-VERSION = "1.1.33"
+VERSION = "1.1.35"
 MAX_TORRENT = 4 * 1024 * 1024
 DEFAULTS = {"directory": "", "concurrent": 3, "connections": 4, "downloadKiB": 0,
             "uploadKiB": 1024, "seedRatio": 1.0, "seedMinutes": 60,
@@ -916,7 +916,8 @@ class Manager:
         if not isinstance(ident, str) or not re.fullmatch(r'[a-f0-9]{24}', ident):
             raise DownloadError('种子缓存任务编号无效')
         # Anchor at plugin var; neither metadata nor the task child may be a link.
-        root_fd = os.open(str(self.var), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        from plugin_paths import open_state_directory
+        root_fd = open_state_directory(self.home)
         try:
             try: fd = os.open('metadata', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=root_fd)
             except FileNotFoundError: return result
@@ -960,13 +961,15 @@ class Manager:
         for job in active + waiting:
             paths = [job.get('dir', '')] + [f.get('path', '') for f in job.get('files', [])]
             for path in paths:
-                try:
-                    parts = Path(path).relative_to(self.var / 'metadata').parts
-                    if parts: protected.add(parts[0])
-                except ValueError: pass
+                for base in (self.var / 'metadata', self.var.resolve(strict=True) / 'metadata'):
+                    try:
+                        parts = Path(path).relative_to(base).parts
+                        if parts: protected.add(parts[0])
+                    except ValueError: pass
         result = {'files': 0, 'bytes': 0, 'directories': 0, 'retained': 0,
                   'protected': 0, 'failed': [], 'partial': False}
-        root_fd = os.open(str(self.var), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        from plugin_paths import open_state_directory
+        root_fd = open_state_directory(self.home)
         try:
             try: fd = os.open('metadata', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=root_fd)
             except FileNotFoundError: return result
@@ -1191,6 +1194,11 @@ class Manager:
                 return self.queue_job("clear")
             if action == "cache_clean":
                 return self.clean_cache()
+            if action in ('bt_cache_list', 'bt_cache_preview', 'bt_cache_delete'):
+                import bt_cache
+                if action == 'bt_cache_list': return bt_cache.listing(self)
+                if action == 'bt_cache_preview': return bt_cache.preview(self, data)
+                return bt_cache.delete(self, data)
             if action == "settings":
                 return self.save_settings(data)
             if action == "bt_settings":

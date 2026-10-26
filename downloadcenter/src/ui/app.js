@@ -220,6 +220,34 @@ var document = window.XiaomiPluginClient.document;
       r.rows.forEach(t => { const row = text('article', '', 'tracker-result'); row.append(text('strong', t.name), text('p', (t.owned ? '下载中心' : '外部 / Openlist') + (t.private ? ' · 私有种子（不追加）' : '') + ' · 匹配附加列表 ' + t.matched + ' 个'), text('p', '实际 Tracker ' + t.total + ' 个，工作中 ' + t.working + ' 个，报告错误 ' + t.failed + ' 个。')); box.append(row); });
     } catch (e) { box.replaceChildren(text('p', '核对失败：' + e.message)); throw e; }
   });
+  async function loadSeedCache() {
+    const result = await api('bt_cache_list'), list = $('seedCacheList');
+    $('seedCacheSummary').textContent = result.files.length + ' 个种子 · ' + bytes(result.bytes) + ' · 可清理 ' + result.files.filter(seed => !seed.protected).length + ' 个' +
+      (!result.verified ? '；下载核心未就绪，只可查看和预览' : '') +
+      (result.skipped ? '；已保留 ' + result.skipped + ' 个其他或异常项目' : '') +
+      (result.partial ? '；文件过多，本次仅显示部分，请先整理' : '');
+    list.replaceChildren();
+    if (!result.files.length) list.append(text('p', '暂无种子缓存', 'empty'));
+    result.files.forEach(seed => {
+      const card = text('article', '', 'task-card');
+      card.append(text('h3', seed.name), text('p', seed.source + ' · ' + bytes(seed.size) + ' · ' + new Date(seed.modified * 1000).toLocaleString()), text('p', seed.key), text('p', seed.reason || '无任务占用，可清理'));
+      const actions = text('div', '', 'actions');
+      actions.append(taskButton('预览 / 创建下载', async () => {
+        const info = await api('bt_cache_preview', seed);
+        if (info.files.length > 2000) throw new Error('此种子文件超过 2000 个，暂不支持导入');
+        setKind('torrent'); applyTorrent(info, info.torrent, info.filename);
+        newDirectory = snapshot?.settings?.directory || ''; $('newDirectory').textContent = pathLabel(newDirectory);
+        show('newDialog');
+      }));
+      const remove = taskButton('删除种子缓存', async () => {
+        if (!(await confirm('删除种子缓存？', '将删除插件内的 ' + seed.name + '。仅允许删除无任务占用且无关联续传状态的种子副本；下载文件、任务和断点数据保留。')).ok) return;
+        await api('bt_cache_delete', seed); await loadSeedCache(); toast('种子缓存已删除');
+      }, 'danger');
+      remove.disabled = seed.protected; actions.append(remove);
+      card.append(actions); list.append(card);
+    });
+  }
+  $('seedCacheRefresh').onclick = () => busy($('seedCacheRefresh'), loadSeedCache);
   $('cleanCache').onclick = () => busy($('cleanCache'), async () => {
     const answer = await confirm('清理磁链缓存？', '仅删除插件内已无任务使用的自动种子和临时缓存。保留所有现有任务、下载文件、手动导入的种子及续传数据；不会扫描下载目录。请保持下载服务运行以核对占用。');
     if (!answer.ok) return;

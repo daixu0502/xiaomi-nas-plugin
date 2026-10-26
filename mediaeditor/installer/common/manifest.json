@@ -10,9 +10,9 @@
     "common/user_state_io.py": "de65b4d964c403e9bd4cf7c7b0bfe18ba3dc551f610db928ab4e4fcc015a350f",
     "component_admin.py": "8d4832b4794f552ab2bf0a5d2d17ce44e614d28497f7f54c3efa620856ec9257",
     "minas-helper": "f6e858adb112512f7caf2a885cb6a72e2ae16e0608935362c3968240edf94fc5",
-    "modules/mediaeditor/api.py": "da9add16bd9924a8243cfc61049d9571c135bd5e9f74c7da95c1ffec282bfbca",
+    "modules/mediaeditor/api.py": "9dbc45c8035cbd55cee926414f8ae8ad6eaf82e4e5e918736287764ed5a6969d",
     "modules/mediaeditor/provider.py": "7d3a0b68f4067b4ceac17e02350011b8e7668579471a41f893e8e7f5f3aab243",
     "modules/mediaeditor/sqlite_native.py": "77da46bd7ac20bdaa12903bfe87810f22d141c085fe52481300c424780029cf7",
-    "modules/mediaeditor/store.py": "50860d075002db527ffea0e3fa82e8f9f6de633b073ec8b729c585002db67230"
+    "modules/mediaeditor/store.py": "f16b9e4629fd3fcf3a4c9d03159defe3dc392d6bfb66c55bb4d22ff8d24b9364"
   }
 }

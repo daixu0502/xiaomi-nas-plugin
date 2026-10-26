@@ -271,6 +271,9 @@
 [data-minas-plugin="downloadcenter"] .core-grid .core-status[data-state="done"]{color:var(--success);}
 @media(max-width:650px){[data-minas-plugin="downloadcenter"] .engine-grid,[data-minas-plugin="downloadcenter"] .interface-grid,[data-minas-plugin="downloadcenter"] .core-grid{grid-template-columns:minmax(0,1fr);}}
 
+[data-minas-plugin="downloadcenter"] .seed-cache-list{max-height:min(600px,60vh);overflow-y:auto;overscroll-behavior:contain;}
+[data-minas-plugin="downloadcenter"] .seed-cache-list h3,[data-minas-plugin="downloadcenter"] .seed-cache-list p{overflow-wrap:anywhere;}
+
 /* BEGIN SHARED FORM CONTROLS */
 /* [data-minas-plugin="downloadcenter"] is replaced with the plugin scope by sync-ui-controls.py. */
 /* Text metrics and font families are owned by typography.css. */
