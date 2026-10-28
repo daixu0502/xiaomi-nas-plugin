@@ -3,7 +3,7 @@
 var document = window.XiaomiPluginClient.document;
 
   var state = {
-    page: 'overview',
+    page: 'containers',
     containers: [],
     images: [],
     showIntermediate: false,
@@ -11,7 +11,7 @@ var document = window.XiaomiPluginClient.document;
     engineRunning: false,
     containerFilter: 'all'
   };
-  var pageOrder = ['overview', 'containers', 'images', 'volumes'];
+  var pageOrder = ['containers', 'images', 'networks', 'volumes', 'overview'];
   var toastTimer = null;
   var confirmCallback = null;
 
@@ -116,6 +116,7 @@ var document = window.XiaomiPluginClient.document;
     if (page === 'containers') loadContainers();
     if (page === 'images') loadImages();
     if (page === 'volumes') loadVolumes();
+    if (page === 'networks') loadNetworks();
   }
 
   function detailItem(label, value) {
@@ -429,6 +430,14 @@ var document = window.XiaomiPluginClient.document;
     });
   }
 
+  function loadNetworks() {
+    return api('network_list').then(function (data) {
+      var rows = data.networks || []; byId('networkSummary').textContent = rows.length + ' 个网络';
+      byId('networkList').innerHTML = rows.length ? rows.map(function (n) { return '<article class="resource-card"><div class="resource-head"><div class="resource-title"><h3>' + escapeHtml(n.name) + '</h3><p>' + escapeHtml(n.id || '') + '</p></div><span class="badge">' + escapeHtml(n.driver) + '</span></div><div class="resource-meta">' + escapeHtml(n.scope || 'local') + '</div></article>'; }).join('') : '<p class="empty-state">没有可显示的网络</p>';
+    }).catch(function (error) { byId('networkSummary').textContent = error.message; });
+  }
+  byId('refreshNetworks').onclick = loadNetworks;
+
   function loadVolumes() {
     return api('volume_list').then(function (data) {
       state.volumes = data.volumes || []; renderVolumes();
@@ -569,4 +578,5 @@ var document = window.XiaomiPluginClient.document;
   }, { passive: true });
 
   loadOverview();
+  loadContainers();
 }());

@@ -296,6 +296,7 @@ var document = window.XiaomiPluginClient.document;
       toast(result.message); await refresh(true);
     });
   };
+  document.addEventListener('workbench:section', function(e){if(e.detail.section!=='service')hideCredentials();});
   window.addEventListener('pagehide', hideCredentials);
   window.addEventListener('unmount', hideCredentials);
   $('openlistCopy').onclick = () => busy($('openlistCopy'), async () => { try { await navigator.clipboard.writeText($('openlistUrl').value); toast('连接地址已复制，请勿公开'); } catch (_) { $('openlistUrl').focus(); $('openlistUrl').select(); toast('请长按或使用 Ctrl+C 复制选中的地址'); } });

@@ -34,6 +34,7 @@ var document = window.XiaomiPluginClient.document;
   }
   function target(t) { const p=t.params||{}; return p.container||p.image||p.path||(t.kind==='reboot'?'整台 NAS':'尚未配置'); }
   function switchPage(name) {
+    if(!['tasks','history','templates'].includes(name))return;
     document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+name));
     document.querySelectorAll('[data-page]').forEach(b=>{b.classList.toggle('active',b.dataset.page===name);b.setAttribute('aria-current',b.dataset.page===name?'page':'false');});
   }
@@ -164,17 +165,17 @@ var document = window.XiaomiPluginClient.document;
     $('schedulerToggle').disabled=!!data.runs.some(r=>r.state==='running');
     $('schedulerToggle').className=data.scheduler?'secondary':'primary';
     $('schedulerToggle').setAttribute('aria-pressed',data.scheduler?'true':'false');
-    $('clock').textContent='NAS 时间 '+timestamp(data.serverTime)+' · '+(data.timezone||''); $('poolInfo').textContent=data.poolReady?'存储池已挂载，可执行要求存储池就绪的任务。':'存储池尚未挂载：依赖存储池的任务不会执行。';
+    $('clock').textContent='NAS 时间 '+timestamp(data.serverTime)+' · '+(data.timezone||'');
     $('countTotal').textContent=data.tasks.length;$('countEnabled').textContent=data.tasks.filter(t=>t.enabled).length;$('countRunning').textContent=data.runs.filter(r=>r.state==='running').length;
     const failedCount=data.runs.filter(r=>['failed','timeout','interrupted'].includes(r.state)&&Number(r.ended||r.started)>=(data.serverTime||Date.now()/1000)-86400).length;
     $('countFailed').textContent=failedCount;
     $('countFailed').classList.toggle('metric-alert',failedCount>0);
     $('taskSummary').textContent=data.tasks.length+' 个任务 · '+data.tasks.filter(t=>t.enabled).length+' 个已启用';
-    list('taskList',data.tasks,t=>taskCard(t,false),'暂无任务，可从模板创建。');list('templateList',templates,t=>taskCard(t,true),'正在读取模板…');list('historyList',data.runs,runCard,'还没有执行记录。安装后所有预置任务保持停用。');list('recent',data.runs.slice(0,3),runCard,'尚未执行任务，先配置并手动启用一个模板吧。');
+    list('taskList',data.tasks,t=>taskCard(t,false),'暂无任务，可从模板创建。');list('templateList',templates,t=>taskCard(t,true),'正在读取模板…');list('historyList',data.runs,runCard,'还没有执行记录。安装后所有预置任务保持停用。');
     $('version').textContent='插件版本 '+(data.pluginVersion||'未知')+' · 公共权限组件 '+(data.helperVersion||'不可用');
   }
   async function refresh() { if(loading)return; loading=true;try{data=await request('list');if(!templates.length)templates=(await request('templates')).templates;render();}catch(error){$('health').className='badge failed';$('health').textContent='连接失败';throw error;}finally{loading=false;} }
-  document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>switchPage(b.dataset.page));document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>switchPage(b.dataset.go));
+  document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>switchPage(b.dataset.page));
   $('newTask').onclick=()=>busy($('newTask'),()=>edit());$('refresh').onclick=()=>busy($('refresh'),refresh);$('refreshHistory').onclick=()=>busy($('refreshHistory'),refresh);
   $('schedulerToggle').onclick=()=>busy($('schedulerToggle'),async()=>{
     const enabled=!data.scheduler, count=data.tasks.filter(t=>t.enabled).length;

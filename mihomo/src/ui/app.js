@@ -972,7 +972,7 @@ var document = window.XiaomiPluginClient.document;
     });
   }
 
-  var pageOrder = ['overview', 'proxies', 'subscription', 'config', 'logs'];
+  var pageOrder = ['overview', 'subscription', 'settings', 'config', 'logs'];
 
   function activatePage(pageName, fromSwipe) {
     var tab = document.querySelector('.tab[data-page="' + pageName + '"]');
@@ -984,8 +984,8 @@ var document = window.XiaomiPluginClient.document;
     page.classList.add('active');
     if (pageName === 'config' && !state.configLoaded) loadConfig();
     if (pageName === 'subscription') { loadSubscription(); loadManualNodes(); loadRuleProviders(); }
-    if (pageName === 'proxies') { loadProxies(); loadProviders(); loadGeoData(false); }
-    if (pageName === 'overview') { loadStatus(false);loadDockerProxy(false);loadNetworkAccess(false);loadCoreUpdate(false); }
+    if (pageName === 'overview') { loadStatus(false); loadProxies(); loadProviders(); }
+    if (pageName === 'settings') { loadDockerProxy(false); loadNetworkAccess(false); loadCoreUpdate(false); loadGeoData(false); }
     if (pageName === 'logs') loadLogs();
     if (fromSwipe) window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -1327,6 +1327,8 @@ var document = window.XiaomiPluginClient.document;
   initPickers();
   initConfirmDialog();
   loadStatus(false);
+  loadProxies();
+  loadProviders();
   loadDockerProxy(false);
   loadNetworkAccess(false);
   loadCoreUpdate(false);

@@ -9,8 +9,8 @@
   <meta name="theme-color" content="#eef1f5" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#171a20" media="(prefers-color-scheme: dark)">
   <title>docker</title>
-  <link rel="stylesheet" href="style.css?v=1.1.29&amp;ui=image-filter">
-  <link rel="stylesheet" href="palette.css?v=1.1.29&amp;ui=compact-metrics-20260930">
+  <link rel="stylesheet" href="style.css?v=1.1.32&amp;ui=image-filter">
+  <link rel="stylesheet" href="palette.css?v=1.1.32&amp;ui=compact-metrics-20260930">
 </head>
 <body><div data-minas-plugin="dockermanager"><div class="minas-plugin-body">
   <main id="shell" class="shell">
@@ -23,20 +23,10 @@
     </header>
 <section class="plugin-status"><div class="status-main"><span id="engineBadge" class="status-pill neutral"><i></i>检查中</span><h2 class="status-title">Docker 引擎</h2></div><p id="engineSubtitle" class="status-description">正在读取设备信息…</p></section>
 
-    <nav class="tabs" aria-label="功能页面">
-      <button class="tab active" data-page="overview">概览</button>
-      <button class="tab" data-page="containers">容器</button>
-      <button class="tab" data-page="images">镜像</button>
-      <button class="tab" data-page="volumes">存储卷</button>
-    </nav>
+    <nav class="tabs" aria-label="Docker 功能"><button type="button" class="tab active" data-page="containers">容器</button><button type="button" class="tab" data-page="images">镜像</button><button type="button" class="tab" data-page="networks">网络</button><button type="button" class="tab" data-page="volumes">存储卷</button><button type="button" class="tab" data-page="overview">设置</button></nav>
 
-    <section id="page-overview" class="page active">
-      <div class="metric-grid">
-        <button class="metric-card" data-go="containers"><span>运行中</span><strong id="runningMetric">—</strong></button>
-        <button class="metric-card" data-go="containers"><span>已停止</span><strong id="stoppedMetric">—</strong></button>
-        <button class="metric-card" data-go="images"><span>镜像</span><strong id="imageMetric">—</strong></button>
-        <button class="metric-card" data-go="volumes"><span>存储卷</span><strong id="volumeMetric">—</strong></button>
-      </div>
+    <section id="page-overview" class="page">
+
       <article class="panel">
         <div class="panel-heading"><div><h3>Docker 服务</h3><p>启动、停止或重启整个 Docker 引擎</p></div></div>
         <div class="control-grid">
@@ -55,7 +45,12 @@
       </article>
     </section>
 
-    <section id="page-containers" class="page" aria-label="容器">
+    <section id="page-containers" class="page active" aria-label="容器"><div class="metric-grid">
+        <button class="metric-card" data-go="containers"><span>运行中</span><strong id="runningMetric">—</strong></button>
+        <button class="metric-card" data-go="containers"><span>已停止</span><strong id="stoppedMetric">—</strong></button>
+        <button class="metric-card" data-go="images"><span>镜像</span><strong id="imageMetric">—</strong></button>
+        <button class="metric-card" data-go="volumes"><span>存储卷</span><strong id="volumeMetric">—</strong></button>
+      </div>
       <div class="section-heading section-toolbar">
         <div><h2>容器</h2><p id="containerSummary">读取容器中…</p></div>
         <button id="openCreateContainer" class="primary-button" type="button">＋ 创建</button>
@@ -73,7 +68,7 @@
         <button class="filter" data-filter="running">运行中</button>
         <button class="filter" data-filter="stopped">已停止</button>
       </div>
-      <div id="containerList" class="stack loading-row">正在读取…</div>
+      <div id="containerList" class="stack loading-row workbench-list-surface">正在读取…</div>
     </section>
 
     <section id="page-images" class="page" aria-label="镜像">
@@ -100,7 +95,8 @@
       <div id="volumeList" class="stack loading-row">正在读取…</div>
     </section>
 
-    <footer id="pluginVersion">插件版本 1.1.29 · 公共权限组件读取中</footer>
+    <section id="page-networks" class="page"><div class="section-heading"><div><h2>容器网络</h2><p id="networkSummary">正在读取网络…</p></div><button id="refreshNetworks" class="secondary-button" type="button">刷新网络</button></div><div id="networkList" class="stack workbench-list-surface"></div></section>
+<footer id="pluginVersion">插件版本 1.1.32 · 公共权限组件读取中</footer>
   </main>
 
   <div id="modalBackdrop" class="modal-backdrop" hidden></div>
@@ -140,8 +136,8 @@
 
   <div id="busy" class="busy" hidden><div class="spinner"></div><span id="busyText">正在处理…</span></div>
   <div id="toast" class="toast" role="status"></div>
-  <script src="client-bridge.js?v=1.1.29&amp;ui=compact-metrics-20260930"></script>
-  <script src="app.js?v=1.1.29&amp;ui=image-filter"></script>
+  <script src="client-bridge.js?v=1.1.32&amp;ui=compact-metrics-20260930"></script>
+  <script src="app.js?v=1.1.32&amp;ui=image-filter"></script>
   <script>
     (function () {
       var document = window.XiaomiPluginClient.document;

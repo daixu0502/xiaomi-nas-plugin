@@ -9,9 +9,9 @@
   <meta name="theme-color" content="#eef1f5" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#171a20" media="(prefers-color-scheme: dark)">
   <title>文件快传</title>
-  <link rel="stylesheet" href="style.css?v=1.1.54&amp;ui=clipboard-20261015">
-  <link rel="stylesheet" href="modal.css?v=1.1.54">
-  <link rel="stylesheet" href="palette.css?v=1.1.54&amp;ui=clipboard-20261015">
+  <link rel="stylesheet" href="style.css?v=1.1.57&amp;ui=clipboard-20261015">
+  <link rel="stylesheet" href="modal.css?v=1.1.57">
+  <link rel="stylesheet" href="palette.css?v=1.1.57&amp;ui=clipboard-20261015">
 </head>
 <body><div data-minas-plugin="quickshare"><div class="minas-plugin-body">
   <main class="shell">
@@ -22,13 +22,34 @@
 
     <section class="plugin-status"><div class="status-main"><span id="serviceBadge" class="status-pill"><i></i>检查中</span><h2 class="status-title">临时分享服务</h2></div><p class="status-description" id="endpoint">正在读取访问地址…</p></section>
 
-    <nav class="tabs">
-      <button class="tab active" data-page="create">创建</button>
-      <button class="tab" data-page="records">分享记录</button>
-      <button class="tab" data-page="settings">设置</button>
-    </nav>
+    <nav class="tabs" aria-label="快传功能"><button type="button" class="tab active" data-page="records">分享链接</button><button type="button" class="tab" data-page="uploads">接收上传</button><button type="button" class="tab" data-page="history">全部记录</button><button type="button" class="tab" data-page="settings">设置</button></nav>
 
-    <section id="page-create" class="page active">
+
+
+    <section id="page-records" class="page active" aria-label="分享记录"><div class="metrics workbench-share-metrics"><article><span>有效分享</span><strong id="shareActiveCount">—</strong></article><article><span>上传入口</span><strong id="shareUploadCount">—</strong></article><article><span>累计访问</span><strong id="shareUseCount">—</strong></article></div>
+      <div class="section-heading section-toolbar records-heading"><div class="records-title"><h2 id="shareHeading">分享链接</h2><p id="recordSummary">正在读取…</p></div><button id="newShare" class="primary-button" type="button">新建分享</button><button id="clearShares" class="danger-button" type="button" hidden>清空记录</button></div>
+      <div id="shareList" class="stack loading workbench-list-surface">正在读取分享记录…</div>
+    </section>
+
+    <section id="page-settings" class="page">
+      <article class="panel">
+        <div class="panel-heading"><div><h3>分享服务</h3><p>安装时自动分配独立 TCP 端口，避免多用户冲突。</p></div></div>
+        <div class="button-row"><button id="startService" class="primary-button" type="button">启动服务</button><button id="stopService" class="danger-button" type="button">停止服务</button></div>
+      </article>
+      <article class="panel">
+        <div class="panel-heading"><div><h3>公网分享地址</h3><p>生成链接时使用；不会自动修改路由器。</p></div></div>
+        <label class="field-label"><span>外部基础地址</span><input id="externalBase" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例如 https://share.example.com 或 http://公网IP:端口"></label>
+        <div id="lanAddress" class="selected-path"></div>
+        <button id="saveSettings" class="primary-button full" type="button">保存地址</button>
+        <div class="warning-note">如果填写 HTTP 公网地址，密码和文件传输不会被加密。建议由路由器或反向代理提供 HTTPS，再转发到上方显示的局域网端口。</div>
+      </article>
+      <article class="panel compact"><h3>路由器端口转发</h3><p class="router-help">协议选择 TCP，内网主机填写本设备 IP，内网端口使用上方“局域网地址”中的端口；公网端口可以自定义。然后将完整公网地址填写到上方。</p></article>
+    </section>
+
+    <footer id="version">插件版本 1.1.57</footer>
+  </main>
+
+<section id="page-create" class="dialog create-share-dialog" role="dialog" aria-modal="true" aria-labelledby="createShareTitle" hidden><header class="dialog-head"><h2 id="createShareTitle">新建分享</h2><button id="closeCreateShare" type="button" class="close-button" aria-label="关闭新建分享">×</button></header>
       <article class="panel">
         <div class="panel-heading"><div><h3>分享类型</h3><p>分享文件、整个文件夹，或接收朋友上传的文件。</p></div></div>
         <div id="kindSwitch" class="segmented"><button class="active" data-kind="download">文件下载</button><button data-kind="folder">文件夹分享</button><button data-kind="upload">上传入口</button></div>
@@ -50,30 +71,6 @@
       </article>
       <div class="security-note">公网使用密码时请优先配置 HTTPS。随机链接本身具有访问权限，请勿发送到公开群聊。</div>
     </section>
-
-    <section id="page-records" class="page" aria-label="分享记录">
-      <div class="section-heading section-toolbar records-heading"><div class="records-title"><h2>分享记录</h2><p id="recordSummary">正在读取…</p></div><button id="clearShares" class="danger-button" type="button" hidden>清空记录</button></div>
-      <div id="shareList" class="stack loading">正在读取分享记录…</div>
-    </section>
-
-    <section id="page-settings" class="page">
-      <article class="panel">
-        <div class="panel-heading"><div><h3>分享服务</h3><p>安装时自动分配独立 TCP 端口，避免多用户冲突。</p></div></div>
-        <div class="button-row"><button id="startService" class="primary-button" type="button">启动服务</button><button id="stopService" class="danger-button" type="button">停止服务</button></div>
-      </article>
-      <article class="panel">
-        <div class="panel-heading"><div><h3>公网分享地址</h3><p>生成链接时使用；不会自动修改路由器。</p></div></div>
-        <label class="field-label"><span>外部基础地址</span><input id="externalBase" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例如 https://share.example.com 或 http://公网IP:端口"></label>
-        <div id="lanAddress" class="selected-path"></div>
-        <button id="saveSettings" class="primary-button full" type="button">保存地址</button>
-        <div class="warning-note">如果填写 HTTP 公网地址，密码和文件传输不会被加密。建议由路由器或反向代理提供 HTTPS，再转发到上方显示的局域网端口。</div>
-      </article>
-      <article class="panel compact"><h3>路由器端口转发</h3><p class="router-help">协议选择 TCP，内网主机填写本设备 IP，内网端口使用上方“局域网地址”中的端口；公网端口可以自定义。然后将完整公网地址填写到上方。</p></article>
-    </section>
-
-    <footer id="version">插件版本 1.1.54</footer>
-  </main>
-
   <div id="modalBackdrop" class="modal-backdrop" hidden></div>
   <section id="browserModal" class="sheet" role="dialog" aria-modal="true" aria-labelledby="browserTitle" hidden>
     <div class="sheet-handle"></div>
@@ -114,8 +111,8 @@
   </section>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="client-bridge.js?v=1.1.54&amp;ui=clipboard-20261015"></script>
-  <script src="app.js?v=1.1.54&amp;ui=clipboard-20261015"></script>
+  <script src="client-bridge.js?v=1.1.57&amp;ui=clipboard-20261015"></script>
+  <script src="app.js?v=1.1.57&amp;ui=clipboard-20261015"></script>
   <script>
     (function () {
       var document = window.XiaomiPluginClient.document;

@@ -56,7 +56,8 @@
       pending = 0;
       if (!frame.isConnected) return;
       var height = boundary.clientHeight;
-      if (outer && outer.clientHeight > 0) height = height > 0 ? Math.min(height, outer.clientHeight) : outer.clientHeight;
+      // The micro-app is the boundary; an absolutely positioned host may have a short flow parent.
+      if (!height && outer && outer.clientHeight > 0) height = outer.clientHeight;
       if (height > 0) frame.style.height = height + 'px';
       frame.classList.toggle('desktop-compact', frame.clientWidth < 680);
     }
@@ -93,9 +94,13 @@
     var backdrop = nativeDocument.createElement('div');
     backdrop.className = 'plugin-dialog-backdrop';
     backdrop.setAttribute('aria-hidden', 'true');
+    var depth = frame.querySelectorAll('dialog[open]').length;
+    var originalZIndex = dialog.style.zIndex;
+    backdrop.style.zIndex = String(80 + depth * 2);
+    dialog.style.zIndex = String(81 + depth * 2);
     frame.appendChild(backdrop);
     frame.appendChild(dialog);
-    var backgrounds = Array.prototype.slice.call(frame.children).filter(function (el) { return el.matches('.shell,.tabs'); });
+    var backgrounds = Array.prototype.slice.call(frame.children).filter(function (el) { return el !== dialog && el.matches('.shell,.tabs,dialog[open]'); });
     var inertBefore = backgrounds.map(function (el) { return el.inert; });
     backgrounds.forEach(function (el) { el.inert = true; });
     function keys(event) {
@@ -113,6 +118,7 @@
     }
     function cleanup() {
       backdrop.remove(); dialog.removeEventListener('keydown', keys);
+      dialog.style.zIndex = originalZIndex;
       backgrounds.forEach(function (el, i) { el.inert = inertBefore[i]; });
       if (previous && previous.isConnected && pluginRoot.contains(previous)) previous.focus({ preventScroll: true });
     }
@@ -421,3 +427,187 @@
   global.addEventListener('unmount', dispose, {once:true}); global.addEventListener('pagehide', dispose, {once:true});
 })(window);
 /* END SHARED FORM CONTROLS */
+
+/* BEGIN SHARED MOBILE NAVIGATION */
+/* Event-driven mobile navigation. No timers or network polling. */
+(function (global) {
+  'use strict';
+  var client=global.XiaomiPluginClient;
+  if (!client) return;
+  var root=client.document.documentElement, nav=root.querySelector('.tabs');
+  if (!nav || nav.dataset.mobileNavigation==='ready') return;
+  nav.dataset.mobileNavigation='ready';
+  var originalLabel=nav.getAttribute('aria-label') || '功能导航';
+  var frame=0, reveal=false, smooth=false, activeBefore=null, disposed=false;
+  function visibleButtons() {
+    return Array.from(nav.querySelectorAll('.tab')).filter(function (button) { return !button.hidden && button.getClientRects().length && !button.disabled; });
+  }
+  function refresh() {
+    frame=0;
+    if (disposed || !nav.isConnected) return;
+    if (root.classList.contains('desktop-client')) { reveal=false; smooth=false; return; }
+    var buttons=visibleButtons(), active=buttons.find(function (button) { return button.classList.contains('active'); });
+    buttons.forEach(function (button) {
+      var wanted=button===active?'page':null;
+      if (wanted && button.getAttribute('aria-current')!==wanted) button.setAttribute('aria-current',wanted);
+      else if (!wanted && button.hasAttribute('aria-current')) button.removeAttribute('aria-current');
+    });
+    if (active!==activeBefore) reveal=true;
+    activeBefore=active;
+    if (reveal && active) {
+      var boundary=nav.getBoundingClientRect(), item=active.getBoundingClientRect(), scale=boundary.width/(nav.offsetWidth || 1), next=nav.scrollLeft;
+      var inset=6*scale;
+      if (item.left<boundary.left+inset) next-=(boundary.left+inset-item.left)/scale;
+      else if (item.right>boundary.right-inset) next+=(item.right-boundary.right+inset)/scale;
+      next=Math.max(0,Math.min(next,nav.scrollWidth-nav.clientWidth));
+      if (Math.abs(next-nav.scrollLeft)>1) nav.scrollTo({left:next,behavior:smooth&&!global.matchMedia('(prefers-reduced-motion: reduce)').matches?'smooth':'auto'});
+    }
+    reveal=false; smooth=false;
+    var overflow=nav.scrollWidth>nav.clientWidth+1;
+    nav.dataset.scrollLeft=String(overflow&&nav.scrollLeft>1);
+    nav.dataset.scrollRight=String(overflow&&nav.scrollLeft<nav.scrollWidth-nav.clientWidth-1);
+    var label=originalLabel+(overflow?'，左右滑动查看更多功能':'');
+    if (nav.getAttribute('aria-label')!==label) nav.setAttribute('aria-label',label);
+  }
+  function schedule(shouldReveal,shouldSmooth) {
+    if (disposed) return;
+    reveal=reveal||!!shouldReveal; smooth=smooth||!!shouldSmooth;
+    if (!frame) frame=global.requestAnimationFrame(refresh);
+  }
+  function click(event) { if (event.target.closest('.tab')) schedule(true,true); }
+  function scroll() { schedule(false,false); }
+  function resize() { schedule(true,false); }
+  function keys(event) {
+    if (root.classList.contains('desktop-client') || !['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+    var current=event.target.closest('.tab'), buttons=visibleButtons(), index=buttons.indexOf(current);
+    if (index<0) return;
+    event.preventDefault();
+    var next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(event.key==='ArrowRight'?1:-1)+buttons.length)%buttons.length;
+    buttons[next].focus({preventScroll:true}); buttons[next].click();
+  }
+  // Content swipe gestures must not activate another page while a user pans the menu.
+  function gesture(event) { event.stopPropagation(); }
+  nav.addEventListener('click',click);
+  nav.addEventListener('keydown',keys);
+  nav.addEventListener('scroll',scroll,{passive:true});
+  nav.addEventListener('touchstart',gesture,{passive:true});
+  nav.addEventListener('touchend',gesture,{passive:true});
+  global.addEventListener('resize',resize);
+  var mutation=new MutationObserver(function () { schedule(true,false); });
+  mutation.observe(nav,{subtree:true,childList:true,attributes:true,attributeFilter:['class','hidden']});
+  var rootMutation=new MutationObserver(resize);rootMutation.observe(root,{attributes:true,attributeFilter:['class']});
+  var observer=global.ResizeObserver?new global.ResizeObserver(resize):null;
+  if (observer) observer.observe(nav);
+  if (root.ownerDocument.fonts) root.ownerDocument.fonts.ready.then(resize);
+  schedule(true,false);
+  function dispose() {
+    disposed=true;if(frame)global.cancelAnimationFrame(frame);mutation.disconnect();rootMutation.disconnect();if(observer)observer.disconnect();
+    nav.removeEventListener('click',click);nav.removeEventListener('keydown',keys);nav.removeEventListener('scroll',scroll);
+    nav.removeEventListener('touchstart',gesture);nav.removeEventListener('touchend',gesture);global.removeEventListener('resize',resize);
+    global.removeEventListener('pagehide',dispose);global.removeEventListener('unmount',dispose);
+  }
+  global.addEventListener('pagehide',dispose);global.addEventListener('unmount',dispose);
+})(window);
+/* END SHARED MOBILE NAVIGATION */
+
+/* BEGIN SHARED WORKBENCH */
+/* Shared workbench chrome. Keep the original version node and its live binding. */
+(function (global) {
+  'use strict';
+  var client = global.XiaomiPluginClient;
+  if (!client) return;
+  var doc = client.document, root = doc.documentElement;
+  var shell = root.querySelector('.shell'), heading = root.querySelector('.plugin-header h1');
+  if (!shell || !heading) return;
+  var name = heading.textContent.trim(), navObserver = null, scheduled = 0;
+  var version = shell.querySelector('footer');
+  var originalNext = version && version.nextSibling, originalParent = version && version.parentNode;
+  var helperVersion = version && version.querySelector('#helper-version');
+  var versionObserver = null;
+  root.classList.add('workbench-ui');
+  function text(node, value) { if (node.textContent !== value) node.textContent = value; }
+  function updateTitle() {
+    var nav = root.querySelector('.desktop-frame > .tabs');
+    var active = nav && nav.querySelector('.tab.active');
+    text(heading, root.classList.contains('desktop-client') && active ? active.textContent.trim() : name);
+  }
+  function formatVersion() {
+    if (!version) return;
+    var raw = version.textContent.trim(), marker = raw.indexOf('公共权限组件');
+    var first = (marker < 0 ? raw : raw.slice(0, marker)).replace(/[\s·]+$/, '');
+    var second = marker < 0 ? '' : raw.slice(marker).replace(/^公共权限组件\s*/, '');
+    var lines = version.querySelectorAll(':scope > .workbench-version-line');
+    if (lines.length === (marker < 0 ? 1 : 2) && lines[0].textContent === first &&
+        (marker < 0 || lines[1].textContent === '公共权限组件 ' + second)) return;
+    if (versionObserver) versionObserver.disconnect();
+    var one = doc.createElement('span'); one.className = 'workbench-version-line'; one.textContent = first;
+    version.replaceChildren(one);
+    if (marker >= 0) {
+      var two = doc.createElement('span'); two.className = 'workbench-version-line'; two.textContent = '公共权限组件 ';
+      if (helperVersion) { helperVersion.textContent = second; two.appendChild(helperVersion); }
+      else two.appendChild(doc.createTextNode(second));
+      version.appendChild(two);
+    }
+    if (versionObserver) versionObserver.observe(version, {subtree:true, childList:true, characterData:true});
+  }
+  root.querySelectorAll('.workbench-subnav').forEach(function (nav) {
+    var container = nav.parentNode;
+    function choose(button) {
+      nav.querySelectorAll('[data-section]').forEach(function (item) { item.setAttribute('aria-selected', String(item === button)); });
+      container.querySelectorAll('[data-section-panel]').forEach(function (panel) { panel.hidden = panel.dataset.sectionPanel !== button.dataset.section; });
+      container.dispatchEvent(new CustomEvent('workbench:section', {bubbles:true, detail:{section:button.dataset.section}}));
+    }
+    nav.addEventListener('click', function (event) { var button = event.target.closest('[data-section]'); if (button) choose(button); });
+    nav.addEventListener('keydown', function (event) {
+      if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+      var buttons = Array.from(nav.querySelectorAll('[data-section]')), index = buttons.indexOf(event.target);
+      if (index < 0) return; event.preventDefault();
+      index = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+      choose(buttons[index]); buttons[index].focus();
+    });
+  });
+  function decorate() {
+    scheduled = 0;
+    var frame = root.querySelector('.desktop-frame');
+    if (!root.classList.contains('desktop-client') || !frame) {
+      if (version && originalParent && version.parentNode !== originalParent) {
+        originalParent.insertBefore(version, originalNext && originalNext.parentNode === originalParent ? originalNext : null);
+      }
+      updateTitle(); return;
+    }
+    var nav = frame.querySelector(':scope > .tabs');
+    if (!nav) {
+      nav = doc.createElement('nav'); nav.className = 'tabs workbench-single-nav';
+      nav.setAttribute('aria-label', '功能页面');
+      var tab = doc.createElement('button'); tab.type = 'button'; tab.className = 'tab active';
+      tab.textContent = '概览'; tab.setAttribute('aria-current', 'page');
+      tab.addEventListener('click', function () { shell.scrollTop = 0; });
+      nav.appendChild(tab); frame.insertBefore(nav, shell);
+    }
+    var oldBar = frame.querySelector(':scope > .workbench-topbar'); if (oldBar) oldBar.remove();
+    if (version && version.parentNode !== nav) {
+      version.classList.add('workbench-version'); nav.appendChild(version);
+    }
+    if (!navObserver) {
+      navObserver = new MutationObserver(updateTitle);
+      navObserver.observe(nav, {subtree: true, attributes: true, attributeFilter: ['class']});
+    }
+    updateTitle();
+  }
+  var observer = new MutationObserver(function () {
+    if (!scheduled) scheduled = global.requestAnimationFrame(decorate);
+  });
+  observer.observe(root, {attributes: true, attributeFilter: ['class']});
+  if (version) {
+    versionObserver = new MutationObserver(formatVersion); formatVersion();
+    versionObserver.observe(version, {subtree:true, childList:true, characterData:true});
+  }
+  decorate();
+  function dispose() {
+    observer.disconnect(); if (navObserver) navObserver.disconnect(); if (versionObserver) versionObserver.disconnect();
+    if (scheduled) global.cancelAnimationFrame(scheduled);
+    global.removeEventListener('unmount', dispose); global.removeEventListener('pagehide', dispose);
+  }
+  global.addEventListener('unmount', dispose); global.addEventListener('pagehide', dispose);
+})(window);
+/* END SHARED WORKBENCH */

@@ -1,21 +1,40 @@
 (function(){
 'use strict';
 var document = window.XiaomiPluginClient.document;
-var state={kind:'download',path:'',expiry:86400,browsePath:'',shares:[],running:null,serviceBusy:false};
-var toastTimer=null,modalType='',confirmCallback=null,lastFocus=null;
+var state={kind:'download',path:'',expiry:86400,browsePath:'',shares:[],running:null,serviceBusy:false,page:'records'};
+var toastTimer=null,modalType='',confirmCallback=null,lastFocus=null,modalStack=[];
 var extendingShare=null,extendBusy=false;
 function id(name){return document.getElementById(name)}
 function el(tag,className,text){var node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node}
 function toast(message,isError){var node=id('toast');node.textContent=message;node.className='toast show'+(isError?' error':'');clearTimeout(toastTimer);toastTimer=setTimeout(function(){node.className='toast'},2800)}
 function request(action,data){return window.XiaomiPluginClient.request({plugin:'quickshare',cgi:'quickshare.cgi',action:action,options:{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(data||{})}}).then(function(response){return response.json().catch(function(){throw new Error('设备返回了无法解析的数据')})}).then(function(result){if(!result.ok)throw new Error(result.error||'操作失败');return result})}
 function restoreFocus(){if(!lastFocus||!document.documentElement.contains(lastFocus))return;var x=window.pageXOffset,y=window.pageYOffset;try{lastFocus.focus({preventScroll:true})}catch(error){lastFocus.focus()}if(window.pageXOffset!==x||window.pageYOffset!==y)window.scrollTo(x,y)}
-function openModal(type){lastFocus=document.activeElement;modalType=type;id('modalBackdrop').hidden=false;id(type).hidden=false;document.body.classList.add('modal-open')}
-function closeModal(){if(!modalType||(extendBusy&&modalType==='extendModal'))return;id(modalType).hidden=true;id('modalBackdrop').hidden=true;document.body.classList.remove('modal-open');modalType='';restoreFocus()}
+function syncModals(){
+ modalType=modalStack.length?modalStack[modalStack.length-1].type:'';
+ id('modalBackdrop').hidden=!modalType;id('modalBackdrop').style.zIndex=String(59+Math.max(0,modalStack.length-1)*2);
+ document.body.classList.toggle('modal-open',!!modalType);document.querySelector('.shell').inert=!!modalType;document.querySelector('.tabs').inert=!!modalType;
+ modalStack.forEach(function(item,index){id(item.type).style.zIndex=String(60+index*2);id(item.type).inert=index!==modalStack.length-1;});
+}
+function openModal(type){
+ if(modalType===type)return;var focus=document.activeElement;modalStack.push({type:type,focus:focus});id(type).hidden=false;syncModals();
+ var first=id(type).querySelector('button,input,textarea');if(first)first.focus({preventScroll:true});
+}
+function closeModal(){
+ if(!modalType||(extendBusy&&modalType==='extendModal'))return;
+ var item=modalStack.pop();id(item.type).hidden=true;id(item.type).inert=false;lastFocus=item.focus;syncModals();restoreFocus();
+}
+function openShare(kind){updateKind(kind||'download');id('createShareTitle').textContent=kind==='upload'?'创建上传入口':'新建分享';openModal('page-create');}
 function confirmAction(title,message,callback){id('confirmTitle').textContent=title;id('confirmMessage').textContent=message;confirmCallback=callback;openModal('confirmModal')}
 function formatSize(bytes){var size=Number(bytes||0),units=['B','KB','MB','GB','TB'],i=0;while(size>=1024&&i<units.length-1){size/=1024;i++}return(i?size.toFixed(1):Math.round(size))+' '+units[i]}
 function formatTime(value){if(!value)return'—';var date=new Date(Number(value)*1000);return date.toLocaleString()}
 function statusText(value){return{active:'有效',expired:'已过期',exhausted:'次数用完',revoked:'已失效'}[value]||value}
-function activatePage(page){document.querySelectorAll('.tab').forEach(function(tab){tab.classList.toggle('active',tab.dataset.page===page)});document.querySelectorAll('.page').forEach(function(node){node.classList.toggle('active',node.id==='page-'+page)});if(page==='records')loadShares();if(page==='settings')loadSettings()}
+function activatePage(page){
+ state.page=page;var view=['records','uploads','history'].includes(page)?'records':page;
+ document.querySelectorAll('.tab').forEach(function(tab){tab.classList.toggle('active',tab.dataset.page===page);tab.setAttribute('aria-current',tab.dataset.page===page?'page':'false');});
+ document.querySelectorAll('.page').forEach(function(node){node.classList.toggle('active',node.id==='page-'+view);});
+ if(view==='records'){id('shareHeading').textContent={records:'分享链接',uploads:'接收上传',history:'全部分享记录'}[page];id('newShare').textContent=page==='uploads'?'创建上传入口':'新建分享';loadShares();}
+ if(page==='settings')loadSettings();
+}
 
 function updateServiceControls(){id('startService').disabled=state.serviceBusy||state.running!==false;id('stopService').disabled=state.serviceBusy||state.running!==true}
 function loadStatus(showToast){return request('status').then(function(data){state.running=Boolean(data.running);id('serviceBadge').className='status-pill '+(data.running?'online':'offline');id('serviceBadge').innerHTML='<i></i>'+(data.running?'运行中':'已停止');id('endpoint').textContent=data.baseUrl;id('version').textContent='插件版本 '+data.pluginVersion;id('recordSummary').textContent=data.activeShares+' 个有效 · '+data.totalShares+' 条记录';updateServiceControls();if(showToast)toast('状态已刷新')}).catch(function(error){state.running=null;updateServiceControls();id('serviceBadge').className='status-pill offline';id('serviceBadge').innerHTML='<i></i>连接失败';toast(error.message,true)})}
@@ -62,7 +81,7 @@ function manualCopy(value){
   id('copyHelp').textContent=selected?'自动复制未成功，链接已选中。电脑按 Ctrl+C（Mac 按 ⌘C），手机可长按复制。':'自动复制未成功。请选中上方链接，电脑按 Ctrl+C（Mac 按 ⌘C），手机可长按复制。';
   id('copyHelp').hidden=false;
 }
-function createShare(){var password=id('password').value,maxUses=Number(id('maxUses').value);if(!state.path){toast('请先'+targetTitle(),true);return}if(password&&password.length<4){toast('密码至少需要 4 位',true);return}if(!Number.isInteger(maxUses)||maxUses<0||maxUses>1000){toast('次数必须是 0–1000 的整数',true);return}var button=id('createButton');button.disabled=true;request('create',{kind:state.kind,path:state.path,password:password,expiresIn:state.expiry,maxUses:maxUses}).then(function(data){id('password').value='';showShareLink(data.share.url);loadStatus(false);loadShares()}).catch(function(error){toast(error.message,true)}).finally(function(){button.disabled=false})}
+function createShare(){var password=id('password').value,maxUses=Number(id('maxUses').value);if(!state.path){toast('请先'+targetTitle(),true);return}if(password&&password.length<4){toast('密码至少需要 4 位',true);return}if(!Number.isInteger(maxUses)||maxUses<0||maxUses>1000){toast('次数必须是 0–1000 的整数',true);return}var button=id('createButton');button.disabled=true;request('create',{kind:state.kind,path:state.path,password:password,expiresIn:state.expiry,maxUses:maxUses}).then(function(data){id('password').value='';closeModal();showShareLink(data.share.url);loadStatus(false);loadShares()}).catch(function(error){toast(error.message,true)}).finally(function(){button.disabled=false})}
 
 function loadShares(){var list=id('shareList');list.className='stack loading';list.textContent='正在读取分享记录…';return request('list').then(function(data){state.shares=data.shares||[];renderShares()}).catch(function(error){list.textContent=error.message;toast(error.message,true)})}
 function extendSeconds(){var selected=document.querySelector('#extendForm input[name="extendSeconds"]:checked');return selected?Number(selected.value):86400}
@@ -86,9 +105,13 @@ id('extendForm').addEventListener('submit',function(event){
 function renderShares(){
   var list=id('shareList');
   list.textContent='';list.className='stack';
-  id('clearShares').hidden=!state.shares.length;
-  if(!state.shares.length){list.className='stack empty-state';list.textContent='还没有分享记录。';return}
-  state.shares.forEach(function(share){
+  id('clearShares').hidden=state.page!=='history'||!state.shares.length;
+  var rows=state.shares.filter(function(item){return state.page==='history'||(item.status==='active'&&(state.page==='uploads'?item.kind==='upload':item.kind!=='upload'));});
+  id('shareActiveCount').textContent=state.shares.filter(function(v){return v.kind!=='upload'&&v.status==='active';}).length;
+  id('shareUploadCount').textContent=state.shares.filter(function(v){return v.kind==='upload'&&v.status==='active';}).length;
+  id('shareUseCount').textContent=state.shares.reduce(function(sum,v){return sum+Number(v.uses||0);},0);
+  if(!rows.length){list.className='stack empty-state';list.textContent='还没有分享记录。';return}
+  rows.forEach(function(share){
     var card=el('article','share-card');
     var head=el('div','share-head'),title=el('div','share-title');
     title.appendChild(el('h3','',share.name));title.appendChild(el('p','',share.path));
@@ -132,6 +155,8 @@ function renderShares(){
 document.querySelectorAll('.tab').forEach(function(tab){tab.addEventListener('click',function(){activatePage(tab.dataset.page)})});
 document.querySelectorAll('#kindSwitch button').forEach(function(button){button.addEventListener('click',function(){updateKind(button.dataset.kind)})});
 document.querySelectorAll('#expiryChoices button').forEach(function(button){button.addEventListener('click',function(){state.expiry=Number(button.dataset.value);document.querySelectorAll('#expiryChoices button').forEach(function(item){item.classList.toggle('active',item===button)})})});
+id('newShare').onclick=function(){openShare(state.page==='uploads'?'upload':'download');};
+id('closeCreateShare').onclick=closeModal;
 id('refresh').addEventListener('click',function(){loadStatus(true);loadShares()});id('browseButton').addEventListener('click',openBrowser);id('browserBack').addEventListener('click',function(){browse(parentPath(state.browsePath))});id('chooseFolder').addEventListener('click',function(){selectPath(state.browsePath)});id('closeBrowser').addEventListener('click',closeModal);id('createButton').addEventListener('click',createShare);id('closeLink').addEventListener('click',closeModal);id('copyCreatedLink').addEventListener('click',function(){copyText(id('createdLink').value).then(function(){toast('链接已复制');closeModal()}).catch(function(){manualCopy(id('createdLink').value)})});
 id('clearShares').addEventListener('click',function(){
   confirmAction('清空分享记录','将删除全部分享记录，所有仍有效的链接会立即失效。此操作无法恢复，但不会删除原文件或已上传的文件。是否继续？',function(){
@@ -141,7 +166,11 @@ id('clearShares').addEventListener('click',function(){
 id('modalBackdrop').addEventListener('click',function(){if(modalType==='confirmModal'){confirmCallback=null}closeModal()});id('confirmCancel').addEventListener('click',function(){confirmCallback=null;closeModal()});id('confirmAccept').addEventListener('click',function(){var callback=confirmCallback;confirmCallback=null;closeModal();if(callback)callback()});
 id('saveSettings').addEventListener('click',function(){var value=id('externalBase').value.trim();if(value&&!/^https?:\/\//i.test(value)){toast('请输入完整的 HTTP 或 HTTPS 地址',true);return}var button=this;button.disabled=true;request('settings_save',{externalBase:value}).then(function(data){toast('公网分享地址已保存');id('endpoint').textContent=data.baseUrl;loadShares()}).catch(function(error){toast(error.message,true)}).finally(function(){button.disabled=false})});
 id('startService').addEventListener('click',function(){runServiceAction('server_start',this,'分享服务已启动')});id('stopService').addEventListener('click',function(){var button=this;confirmAction('停止分享服务','停止后所有临时链接都会暂时无法访问，但分享记录不会删除。',function(){runServiceAction('server_stop',button,'分享服务已停止')})});
-document.addEventListener('keydown',function(event){if(event.key==='Escape'&&modalType){if(modalType==='confirmModal')confirmCallback=null;closeModal()}});
-var swipe=null;document.querySelector('.shell').addEventListener('touchstart',function(event){if(event.touches.length!==1||event.target.closest('button,input,textarea,a')||modalType){swipe=null;return}var touch=event.touches[0];if(touch.clientX<24||touch.clientX>window.innerWidth-24){swipe=null;return}swipe={x:touch.clientX,y:touch.clientY}},{passive:true});document.querySelector('.shell').addEventListener('touchend',function(event){if(!swipe||!event.changedTouches.length)return;var touch=event.changedTouches[0],dx=touch.clientX-swipe.x,dy=touch.clientY-swipe.y;swipe=null;if(Math.abs(dx)<55||Math.abs(dx)<Math.abs(dy)*1.35)return;var pages=['create','records','settings'],active=document.querySelector('.tab.active'),index=pages.indexOf(active?active.dataset.page:'create'),next=dx<0?index+1:index-1;if(next>=0&&next<pages.length)activatePage(pages[next])},{passive:true});
+document.addEventListener('keydown',function(event){
+ if(!modalType)return;
+ if(event.key==='Escape'){event.preventDefault();if(modalType==='confirmModal')confirmCallback=null;closeModal();}
+ if(event.key==='Tab'){var items=Array.from(id(modalType).querySelectorAll('button,input,textarea,select,a[href]')).filter(function(el){return !el.disabled&&el.tabIndex>=0&&el.getClientRects().length;});var first=items[0],last=items[items.length-1];if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}
+});
+var swipe=null;document.querySelector('.shell').addEventListener('touchstart',function(event){if(event.touches.length!==1||event.target.closest('button,input,textarea,a')||modalType){swipe=null;return}var touch=event.touches[0];if(touch.clientX<24||touch.clientX>window.innerWidth-24){swipe=null;return}swipe={x:touch.clientX,y:touch.clientY}},{passive:true});document.querySelector('.shell').addEventListener('touchend',function(event){if(!swipe||!event.changedTouches.length)return;var touch=event.changedTouches[0],dx=touch.clientX-swipe.x,dy=touch.clientY-swipe.y;swipe=null;if(Math.abs(dx)<55||Math.abs(dx)<Math.abs(dy)*1.35)return;var pages=['records','uploads','history','settings'],active=document.querySelector('.tab.active'),index=pages.indexOf(active?active.dataset.page:'records'),next=dx<0?index+1:index-1;if(next>=0&&next<pages.length)activatePage(pages[next])},{passive:true});
 updateServiceControls();loadStatus(false);loadShares();loadSettings();
 })();

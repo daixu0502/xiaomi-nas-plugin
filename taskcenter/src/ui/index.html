@@ -1,20 +1,14 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="theme-color" content="#eef1f5" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#171a20" media="(prefers-color-scheme: dark)"><title>定时任务</title><link rel="stylesheet" href="style.css?v=1.0.30&amp;ui=compact-metrics-20260930"><link rel="stylesheet" href="palette.css?v=1.0.30&amp;ui=compact-metrics-20260930"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="theme-color" content="#eef1f5" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#171a20" media="(prefers-color-scheme: dark)"><title>定时任务</title><link rel="stylesheet" href="style.css?v=1.0.33&amp;ui=compact-metrics-20260930"><link rel="stylesheet" href="palette.css?v=1.0.33&amp;ui=compact-metrics-20260930"></head>
 <body><div data-minas-plugin="taskcenter"><div class="minas-plugin-body">
 <main class="shell">
  <header class="topbar plugin-header"><div><div class="eyebrow">XIAOMI SMART STORAGE</div><h1>定时任务</h1></div><button id="refresh" class="icon-button refresh-control" aria-label="刷新" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.2-2.1L20 11M4 13l2.7 4.1A7 7 0 0 0 17.9 15"/></svg></button></header>
  <section class="plugin-status scheduler-status"><div class="status-copy"><div class="status-main"><span id="health" class="badge" role="status">检查中</span><h2 class="status-title">让 NAS 按计划工作</h2></div><p class="status-description" id="clock">正在读取设备时间…</p></div><button id="schedulerToggle" class="primary" type="button" disabled>正在读取调度状态…</button></section>
- <nav class="tabs" aria-label="功能页面"><button class="tab active" data-page="overview">概览</button><button class="tab" data-page="tasks">任务</button><button class="tab" data-page="templates">模板</button><button class="tab" data-page="history">记录</button></nav>
- <section id="page-overview" class="page active">
-  <div class="metrics"><article><span>任务总数</span><strong id="countTotal">—</strong></article><article><span>已启用</span><strong id="countEnabled">—</strong></article><article><span>执行中</span><strong id="countRunning">—</strong></article><article><span>近 24 小时失败</span><strong id="countFailed">—</strong></article></div>
-  <article class="panel welcome"><div class="eyebrow accent">FIRST STEPS</div><h2>先选模板，再手动启用</h2><p>容器、用户脚本与安全清理模板默认停用。支持指定日期、月计划、Cron 和成功后联动。升级不会自动启用新任务或执行清理。</p><div class="actions"><button class="primary" data-go="tasks">配置我的任务</button><button class="secondary" data-go="templates">浏览模板</button></div></article>
-  <article class="panel"><h3>最近执行</h3><div id="recent" class="stack"></div></article>
-  <article class="panel"><h3>执行规则</h3><p>按 NAS 本机时区运行，每分钟检查一次。错过的普通计划不补跑；上次未结束则跳过。开机任务仅在启用后的下一次开机生效。</p><p id="poolInfo"></p><p>脚本以安装插件的用户执行；重启和 Docker 操作由受限权限助手执行。日志保留最近 100 条，每条最多 64 KiB。</p></article>
- </section>
- <section id="page-tasks" class="page"><div class="toolbar"><p id="taskSummary">正在读取…</p><button id="newTask" class="primary">＋ 新建任务</button></div><div id="taskList" class="stack"></div></section>
+ <nav class="tabs" aria-label="任务功能"><button type="button" class="tab active" data-page="tasks">任务</button><button type="button" class="tab" data-page="history">执行记录</button><button type="button" class="tab" data-page="templates">模板</button></nav>
+ <section id="page-tasks" class="page active"><div class="metrics"><article><span>任务总数</span><strong id="countTotal">—</strong></article><article><span>已启用</span><strong id="countEnabled">—</strong></article><article><span>执行中</span><strong id="countRunning">—</strong></article><article><span>近 24 小时失败</span><strong id="countFailed">—</strong></article></div><div class="toolbar"><p id="taskSummary">正在读取…</p><button id="newTask" class="primary">＋ 新建任务</button></div><div id="taskList" class="stack workbench-list-surface"></div></section>
  <section id="page-templates" class="page"><article class="notice">模板不会直接执行。点击“使用模板”后编辑并保存，任务仍是停用状态。</article><div id="templateList" class="stack"></div></section>
  <section id="page-history" class="page"><div class="toolbar"><p>最近 100 条 · 点击查看输出</p><button id="refreshHistory" class="secondary">刷新</button></div><div id="historyList" class="stack"></div></section>
- <footer id="version">插件版本 1.0.30 · 公共权限组件读取中</footer>
+ <footer id="version">插件版本 1.0.33 · 公共权限组件读取中</footer>
 </main>
 <div id="backdrop" class="backdrop" hidden></div>
 <section id="editor" class="dialog editor" role="dialog" aria-modal="true" aria-labelledby="editorTitle" hidden>
@@ -50,5 +44,5 @@
 <section id="logDialog" class="dialog editor" role="dialog" aria-modal="true" aria-labelledby="logTitle" hidden><header class="dialog-head"><h2 id="logTitle">执行输出</h2><button class="close-button" data-close="logDialog" aria-label="关闭">×</button></header><pre id="logText"></pre></section>
 <div id="pickerBackdrop" class="backdrop picker-backdrop" hidden></div><section id="picker" class="dialog picker" role="dialog" aria-modal="true" aria-labelledby="pickerTitle" hidden><header class="dialog-head"><h2 id="pickerTitle">选择选项</h2><button class="close-button" data-close="picker" aria-label="关闭">×</button></header><div id="pickerOptions" class="picker-options"></div></section>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
-<script src="client-bridge.js?v=1.0.30&amp;ui=compact-metrics-20260930"></script><script src="app.js?v=1.0.30&amp;ui=compact-metrics-20260930"></script>
+<script src="client-bridge.js?v=1.0.33&amp;ui=compact-metrics-20260930"></script><script src="app.js?v=1.0.33&amp;ui=compact-metrics-20260930"></script>
 </div></div></body></html>

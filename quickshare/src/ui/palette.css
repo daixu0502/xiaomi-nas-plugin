@@ -155,7 +155,7 @@
 
 /* BEGIN SHARED TYPOGRAPHY */
 /* Scoped text metrics. Reuse host fonts; desktop readability has its own scale. */
-[data-minas-plugin="quickshare"]{--type-body:14px;--type-body-line:20px;--type-title:20px;--type-title-line:28px;--type-heading:17px;--type-heading-line:24px;--type-subheading:15px;--type-subheading-line:22px;--type-dialog:18px;--type-dialog-line:26px;--type-helper:12px;--type-helper-line:18px;--type-notice:13px;--type-notice-line:20px;--type-code:13px;--type-code-line:21px;--type-eyebrow:11px;--type-eyebrow-line:16px;--type-field:14px;--type-field-line:22px;--type-metric:22px;--type-metric-line:30px;--type-table-heading:13px;--type-table-heading-line:20px;--type-selection:16px;--type-selection-line:24px;--font-ui:"MiSans","MiSans VF","PingFang SC","Microsoft YaHei UI","Microsoft YaHei","Noto Sans SC",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;--font-code:ui-monospace,"Cascadia Code",Consolas,"SFMono-Regular",Menlo,var(--font-ui),monospace;--text:#22252a;--muted:#6b7280;font-family:var(--font-ui);font-size:var(--type-body);font-weight:400;line-height:var(--type-body-line);font-synthesis:none;letter-spacing:normal;text-shadow:none;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+[data-minas-plugin="quickshare"]{--type-body:14px;--type-body-line:22px;--type-title:24px;--type-title-line:32px;--type-heading:16px;--type-heading-line:24px;--type-subheading:15px;--type-subheading-line:22px;--type-dialog:18px;--type-dialog-line:26px;--type-helper:12px;--type-helper-line:18px;--type-notice:13px;--type-notice-line:21px;--type-code:14px;--type-code-line:22px;--type-eyebrow:11px;--type-eyebrow-line:16px;--type-field:14px;--type-field-line:22px;--type-metric:24px;--type-metric-line:32px;--type-table-heading:13px;--type-table-heading-line:20px;--type-selection:16px;--type-selection-line:24px;--font-ui:"MiSans","MiSans VF","PingFang SC","Microsoft YaHei UI","Microsoft YaHei","Noto Sans SC",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;--font-code:ui-monospace,"Cascadia Code",Consolas,"SFMono-Regular",Menlo,var(--font-ui),monospace;--text:#22252a;--muted:#6b7280;font-family:var(--font-ui);font-size:var(--type-body);font-weight:400;line-height:var(--type-body-line);font-synthesis:none;letter-spacing:normal;text-shadow:none;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
 [data-minas-plugin="quickshare"].desktop-client{--type-body:16px;--type-body-line:24px;--type-title:22px;--type-title-line:30px;--type-heading:18px;--type-heading-line:26px;--type-subheading:16px;--type-subheading-line:24px;--type-dialog:20px;--type-dialog-line:28px;--type-helper:14px;--type-helper-line:21px;--type-notice:14px;--type-notice-line:22px;--type-code:14px;--type-code-line:22px;--type-eyebrow:12px;--type-eyebrow-line:18px;--type-field:16px;--type-field-line:24px;--type-metric:24px;--type-metric-line:32px;--type-table-heading:14px;--type-table-heading-line:22px;--type-selection:17px;--type-selection-line:26px;--text:#20242a;--muted:#596273;-webkit-font-smoothing:auto;-moz-osx-font-smoothing:auto}
 @media(prefers-color-scheme:dark){[data-minas-plugin="quickshare"]:not(.desktop-client){--text:#e6e8ed;--muted:#aeb5c1}}
 /* Retire legacy business-page sizes through inheritance. Keep semantic tiers
@@ -213,8 +213,127 @@
 [data-minas-plugin="quickshare"]:not(.desktop-client) .tabs::-webkit-scrollbar{display:none}
 [data-minas-plugin="quickshare"]:not(.desktop-client) .tabs::before{display:none}
 [data-minas-plugin="quickshare"]:not(.desktop-client) .tabs .tab{flex:1 0 auto!important;min-width:max-content;width:auto!important;min-height:40px;height:auto;margin:0;padding:9px 12px;white-space:nowrap!important;overflow:visible;text-overflow:clip;text-align:center;border:0;border-radius:10px;background:transparent;color:var(--muted);box-shadow:none}
+/* Small fixed menus can share the row equally without changing scrolling menus. */
+[data-minas-plugin="quickshare"]:not(.desktop-client) .tabs.tabs-equal .tab{flex:1 0 0!important;min-width:0;width:0!important;padding-inline:8px}
 [data-minas-plugin="quickshare"]:not(.desktop-client) .tabs .tab.active,[data-minas-plugin="quickshare"]:not(.desktop-client) .tabs .tab[aria-current=page]{color:var(--accent);background:var(--soft);box-shadow:none}
 [data-minas-plugin="quickshare"]:not(.desktop-client) .tabs .tab:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
 [data-minas-plugin="quickshare"]:not(.desktop-client) .tabs .tab[hidden]{display:none!important}
 @media(prefers-reduced-motion:reduce){[data-minas-plugin="quickshare"]:not(.desktop-client) .tabs{scroll-behavior:auto}}
 /* END SHARED MOBILE NAVIGATION */
+
+/* BEGIN SHARED WORKBENCH */
+/* Clear workbench: one shared production skin; all selectors stay in this plugin. */
+[data-minas-plugin="quickshare"].workbench-ui{--bg:#f5f7fb;--surface:#fff;--surface-solid:#fff;--text:#202c40;--muted:#69778c;--line:#e4eaf2;--sidebar:#fff;--accent:#4f65d8;--soft:#edf1ff;--on-accent:#fff;--blue:var(--accent);--blue-dark:var(--accent);--blue-soft:var(--soft);--teal:var(--accent);--teal-dark:var(--accent);--teal-soft:var(--soft);--purple:var(--accent);--purple-dark:var(--accent);--purple-soft:var(--soft);--green-dark:var(--accent);--green-soft:var(--soft);--shadow:none;--card-radius:14px;--card-gap:18px;color-scheme:light}
+/* Desktop type sizes remain owned by typography.css. */
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client{--text:#20242a;--muted:#536074}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .plugin-header h1{font-weight:600!important;letter-spacing:normal}
+[data-minas-plugin="quickshare"].workbench-ui .minas-plugin-body{background:var(--bg);color:var(--text)}
+[data-minas-plugin="quickshare"].workbench-ui [hidden]{display:none!important}
+[data-minas-plugin="quickshare"].workbench-ui .page{display:none}
+[data-minas-plugin="quickshare"].workbench-ui .page.active{display:block}
+[data-minas-plugin="quickshare"].workbench-ui .plugin-header .eyebrow{display:none}
+@media(prefers-color-scheme:dark){[data-minas-plugin="quickshare"].workbench-ui:not(.desktop-client){--bg:#141a24;--surface:#1d2532;--surface-solid:#1d2532;--text:#e7edf7;--muted:#a4b0c3;--line:#303b4d;--sidebar:#19212e;--accent:#a4b4ff;--soft:#293452;--on-accent:#172049;color-scheme:dark}}
+[data-minas-plugin="quickshare"].workbench-ui .shell{padding:22px 18px 30px}
+[data-minas-plugin="quickshare"].workbench-ui .plugin-header{min-height:62px;margin-bottom:20px;gap:14px}
+[data-minas-plugin="quickshare"].workbench-ui .plugin-header h1{font-weight:500!important;letter-spacing:-.02em}
+[data-minas-plugin="quickshare"].workbench-ui .plugin-status{min-height:0;margin-bottom:18px;padding:15px 18px;border-radius:var(--card-radius);box-shadow:none;background:var(--surface)}
+[data-minas-plugin="quickshare"].workbench-ui .tabs{box-shadow:none}
+[data-minas-plugin="quickshare"].workbench-ui :is(.panel,.card,.container-card,.image-card,.volume-card,.task-card,.share-card,.disk-card){border:1px solid var(--line);border-radius:var(--card-radius);box-shadow:none;background:var(--surface)}
+[data-minas-plugin="quickshare"].workbench-ui :is(.page,.editor-layout,.content-column)>:is(.panel,.card){margin-bottom:18px}
+[data-minas-plugin="quickshare"].workbench-ui :is(.panel,.card){padding:20px}
+[data-minas-plugin="quickshare"].workbench-ui :is(.panel,.card)>:is(h2,h3){margin-bottom:14px}
+[data-minas-plugin="quickshare"].workbench-ui :is(.card-heading,.panel-heading,.section-heading){gap:14px;margin-bottom:16px}
+[data-minas-plugin="quickshare"].workbench-ui :is(.card-heading,.panel-heading,.section-heading)>div{min-width:0}
+[data-minas-plugin="quickshare"].workbench-ui :is(.card-heading,.panel-heading) p{margin-top:4px;color:var(--muted)}
+[data-minas-plugin="quickshare"].workbench-ui .stack{gap:12px}
+[data-minas-plugin="quickshare"].workbench-ui :is(.metric-grid,.metrics){border-radius:var(--card-radius);box-shadow:none;margin-bottom:18px}
+[data-minas-plugin="quickshare"].workbench-ui :is(.metric-grid,.metrics)>:is(.metric,.metric-card,article){min-height:92px;padding:18px 20px;gap:6px;box-shadow:none}
+[data-minas-plugin="quickshare"].workbench-ui :is(.metric-grid,.metrics)>*>strong{font-size:var(--type-metric)!important;line-height:var(--type-metric-line)!important;font-weight:500!important}
+[data-minas-plugin="quickshare"].workbench-ui :is(.group-row,.provider-row,.detail-item,.detail-row,.task-row,.service-row){background:var(--surface);border-color:var(--line);border-radius:10px}
+[data-minas-plugin="quickshare"].workbench-ui :is(.button,.primary-button,.secondary-button,.danger-button,.action-button,button.primary,button.secondary,button.danger,.pick-trigger){min-height:38px;border-radius:8px;padding:7px 13px;box-shadow:none;font-weight:500}
+[data-minas-plugin="quickshare"].workbench-ui :is(.button.secondary,.secondary-button,button.secondary,.action-button){background:var(--surface);border-color:var(--line);color:var(--text)}
+[data-minas-plugin="quickshare"].workbench-ui :is(.button.primary,.primary-button,button.primary){background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+[data-minas-plugin="quickshare"].workbench-ui :is(input,textarea,select,.ui-select-trigger,.mi-select-trigger):not([type=checkbox]):not([type=radio]):not([role=switch]){border-radius:8px;border-color:var(--line);background:var(--surface);color:var(--text)}
+[data-minas-plugin="quickshare"].workbench-ui :is(.actions,.button-row,.panel-actions,.form-actions){gap:9px}
+[data-minas-plugin="quickshare"].workbench-ui :is(.status-pill,.mini-badge,.badge,.pill){border-radius:6px;font-weight:500}
+[data-minas-plugin="quickshare"].workbench-ui :is(.table-scroll,.table-responsive){min-width:0;max-width:100%}
+[data-minas-plugin="quickshare"].workbench-ui :is(th,td){border-color:var(--line)}
+[data-minas-plugin="quickshare"].workbench-ui :is(.modal,.dialog,.sheet,.detail-sheet,.mi-picker-sheet,.mi-confirm-dialog,dialog){border-color:var(--line);border-radius:18px;background:var(--surface-solid);color:var(--text)}
+[data-minas-plugin="quickshare"].workbench-ui .toast{z-index:95}
+/* The host already supplies the window title. Keep only navigation and content. */
+[data-minas-plugin="quickshare"].workbench-ui .workbench-topbar{display:none!important}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame{display:grid;grid-template-columns:176px minmax(0,1fr);grid-template-rows:minmax(0,1fr);gap:0;background:var(--bg)}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame>.tabs{grid-column:1;grid-row:1;display:flex;flex-direction:column;align-items:stretch;width:100%;height:100%;min-height:0;max-height:none;padding:22px 12px 14px;gap:5px;margin:0;border:0;border-right:1px solid var(--line);border-radius:0;background:var(--surface);overflow:auto}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame>.tabs::before{display:none!important;content:none!important}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame>.tabs .tab{flex:0 0 auto;display:block;min-height:40px;width:100%;padding:9px 12px;border-radius:8px;background:transparent;color:var(--muted);text-align:left;box-shadow:none}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame>.tabs .tab.active{background:var(--soft);color:var(--accent)}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame>.shell{grid-column:2;grid-row:1;display:block;width:100%;height:100%;min-width:0;max-height:100%;padding:28px 28px 34px;margin:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}
+[data-minas-plugin="quickshare"].workbench-ui .shell{container:workbench-page / inline-size}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .plugin-header .eyebrow{display:none}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .plugin-header{min-height:42px;margin-bottom:22px;align-items:center}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame>.tabs>.workbench-version{display:block!important;flex:0 0 auto;width:100%;min-width:0;max-width:100%;margin-top:auto;padding:28px 10px 0;text-align:left;font-size:var(--type-helper)!important;line-height:var(--type-helper-line)!important;color:var(--muted);overflow-wrap:anywhere}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .workbench-version *{font-size:inherit!important;line-height:inherit!important}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-version-line{display:block;max-width:100%;overflow-wrap:anywhere}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame.desktop-compact{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame.desktop-compact>.tabs{grid-column:1;grid-row:1;flex-direction:row;flex-wrap:wrap;align-content:flex-start;height:auto;max-height:180px;width:100%;padding:9px 12px;border-right:0;border-bottom:1px solid var(--line);gap:3px 7px}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame.desktop-compact>.tabs::before{display:none}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame.desktop-compact>.tabs .tab{width:auto;flex:1 0 auto;text-align:center;padding:7px 9px;min-height:36px}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame.desktop-compact>.tabs>.workbench-version{flex-basis:100%;padding:4px 9px 0;margin:0;font-size:var(--type-helper)!important;line-height:var(--type-helper-line)!important}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame.desktop-compact>.shell{grid-column:1;grid-row:2;width:100%;height:100%;padding:20px 16px 28px}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame.desktop-compact>.shell :is(.grid,.engine-grid,.form-grid,.field-grid,.editor-layout){grid-template-columns:minmax(0,1fr)}
+/* Shared form and list geometry retains all original controls and labels. */
+[data-minas-plugin="quickshare"].workbench-ui .form-body{gap:16px}
+[data-minas-plugin="quickshare"].workbench-ui :is(.form-grid,.field-grid,.engine-grid){gap:16px}
+[data-minas-plugin="quickshare"].workbench-ui :is(.form-body label,.field-grid label){min-width:0}
+[data-minas-plugin="quickshare"].workbench-ui .media-selection{border:1px solid var(--line);border-radius:var(--card-radius);padding:16px 18px;margin:0 0 18px;background:var(--surface);box-shadow:none}
+[data-minas-plugin="quickshare"].workbench-ui .media-selection>div{min-width:0}
+[data-minas-plugin="quickshare"].workbench-ui .media-selection strong{overflow-wrap:anywhere}
+[data-minas-plugin="quickshare"].workbench-ui .interface-item{background:var(--bg);border:0;border-radius:10px;padding:16px}
+[data-minas-plugin="quickshare"].workbench-ui :is(.workbench-overview,.workbench-grid){display:grid;grid-template-columns:minmax(0,1fr);gap:18px;width:100%;min-width:0}
+[data-minas-plugin="quickshare"].workbench-ui :is(.workbench-overview,.workbench-grid)>*{min-width:0;width:100%;max-width:none!important;justify-self:stretch}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-grid>:is(.panel,.card){margin:0}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-grid>:last-child:nth-child(odd){grid-column:1/-1}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-overview>:is(.metric-grid,.card){margin:0;min-width:0}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-overview>.workbench-full{grid-column:1/-1}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-overview>.metric-grid{grid-column:1/-1}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-full{grid-column:1/-1}
+@container workbench-page (min-width:640px){[data-minas-plugin="quickshare"].workbench-ui :is(.workbench-overview,.workbench-grid){grid-template-columns:repeat(2,minmax(0,1fr))}}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-subnav{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-bottom:18px}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-subnav button{min-height:38px;padding:7px 13px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted)}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-subnav button[aria-selected=true]{background:var(--soft);color:var(--accent);border-color:var(--accent)}
+[data-minas-plugin="quickshare"].workbench-ui :is(#containerList,#imageList,#volumeList,#networkList,#shareList,#taskList,#historyList){background:var(--surface);border:1px solid var(--line);border-radius:var(--card-radius);padding:18px;gap:0}
+[data-minas-plugin="quickshare"].workbench-ui :is(#containerList,#imageList,#volumeList,#networkList,#shareList,#taskList,#historyList)>:is(.task-card,.share-card,.container-card,.resource-card){width:100%;max-width:none;margin:0;padding:18px 0;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none}
+[data-minas-plugin="quickshare"].workbench-ui :is(#containerList,#imageList,#volumeList,#networkList,#shareList,#taskList,#historyList)>:first-child{padding-top:0}
+[data-minas-plugin="quickshare"].workbench-ui :is(#containerList,#imageList,#volumeList,#networkList,#shareList,#taskList,#historyList)>:last-child{border-bottom:0;padding-bottom:0}
+[data-minas-plugin="quickshare"].workbench-ui #download-settings-engines>div{grid-column:1/-1;width:100%}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-media-columns{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-media-columns>:is(#episode-pane,#relation-pane){grid-column:1/-1}
+@container workbench-page (min-width:800px){[data-minas-plugin="quickshare"].workbench-ui .workbench-media-columns{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)}}
+[data-minas-plugin="quickshare"].workbench-ui #keyManager{width:min(620px,calc(100% - 28px));max-height:calc(100dvh - 28px);padding:20px;overflow:auto;text-align:left}
+[data-minas-plugin="quickshare"].workbench-ui.desktop-client .desktop-frame>#keyManager{max-height:calc(100% - 28px)}
+[data-minas-plugin="quickshare"].workbench-ui #keyManager>.panel{margin-top:16px}
+[data-minas-plugin="quickshare"].workbench-ui .dialog-head{display:flex;align-items:center;justify-content:space-between;gap:14px}
+[data-minas-plugin="quickshare"].workbench-ui .create-share-dialog{width:min(600px,calc(100% - 28px));text-align:left;max-height:calc(100dvh - 28px);overflow:auto}
+[data-minas-plugin="quickshare"].workbench-ui .create-share-dialog>.panel{padding:0;margin:18px 0;border:0;border-radius:0;background:transparent}
+[data-minas-plugin="quickshare"].workbench-ui .create-share-dialog>.security-note{margin-top:16px}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-share-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-share-metrics>article{border-top:0;border-left:0}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-share-metrics>article+article{border-left:1px solid var(--line)}
+[data-minas-plugin="quickshare"].workbench-ui .share-head{align-items:center}
+[data-minas-plugin="quickshare"].workbench-ui .share-actions{justify-content:flex-end}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-section-caption{margin:22px 0 12px}
+[data-minas-plugin="quickshare"][data-minas-plugin=sshrecovery].workbench-ui .panel{padding:0;overflow:hidden}
+[data-minas-plugin="quickshare"][data-minas-plugin=sshrecovery].workbench-ui :is(.panel-head,.panel-body,.panel-actions){padding-left:18px;padding-right:18px}
+[data-minas-plugin="quickshare"][data-minas-plugin=sshrecovery].workbench-ui .panel-head{padding-top:16px;padding-bottom:13px;background:var(--surface)}
+[data-minas-plugin="quickshare"][data-minas-plugin=sshrecovery].workbench-ui .panel-actions{padding-top:13px;padding-bottom:16px;background:var(--surface)}
+[data-minas-plugin="quickshare"][data-minas-plugin=sshrecovery].workbench-ui .ssh-overview{background:var(--surface);border:1px solid var(--line);border-radius:var(--card-radius);box-shadow:none}
+[data-minas-plugin="quickshare"][data-minas-plugin=sshrecovery].workbench-ui .grid{gap:18px}
+@media(max-width:760px){
+[data-minas-plugin="quickshare"].workbench-ui .workbench-overview{grid-template-columns:minmax(0,1fr)}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-overview>.workbench-full{grid-column:auto}
+[data-minas-plugin="quickshare"].workbench-ui :is(.metric-grid,.metrics)>:is(.metric,.metric-card,article){min-height:76px;padding:13px 12px}
+[data-minas-plugin="quickshare"].workbench-ui :is(.panel,.card){padding:17px}
+[data-minas-plugin="quickshare"].workbench-ui .media-selection{align-items:flex-start;gap:12px;flex-wrap:wrap}
+[data-minas-plugin="quickshare"].workbench-ui .media-selection>button{flex:0 0 auto}
+}
+/* END SHARED WORKBENCH */

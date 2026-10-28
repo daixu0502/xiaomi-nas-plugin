@@ -58,6 +58,10 @@ function confirmAction(title,text,overwrite=false){
  return new Promise(resolve=>{const d=byId('confirm');byId('confirmTitle').textContent=title;byId('confirmText').textContent=text;byId('overwriteRow').hidden=!overwrite;byId('overwrite').checked=false;d.returnValue='';
  d.addEventListener('close',()=>resolve({ok:d.returnValue==='ok',overwrite:byId('overwrite').checked}),{once:true});window.XiaomiPluginClient.openDialog(d);});
 }
+function switchRecoveryPage(page){doc.querySelectorAll('.tab[data-page]').forEach(tab=>{tab.classList.toggle('active',tab.dataset.page===page);tab.setAttribute('aria-current',tab.dataset.page===page?'page':'false');});doc.querySelectorAll('.page').forEach(panel=>panel.classList.toggle('active',panel.id==='page-'+page));doc.querySelector('.shell').scrollTop=0;}
+doc.querySelectorAll('.tab[data-page]').forEach(tab=>tab.onclick=()=>switchRecoveryPage(tab.dataset.page));
+byId('manageKeys').onclick=()=>window.XiaomiPluginClient.openDialog(byId('keyManager'));
+byId('closeKeyManager').onclick=()=>byId('keyManager').close();
 byId('refresh').onclick=()=>perform('status');
 byId('recover').onclick=async()=>{
  const message=state?.keySaved?'将开启 SSH，并按保存的公钥和主机密钥副本恢复。不会覆盖其他登录公钥。':state?.settings?.generateWithoutPublicKey?'将生成新的登录密钥并开启 SSH。请在 15 分钟内领取一次密钥包，私钥不得公开。':'仅开启 SSH，不改动登录公钥、主机密钥或恢复副本。';

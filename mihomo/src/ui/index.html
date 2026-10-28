@@ -11,8 +11,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Mihomo</title>
   <link rel="icon" href="../../icon/mihomo.icon">
-  <link rel="stylesheet" href="style.css?v=1.7.55&amp;ui=docker-proxy-state">
-  <link rel="stylesheet" href="palette.css?v=1.7.55&amp;ui=compact-metrics-20260930">
+  <link rel="stylesheet" href="style.css?v=1.7.58&amp;ui=docker-proxy-state">
+  <link rel="stylesheet" href="palette.css?v=1.7.58&amp;ui=compact-metrics-20260930">
 </head>
 <body><div data-minas-plugin="mihomo"><div class="minas-plugin-body">
   <main class="shell">
@@ -21,8 +21,8 @@
 
     <nav class="tabs" aria-label="页面导航">
       <button class="tab active" data-page="overview">概览</button>
-      <button class="tab" data-page="proxies">策略</button>
       <button class="tab" data-page="subscription">订阅</button>
+      <button class="tab" data-page="settings">设置</button>
       <button class="tab" data-page="config">配置</button>
       <button class="tab" data-page="logs">日志</button>
     </nav>
@@ -34,7 +34,8 @@
     </article>
 
     <section id="page-overview" class="page active">
-      <div class="metric-grid">
+      <div class="workbench-overview">
+<div class="metric-grid">
         <article class="metric">
           <span>运行模式</span>
           <strong id="modeMetric">—</strong>
@@ -48,35 +49,6 @@
           <strong id="lanMetric">—</strong>
         </article>
       </div>
-
-      <article class="card">
-        <div class="card-heading">
-          <div>
-            <h2>运行模式</h2>
-            <p>切换后立即生效，不会修改配置文件。</p>
-          </div>
-        </div>
-        <div id="modeSwitch" class="segmented" role="group" aria-label="运行模式">
-          <button data-mode="rule">规则</button>
-          <button data-mode="global">全局</button>
-          <button data-mode="direct">直连</button>
-        </div>
-      </article>
-
-      <article class="card">
-        <div class="card-heading">
-          <div>
-            <h2>代理访问范围</h2>
-            <p id="networkAccessSummary">正在读取访问范围…</p>
-          </div>
-        </div>
-        <div id="accessSwitch" class="segmented two" role="group" aria-label="代理访问范围">
-          <button data-access="local">仅本机访问</button>
-          <button data-access="lan">开放局域网</button>
-        </div>
-        <div class="notice warning network-notice">开放后局域网设备可访问此用户自动分配的混合端口。请确保局域网可信，并在客户端使用 NAS 的局域网 IP 与概览中显示的端口。</div>
-      </article>
-
       <article class="card">
         <div class="card-heading">
           <div>
@@ -90,7 +62,79 @@
           <button id="restartButton" class="button danger">重启核心</button>
         </div>
       </article>
+      <article class="card">
+        <div class="card-heading">
+          <div>
+            <h2>运行模式</h2>
+            <p>切换后立即生效，不会修改配置文件。</p>
+          </div>
+        </div>
+        <div id="modeSwitch" class="segmented" role="group" aria-label="运行模式">
+          <button data-mode="rule">规则</button>
+          <button data-mode="global">全局</button>
+          <button data-mode="direct">直连</button>
+        </div>
+      </article>
+      <article class="card workbench-full">
+        <div class="card-heading">
+          <div>
+            <h2>策略组</h2>
+            <p>选择各策略组当前使用的节点。</p>
+          </div>
+          <div class="proxy-heading-actions">
+            <button id="openNodeTests" class="button secondary" type="button" aria-haspopup="dialog" aria-controls="nodeTestDialog" aria-expanded="false">节点测速</button>
+            <button id="reloadProxies" class="icon-button refresh-control" aria-label="刷新策略" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.2-2.1L20 11M4 13l2.7 4.1A7 7 0 0 0 17.9 15"/></svg></button>
+          </div>
+        </div>
+        <div id="proxyGroups" class="stack empty-state">正在读取策略组…</div>
+      </article>
+      <article class="card workbench-full">
+        <div class="card-heading provider-heading">
+          <div>
+            <h2>代理提供者</h2>
+            <p>更新代理提供者；空的受管节点列表和内置提供者无需更新。</p>
+          </div>
+          <button id="updateAllProviders" class="button secondary provider-update" disabled>全部更新</button>
+        </div>
+        <div id="providers" class="stack empty-state">正在读取提供者…</div>
+      </article>
+      </div>
+    </section>
 
+    <section id="page-settings" class="page">
+      <article class="card">
+        <div class="card-heading">
+          <div>
+            <h2>Geo 数据与规则</h2>
+            <p id="geoDataSummary">正在读取 GeoIP 和 GeoSite 状态…</p>
+          </div>
+          <div id="geoDataBadge" class="mini-badge">检查中</div>
+        </div>
+        <label class="field-label" for="geoPolicy">规则策略</label>
+        <select id="geoPolicy" class="policy-select">
+          <option value="cn_direct">国内及局域网直连，其他走 PROXY</option>
+          <option value="lan_direct">仅局域网直连，其他走 PROXY</option>
+          <option value="direct">全部直连</option>
+        </select>
+        <div class="button-row geo-actions">
+          <button id="updateGeoData" class="button secondary">更新 GeoIP / GeoSite</button>
+          <button id="applyGeoPolicy" class="button primary">应用所选策略</button>
+        </div>
+        <div class="privacy-note">Geo 数据只通过本机 PROXY 从 MetaCubeX GitHub 官方仓库下载，并校验官方 SHA-256；不使用第三方镜像。应用策略失败会自动回滚。</div>
+      </article>
+      <article class="card">
+        <div class="card-heading">
+          <div>
+            <h2>代理访问范围</h2>
+            <p id="networkAccessSummary">正在读取访问范围…</p>
+          </div>
+        </div>
+        <div id="accessSwitch" class="segmented two" role="group" aria-label="代理访问范围">
+          <button data-access="local">仅本机访问</button>
+          <button data-access="lan">开放局域网</button>
+        </div>
+        <div class="notice warning network-notice">开放后局域网设备可访问此用户自动分配的混合端口。请确保局域网可信，并在客户端使用 NAS 的局域网 IP 与概览中显示的端口。</div>
+      </article>
       <article class="card">
         <div class="card-heading">
           <div>
@@ -105,7 +149,6 @@
         </div>
         <div class="privacy-note">只安装 MetaCubeX 官方 ARM64 Release，并校验官方 SHA-256；启动失败会自动恢复旧内核。</div>
       </article>
-
       <article class="card">
         <div class="card-heading">
           <div>
@@ -129,55 +172,6 @@
           用于 Docker 拉取镜像和构建；操作会重启 docker.service，运行中的容器可能短暂中断。不会自动修改容器内部的代理环境变量。
         </div>
       </article>
-    </section>
-
-    <section id="page-proxies" class="page">
-      <article class="card">
-        <div class="card-heading">
-          <div>
-            <h2>Geo 数据与规则</h2>
-            <p id="geoDataSummary">正在读取 GeoIP 和 GeoSite 状态…</p>
-          </div>
-          <div id="geoDataBadge" class="mini-badge">检查中</div>
-        </div>
-        <label class="field-label" for="geoPolicy">规则策略</label>
-        <select id="geoPolicy" class="policy-select">
-          <option value="cn_direct">国内及局域网直连，其他走 PROXY</option>
-          <option value="lan_direct">仅局域网直连，其他走 PROXY</option>
-          <option value="direct">全部直连</option>
-        </select>
-        <div class="button-row geo-actions">
-          <button id="updateGeoData" class="button secondary">更新 GeoIP / GeoSite</button>
-          <button id="applyGeoPolicy" class="button primary">应用所选策略</button>
-        </div>
-        <div class="privacy-note">Geo 数据只通过本机 PROXY 从 MetaCubeX GitHub 官方仓库下载，并校验官方 SHA-256；不使用第三方镜像。应用策略失败会自动回滚。</div>
-      </article>
-
-      <article class="card">
-        <div class="card-heading">
-          <div>
-            <h2>策略组</h2>
-            <p>选择各策略组当前使用的节点。</p>
-          </div>
-          <div class="proxy-heading-actions">
-            <button id="openNodeTests" class="button secondary" type="button" aria-haspopup="dialog" aria-controls="nodeTestDialog" aria-expanded="false">节点测速</button>
-            <button id="reloadProxies" class="icon-button refresh-control" aria-label="刷新策略" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.2-2.1L20 11M4 13l2.7 4.1A7 7 0 0 0 17.9 15"/></svg></button>
-          </div>
-        </div>
-        <div id="proxyGroups" class="stack empty-state">正在读取策略组…</div>
-      </article>
-
-      <article class="card">
-        <div class="card-heading provider-heading">
-          <div>
-            <h2>代理提供者</h2>
-            <p>更新代理提供者；空的受管节点列表和内置提供者无需更新。</p>
-          </div>
-          <button id="updateAllProviders" class="button secondary provider-update" disabled>全部更新</button>
-        </div>
-        <div id="providers" class="stack empty-state">正在读取提供者…</div>
-      </article>
-
     </section>
 
     <section id="page-subscription" class="page">
@@ -298,7 +292,7 @@
       </article>
     </section>
 
-    <footer id="pluginVersion">插件版本 1.7.55 · 公共权限组件读取中</footer>
+    <footer id="pluginVersion">插件版本 1.7.58 · 公共权限组件读取中</footer>
   </main>
 
   <div id="nodeTestBackdrop" class="mi-picker-backdrop" hidden></div>
@@ -348,8 +342,8 @@
   </section>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="client-bridge.js?v=1.7.55&amp;ui=compact-metrics-20260930"></script>
-  <script src="app.js?v=1.7.55&amp;ui=docker-proxy-state"></script>
+  <script src="client-bridge.js?v=1.7.58&amp;ui=compact-metrics-20260930"></script>
+  <script src="app.js?v=1.7.58&amp;ui=docker-proxy-state"></script>
   <script>
     (function () {
       var document = window.XiaomiPluginClient.document;
