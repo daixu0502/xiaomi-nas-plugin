@@ -157,6 +157,16 @@ case "$action" in
 esac
 
 case "$action" in
+    node_test_list|node_test_start|node_test_status|node_test_cancel)
+        require_post
+        [ "$(id -un)" = "$plugin_user" ] || json_error "测速必须以插件所属用户运行"
+        body=$(read_json_body) || json_error "测速请求无效或超过 64 KiB"
+        test_operation=${action#node_test_}
+        response=$(printf '%s' "$body" | PLUG_HOME_DIR="$PLUGIN_HOME" python3 -B "$SRC_DIR/files/node_tests.py" "$test_operation" 2>/dev/null) || true
+        printf '%s' "$response" | jq -e 'type == "object"' >/dev/null 2>&1 || json_error "无法连接测速接口"
+        json_header
+        printf '%s\n' "$response"
+        ;;
     subscription_import|subscription_update|geodata_update|geodata_apply_policy|rule_provider_import|update_provider|update_rule_provider)
         require_post
         body=$(read_json_body) || json_error "请求内容无效或超过 64 KiB"

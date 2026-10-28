@@ -561,6 +561,115 @@ var document = window.XiaomiPluginClient.document;
     return element;
   }
 
+  var testNodes = [], testResults = {}, testJob = null, testTimer = null, testLoading = false, testError = '', testBackground = [];
+  function openNodeTests() {
+    if (!byId('nodeTestDialog').hidden) return;
+    testBackground = Array.from(document.querySelectorAll('.shell,.tabs')).map(function (element) { return { element: element, inert: element.inert }; });
+    testBackground.forEach(function (item) { item.element.inert = true; });
+    byId('nodeTestBackdrop').hidden = false;
+    byId('nodeTestDialog').hidden = false;
+    byId('openNodeTests').setAttribute('aria-expanded', 'true');
+    restoreFocus(byId('closeNodeTests'));
+    loadNodeTests();
+  }
+  function closeNodeTests() {
+    if (byId('nodeTestDialog').hidden) return;
+    byId('nodeTestDialog').hidden = true;
+    byId('nodeTestBackdrop').hidden = true;
+    testBackground.forEach(function (item) { item.element.inert = item.inert; });
+    testBackground = [];
+    byId('openNodeTests').setAttribute('aria-expanded', 'false');
+    clearTimeout(testTimer);
+    restoreFocus(byId('openNodeTests'));
+  }
+  function testActive() { return testJob && /^(queued|running)$/.test(testJob.status); }
+  function renderNodeTests() {
+    var list = byId('nodeTestList'); list.replaceChildren();
+    byId('testAllDelays').disabled = testActive() || !testNodes.length || testLoading;
+    byId('refreshNodeTests').disabled = testActive() || testLoading;
+    byId('cancelNodeTest').hidden = !testActive();
+    testNodes.forEach(function (node) {
+      var row = textElement('div', 'node-test-row', ''), title = textElement('div', 'row-title', '');
+      title.appendChild(textElement('strong', '', node.name));
+      title.appendChild(textElement('span', '', node.type + ' · ' + node.provider));
+      var result = testResults[node.key] || {}, delay = result.delay, speed = result.speed;
+      var metrics = textElement('div', 'node-test-metrics', '');
+      metrics.appendChild(textElement('span', delay && delay.error ? 'test-error' : '', '延迟：' + (delay ? delay.error || delay.delayMs + ' ms' : '未测试')));
+      metrics.appendChild(textElement('span', speed && speed.error ? 'test-error' : '', '下载：' + (speed ? speed.error || speed.mbps + ' Mbps · ' + (speed.bytesPerSecond / 1048576).toFixed(2) + ' MiB/s' : '未测试')));
+      if (speed && !speed.error) metrics.appendChild(textElement('small', '', (speed.bytes / 1048576).toFixed(1) + ' MiB / ' + speed.seconds + ' 秒' + (speed.limited ? ' · 已达流量上限，仅供参考' : '')));
+      if (delay || speed) metrics.appendChild(textElement('small', '', '最近测试：' + new Date(Math.max(delay?.testedAt || 0, speed?.testedAt || 0) * 1000).toLocaleString()));
+      var actions = textElement('div', 'button-row', '');
+      [['测延迟', 'delay'], ['测下载', 'speed']].forEach(function (item) {
+        var button = textElement('button', 'button secondary', item[0]); button.type = 'button';
+        button.disabled = testLoading || testActive() || (item[1] === 'speed' && !node.speedSupported);
+        if (item[1] === 'speed' && !node.speedSupported) { button.title = node.speedHint; metrics.appendChild(textElement('small', '', node.speedHint)); }
+        button.onclick = function () { beginNodeTest(item[1], [node.key]); };
+        actions.appendChild(button);
+      });
+      row.append(title, metrics, actions); list.appendChild(row);
+    });
+    if (!testNodes.length) list.appendChild(textElement('p', 'empty-state', '暂无可测试节点，请先启动核心并导入节点'));
+    if (testError) byId('nodeTestStatus').textContent = testError;
+    else if (testJob) byId('nodeTestStatus').textContent = (testJob.message || '') +
+      (testJob.kind === 'speed' && testActive() ? ' · 已接收 ' + ((testJob.bytes || 0) / 1048576).toFixed(1) + ' MiB' : '');
+  }
+  function pollNodeTest() {
+    clearTimeout(testTimer);
+    if (updatePageClosed || byId('nodeTestDialog').hidden) return;
+    postJson('node_test_status', {}).then(function (packet) {
+      testJob = packet.job; testResults = packet.results || {}; testError = ''; renderNodeTests();
+      if (testActive() && !byId('nodeTestDialog').hidden) testTimer = setTimeout(pollNodeTest, 1000);
+    }).catch(function (error) {
+      testError = error.message + '；可刷新节点重新读取结果'; renderNodeTests();
+      if (testActive() && !byId('nodeTestDialog').hidden) testTimer = setTimeout(pollNodeTest, 3000);
+    });
+  }
+  function loadNodeTests() {
+    if (testLoading) return;
+    testLoading = true; testError = ''; renderNodeTests();
+    postJson('node_test_list', {}).then(function (packet) {
+      testNodes = packet.nodes || []; testResults = packet.results || {};
+      byId('nodeTestStatus').textContent = testNodes.length + ' 个节点' + (packet.partial ? '，本次显示前 200 个' : '');
+      return postJson('node_test_status', {});
+    }).then(function (packet) {
+      testJob = packet.job;
+      if (testActive()) pollNodeTest();
+    }).catch(function (error) { testError = error.message; })
+      .finally(function () { testLoading = false; renderNodeTests(); });
+  }
+  function beginNodeTest(kind, names) {
+    if (testLoading || testActive()) return;
+    var submit = function () {
+      testLoading = true; testError = ''; renderNodeTests();
+      postJson('node_test_start', { kind: kind, names: names }).then(function (packet) {
+        testJob = packet.job; pollNodeTest();
+      }).catch(function (error) { toast(error.message, true); })
+        .finally(function () { testLoading = false; renderNodeTests(); });
+    };
+    if (kind === 'speed') confirmAction('将通过“' + testNodes.find(function (node) { return node.key === names[0]; }).name + '”下载测试数据，最多约 20 MiB。结果受测速服务器、节点和当前网络影响。继续？', { title: '测试下载速度' }, submit);
+    else submit();
+  }
+  byId('openNodeTests').onclick = openNodeTests;
+  byId('closeNodeTests').onclick = closeNodeTests;
+  byId('nodeTestBackdrop').onclick = closeNodeTests;
+  byId('nodeTestDialog').addEventListener('keydown', function (event) {
+    if (!byId('confirmDialog').hidden) return;
+    if (event.key === 'Escape') { event.preventDefault(); closeNodeTests(); }
+    if (event.key === 'Tab') {
+      var buttons = Array.from(byId('nodeTestDialog').querySelectorAll('button')).filter(function (button) { return !button.disabled && button.getClientRects().length; });
+      var first = buttons[0], last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); restoreFocus(last); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); restoreFocus(first); }
+    }
+  });
+  byId('refreshNodeTests').onclick = loadNodeTests;
+  byId('testAllDelays').onclick = function () { beginNodeTest('delay', testNodes.map(function (node) { return node.key; })); };
+  byId('cancelNodeTest').onclick = function () {
+    if (testActive()) postJson('node_test_cancel', { id: testJob.id }).then(function () { byId('nodeTestStatus').textContent = '正在停止测试…'; }).catch(function (error) { toast(error.message, true); });
+  };
+  window.addEventListener('unmount', function () { clearTimeout(testTimer); });
+  window.addEventListener('pagehide', function () { clearTimeout(testTimer); });
+
   function loadProxies() {
     var container = byId('proxyGroups');
     container.className = 'stack empty-state';

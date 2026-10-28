@@ -11,8 +11,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Mihomo</title>
   <link rel="icon" href="../../icon/mihomo.icon">
-  <link rel="stylesheet" href="style.css?v=1.7.53&amp;ui=docker-proxy-state">
-  <link rel="stylesheet" href="palette.css?v=1.7.53&amp;ui=compact-metrics-20260930">
+  <link rel="stylesheet" href="style.css?v=1.7.55&amp;ui=docker-proxy-state">
+  <link rel="stylesheet" href="palette.css?v=1.7.55&amp;ui=compact-metrics-20260930">
 </head>
 <body><div data-minas-plugin="mihomo"><div class="minas-plugin-body">
   <main class="shell">
@@ -159,7 +159,10 @@
             <h2>策略组</h2>
             <p>选择各策略组当前使用的节点。</p>
           </div>
-          <button id="reloadProxies" class="icon-button refresh-control" aria-label="刷新策略" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.2-2.1L20 11M4 13l2.7 4.1A7 7 0 0 0 17.9 15"/></svg></button>
+          <div class="proxy-heading-actions">
+            <button id="openNodeTests" class="button secondary" type="button" aria-haspopup="dialog" aria-controls="nodeTestDialog" aria-expanded="false">节点测速</button>
+            <button id="reloadProxies" class="icon-button refresh-control" aria-label="刷新策略" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.2-2.1L20 11M4 13l2.7 4.1A7 7 0 0 0 17.9 15"/></svg></button>
+          </div>
         </div>
         <div id="proxyGroups" class="stack empty-state">正在读取策略组…</div>
       </article>
@@ -295,8 +298,26 @@
       </article>
     </section>
 
-    <footer id="pluginVersion">插件版本 1.7.53 · 公共权限组件读取中</footer>
+    <footer id="pluginVersion">插件版本 1.7.55 · 公共权限组件读取中</footer>
   </main>
+
+  <div id="nodeTestBackdrop" class="mi-picker-backdrop" hidden></div>
+  <section id="nodeTestDialog" class="mi-picker-sheet node-test-dialog" role="dialog" aria-modal="true" aria-labelledby="nodeTestTitle" hidden>
+    <div class="mi-picker-header">
+      <h2 id="nodeTestTitle">节点测速</h2>
+      <button id="closeNodeTests" class="mi-picker-close" type="button" aria-label="关闭节点测速">×</button>
+    </div>
+    <div class="node-test-content">
+      <div class="button-row">
+        <button id="refreshNodeTests" class="button secondary" type="button">刷新节点</button>
+        <button id="testAllDelays" class="button primary" type="button">全部测延迟</button>
+        <button id="cancelNodeTest" class="button secondary" type="button" hidden>停止测试</button>
+      </div>
+      <p class="hint">延迟为 HTTP 请求耗时；下载测速每次最多约 20 MiB、下载阶段约 8 秒，会消耗节点流量。</p>
+      <p id="nodeTestStatus" role="status" aria-live="polite">正在读取节点…</p>
+      <div id="nodeTestList" class="stack node-test-list"></div>
+    </div>
+  </section>
 
   <div id="pickerBackdrop" class="mi-picker-backdrop" hidden></div>
   <section id="pickerSheet" class="mi-picker-sheet" role="dialog" aria-modal="true" aria-labelledby="pickerTitle" hidden>
@@ -327,8 +348,8 @@
   </section>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="client-bridge.js?v=1.7.53&amp;ui=compact-metrics-20260930"></script>
-  <script src="app.js?v=1.7.53&amp;ui=docker-proxy-state"></script>
+  <script src="client-bridge.js?v=1.7.55&amp;ui=compact-metrics-20260930"></script>
+  <script src="app.js?v=1.7.55&amp;ui=docker-proxy-state"></script>
   <script>
     (function () {
       var document = window.XiaomiPluginClient.document;
