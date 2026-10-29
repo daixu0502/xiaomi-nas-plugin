@@ -188,19 +188,19 @@
 @ROOT@.workbench-ui .refresh-control[aria-busy=true] svg,
 @ROOT@.workbench-ui .refresh-control[data-workbench-refreshing=true] svg,
 @ROOT@.workbench-ui .refresh-control.is-loading svg{animation:minas-workbench-refresh .8s linear infinite}
-@ROOT@.workbench-ui .refresh-control[data-workbench-animated=true] svg{animation:none!important;transform:none!important}
 @ROOT@.workbench-ui .refresh-control[aria-busy=true]::before{content:none!important;display:none!important}
 @ROOT@.workbench-ui .refresh-control[data-workbench-refreshing=true]{cursor:progress}
 @keyframes minas-workbench-refresh{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){@ROOT@.workbench-ui .refresh-control[aria-busy=true] svg,@ROOT@.workbench-ui .refresh-control[data-workbench-refreshing=true] svg,@ROOT@.workbench-ui .refresh-control.is-loading svg{animation:none}}
 
 /* Restrained feedback; never move layout or suggest an operation succeeded. */
-@ROOT@.workbench-ui button{transition:background-color .16s ease,border-color .16s ease,box-shadow .16s ease,filter .16s ease}
-@ROOT@.workbench-ui button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@ROOT@.workbench-ui button{--button-focus:var(--accent);transition:background-color .16s ease,border-color .16s ease,box-shadow .16s ease,filter .16s ease}
+@ROOT@.workbench-ui button.danger,@ROOT@.workbench-ui button.danger-button{--button-focus:var(--danger)}
+@ROOT@.workbench-ui button:focus-visible{outline:2px solid var(--button-focus);outline-offset:3px}
 @media(hover:hover) and (pointer:fine){
-@ROOT@.workbench-ui button:hover:not(:disabled):not([aria-disabled=true]){border-color:var(--accent);filter:brightness(.96);box-shadow:0 2px 7px #17263c14}
+@ROOT@.workbench-ui button:hover:not(:disabled):not([aria-disabled=true]){border-color:var(--button-focus);filter:brightness(.96);box-shadow:0 2px 7px #17263c14}
 @ROOT@.workbench-ui[data-theme=dark] button:hover:not(:disabled):not([aria-disabled=true]){filter:brightness(1.12)}
-@ROOT@.workbench-ui button.danger:hover:not(:disabled),@ROOT@.workbench-ui .danger-button:hover:not(:disabled){border-color:var(--danger)}
 }
+@ROOT@.workbench-ui .minas-plugin-body button.danger:hover:not(:disabled):not([aria-disabled=true]),@ROOT@.workbench-ui .minas-plugin-body button.danger-button:hover:not(:disabled):not([aria-disabled=true]),@ROOT@.workbench-ui .minas-plugin-body button.danger:focus-visible,@ROOT@.workbench-ui .minas-plugin-body button.danger-button:focus-visible{border-color:var(--danger)!important;outline-color:var(--danger)!important}
 @ROOT@.workbench-ui button:active:not(:disabled):not([aria-disabled=true]){filter:brightness(.92)}
 @media(prefers-reduced-motion:reduce){@ROOT@.workbench-ui button{transition:none}}

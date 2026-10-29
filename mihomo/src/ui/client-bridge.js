@@ -629,41 +629,12 @@
   client.enhanceSelect(themeSelect);
   var refreshRuns = new Map(), refreshDisposed = false;
   var refreshMotion = global.matchMedia('(prefers-reduced-motion: reduce)');
-  function stopRefreshAnimation(state) {
-    if (state.frame) { global.cancelAnimationFrame(state.frame); state.frame = 0; }
-    if (state.rotor) state.rotor.removeAttribute('transform');
-    state.button.removeAttribute('data-workbench-animated');
-  }
-  function startRefreshAnimation(state) {
-    stopRefreshAnimation(state);
-    var glyph = state.button.querySelector('svg');
-    if (refreshMotion.matches || !glyph) return;
-    // SVG geometry is independent of the desktop host's CSS/WAAPI processing.
-    var rotor = glyph.querySelector('[data-workbench-rotor]');
-    if (!rotor) {
-      rotor = glyph.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'g');
-      rotor.setAttribute('data-workbench-rotor', 'true');
-      Array.from(glyph.children).filter(function (child) { return !['title','desc','defs'].includes(child.localName); }).forEach(function (child) { rotor.appendChild(child); });
-      glyph.appendChild(rotor);
-    }
-    state.rotor = rotor;
-    var box = glyph.viewBox.baseVal, x = box.x + box.width / 2, y = box.y + box.height / 2, start = null;
-    state.button.setAttribute('data-workbench-animated', 'true');
-    function tick(now) {
-      if (refreshDisposed || refreshMotion.matches || !state.button.isConnected) { stopRefreshAnimation(state); return; }
-      if (start === null) start = now;
-      rotor.setAttribute('transform', 'rotate(' + ((now - start) % 800) * .45 + ' ' + x + ' ' + y + ')');
-      state.frame = global.requestAnimationFrame(tick);
-    }
-    state.frame = global.requestAnimationFrame(tick);
-  }
-  function refreshMotionChanged() { refreshRuns.forEach(startRefreshAnimation); if (refreshMotion.matches) motions.forEach(function (motion) { motion.cancel(); }); }
+  function refreshMotionChanged() { if (refreshMotion.matches) motions.forEach(function (motion) { motion.cancel(); }); }
   if (refreshMotion.addEventListener) refreshMotion.addEventListener('change', refreshMotionChanged); else refreshMotion.addListener(refreshMotionChanged);
   function refresh(button, operation) {
     if (refreshRuns.has(button)) return refreshRuns.get(button).promise;
-    var state = {button:button, started:Date.now(), busy:button.getAttribute('aria-busy'), timer:0, release:null, frame:0, rotor:null};
+    var state = {button:button, started:Date.now(), busy:button.getAttribute('aria-busy'), timer:0, release:null};
     function clean() {
-      stopRefreshAnimation(state);
       button.removeAttribute('data-workbench-refreshing');
       if (state.busy === null) button.removeAttribute('aria-busy'); else button.setAttribute('aria-busy', state.busy);
       refreshRuns.delete(button);
@@ -671,7 +642,6 @@
     state.clean = clean;
     button.setAttribute('data-workbench-refreshing', 'true'); button.setAttribute('aria-busy', 'true');
     refreshRuns.set(button, state);
-    startRefreshAnimation(state);
     state.promise = Promise.resolve().then(operation).finally(function () {
       return new Promise(function (resolve) {
         state.release = function () { global.clearTimeout(state.timer); clean(); resolve(); };

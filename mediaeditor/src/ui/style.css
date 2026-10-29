@@ -414,20 +414,20 @@
 [data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[aria-busy=true] svg,
 [data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[data-workbench-refreshing=true] svg,
 [data-minas-plugin="mediaeditor"].workbench-ui .refresh-control.is-loading svg{animation:minas-workbench-refresh .8s linear infinite}
-[data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[data-workbench-animated=true] svg{animation:none!important;transform:none!important}
 [data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[aria-busy=true]::before{content:none!important;display:none!important}
 [data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[data-workbench-refreshing=true]{cursor:progress}
 @keyframes minas-workbench-refresh{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){[data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[aria-busy=true] svg,[data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[data-workbench-refreshing=true] svg,[data-minas-plugin="mediaeditor"].workbench-ui .refresh-control.is-loading svg{animation:none}}
 
 /* Restrained feedback; never move layout or suggest an operation succeeded. */
-[data-minas-plugin="mediaeditor"].workbench-ui button{transition:background-color .16s ease,border-color .16s ease,box-shadow .16s ease,filter .16s ease}
-[data-minas-plugin="mediaeditor"].workbench-ui button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+[data-minas-plugin="mediaeditor"].workbench-ui button{--button-focus:var(--accent);transition:background-color .16s ease,border-color .16s ease,box-shadow .16s ease,filter .16s ease}
+[data-minas-plugin="mediaeditor"].workbench-ui button.danger,[data-minas-plugin="mediaeditor"].workbench-ui button.danger-button{--button-focus:var(--danger)}
+[data-minas-plugin="mediaeditor"].workbench-ui button:focus-visible{outline:2px solid var(--button-focus);outline-offset:3px}
 @media(hover:hover) and (pointer:fine){
-[data-minas-plugin="mediaeditor"].workbench-ui button:hover:not(:disabled):not([aria-disabled=true]){border-color:var(--accent);filter:brightness(.96);box-shadow:0 2px 7px #17263c14}
+[data-minas-plugin="mediaeditor"].workbench-ui button:hover:not(:disabled):not([aria-disabled=true]){border-color:var(--button-focus);filter:brightness(.96);box-shadow:0 2px 7px #17263c14}
 [data-minas-plugin="mediaeditor"].workbench-ui[data-theme=dark] button:hover:not(:disabled):not([aria-disabled=true]){filter:brightness(1.12)}
-[data-minas-plugin="mediaeditor"].workbench-ui button.danger:hover:not(:disabled),[data-minas-plugin="mediaeditor"].workbench-ui .danger-button:hover:not(:disabled){border-color:var(--danger)}
 }
+[data-minas-plugin="mediaeditor"].workbench-ui .minas-plugin-body button.danger:hover:not(:disabled):not([aria-disabled=true]),[data-minas-plugin="mediaeditor"].workbench-ui .minas-plugin-body button.danger-button:hover:not(:disabled):not([aria-disabled=true]),[data-minas-plugin="mediaeditor"].workbench-ui .minas-plugin-body button.danger:focus-visible,[data-minas-plugin="mediaeditor"].workbench-ui .minas-plugin-body button.danger-button:focus-visible{border-color:var(--danger)!important;outline-color:var(--danger)!important}
 [data-minas-plugin="mediaeditor"].workbench-ui button:active:not(:disabled):not([aria-disabled=true]){filter:brightness(.92)}
 @media(prefers-reduced-motion:reduce){[data-minas-plugin="mediaeditor"].workbench-ui button{transition:none}}
 /* END SHARED WORKBENCH */

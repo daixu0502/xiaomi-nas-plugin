@@ -27,7 +27,7 @@ import urllib.request
 import uuid
 
 sys.dont_write_bytecode = True
-VERSION = '1.0.3'
+VERSION = '1.0.4'
 REPOSITORY = 'daixu0502/xiaomi-nas-plugin'
 BASE = Path('/data/minas/plugins/updater')
 RECOVERY = Path('/data/minas/plugins/recovery')
@@ -550,6 +550,57 @@ def rollback(job, journal):
     clean_source_stage(user, plugin, src, (job.name, rollback_token))
 
 
+def cleanup_locked(user, plugin, r):
+    """Caller holds installer + record locks. Never remove an uncommitted backup."""
+    directory = plugin_dir(user, plugin)
+    jobs = plain(directory / 'jobs')
+    entries = [plain(p) for p in jobs.iterdir() if re.fullmatch('[0-9a-f]{32}', p.name)] if jobs.exists() else []
+    journals = [(p, read(p / 'journal.json', {})) for p in entries]
+    if any(j.get('state') == 'prepared' for _, j in journals):
+        return False
+    home, _, _ = identity(user, plugin)
+    src = r.source_path(home, user, plugin)
+    r.verify(user, plugin, home, src)
+    record = protected(RECOVERY / 'records' / (user + '-' + plugin))
+    current = plain(r.load_generation(record))
+    require(current.parent == record and re.fullmatch('generation-[0-9]+', current.name), '当前恢复快照路径无效')
+    expected = read(current / 'INFO')
+    live = read(home / 'INFO')
+    require(expected['version'] == live['version'] and expected['abstract'] == live['abstract'] and r.digest(current / 'src') == live['abstract'], '当前恢复快照未通过校验，保留清理材料')
+    # All paths are within protected root storage; rmtree does not follow the
+    # INFO symlink inside snapshots. No user etc/var/tmp directory is traversed.
+    for old in record.iterdir():
+        if old != current and re.fullmatch('generation-[0-9]+', old.name):
+            protected(old)
+            shutil.rmtree(old)
+    for job, journal in journals:
+        status_value = read(job / 'status.json', {})
+        settled = journal.get('state') in ('committed', 'rolled_back') or (not journal and status_value.get('phase') in ('complete', 'failed', 'interrupted'))
+        if not settled or status_value.get('running'):
+            continue
+        protected(job)
+        for name in ('package.tar.gz', 'package', 'rollback.tar.gz', 'backup'):
+            path = plain(job / name)
+            if path.is_dir():
+                protected(path)
+                shutil.rmtree(path)
+            else:
+                path.unlink(missing_ok=True)
+        if journal and 'cleanedAt' not in journal:
+            journal['cleanedAt'] = time.time()
+            save(job / 'journal.json', journal)
+    return True
+
+
+def cleanup_plugin(user, plugin):
+    r = load_recovery()
+    record = RECOVERY / 'records' / (user + '-' + plugin)
+    if not record.is_dir() or (record / 'removed').exists():
+        return
+    with lock(INSTALL_LOCK), r.record_lock(record):
+        cleanup_locked(user, plugin, r)
+
+
 def transaction(user, plugin, archive, payload, job):
     r = load_recovery()
     home, account, before = identity(user, plugin)
@@ -626,12 +677,13 @@ def transaction(user, plugin, archive, payload, job):
             report(job, 'rollback', '更新失败，正在恢复上一版本', 90)
             rollback(job, journal)
             raise
-        # Cleanup is outside the transaction: a cleanup failure must never undo
-        # an already committed update. Keep the protected rollback generation.
+        # Only a durably committed and verified update can discard its backups.
+        # Cleanup failure must never roll back an already committed update.
         try:
             clean_source_stage(user, plugin, src, (job.name,))
-        except Exception:
-            pass
+            cleanup_locked(user, plugin, r)
+        except (OSError, ValueError):
+            report(job, 'complete', '更新完成；清理材料将在下次检查或开机时重试', 100, running=False)
 
 
 def public_candidate(user, plugin, installed):
@@ -744,12 +796,13 @@ def worker(user, plugin, job_id):
             # Only root-owned updater records are pruned; user caches are never
             # accessed as root. Interrupted transactions remain recoverable.
             try:
+                cleanup_plugin(user, plugin)
                 jobs = sorted((directory / 'jobs').iterdir(), key=lambda p:p.stat().st_mtime, reverse=True)
                 for old in jobs[4:]:
                     if old.name != job_id and re.fullmatch('[0-9a-f]{32}', old.name) and read(old / 'journal.json', {}).get('state') != 'prepared' and not read(old / 'status.json', {}).get('running'):
                         plain(old)
                         shutil.rmtree(old)
-            except OSError:
+            except (OSError, ValueError):
                 pass
 
 
@@ -806,11 +859,17 @@ def bootstrap(user, plugin, payload):
         atomic(target, unit, 0o644)
         run(['systemctl', 'daemon-reload'])
     run(['systemctl', 'enable', 'minas-plugin-update-recover.service'])
+    # An older worker keeps executing its in-memory code after installing this
+    # version. Launch the new cleanup code independently; it waits for the
+    # parent's installer lock and sees only the final committed journal.
+    run(['systemd-run', '--quiet', '--collect', '--unit=minas-update-cleanup-' + uuid.uuid4().hex,
+         '--property=Type=exec', '--property=UMask=0077', '--property=RuntimeMaxSec=10min',
+         '/usr/bin/python3', '-I', '-B', BASE / 'updater.py', 'cleanup'])
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('api', 'worker', 'fetch', 'bootstrap', 'recover'))
+    parser.add_argument('action', choices=('api', 'worker', 'fetch', 'bootstrap', 'recover', 'cleanup'))
     parser.add_argument('--user')
     parser.add_argument('--plugin', choices=PLUGINS)
     parser.add_argument('--job')
@@ -834,7 +893,14 @@ def main():
                 if re.fullmatch('u[0-9]+', user.name):
                     for plugin in PLUGINS:
                         if (user / plugin).is_dir():
-                            recover_plugin(user.name, plugin)
+                            if args.action == 'recover':
+                                recover_plugin(user.name, plugin)
+                            try:
+                                cleanup_plugin(user.name, plugin)
+                            except (OSError, ValueError):
+                                # Other plugins still get maintenance when a
+                                # removed account or offline pool is not ready.
+                                continue
 
 
 if __name__ == '__main__':
