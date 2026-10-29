@@ -29,7 +29,7 @@ PLUGINS = {'mihomo', 'dockermanager', 'taskcenter', 'nascenter', 'sshrecovery', 
 SERVERS = {'mihomo', 'quickshare', 'downloadcenter'}
 MANAGED = SERVERS | {'taskcenter'}
 UNIT = 'minas-plugin-recovery-v2'
-VERSION = '1.6.6'
+VERSION = '1.6.7'
 WATCH_UNIT = UNIT + '-watch.service'
 RUNTIME = Path('/run/minas-plugin-recovery-v2')
 
@@ -688,7 +688,12 @@ WantedBy=multi-user.target
 
 
 def snapshot(user, plugin, payload, retain_previous=False):
+    coordinator = Path(__file__).read_bytes()
+    code_changed = not (BASE / 'recovery.py').is_file() or (BASE / 'recovery.py').read_bytes() != coordinator
     home, src, owner, entry = normalize(user, plugin, payload)
+    updater = payload / 'installer/updater'
+    if updater.is_dir():
+        call([sys.executable, '-I', '-B', updater / 'updater.py', 'bootstrap', '--user', user, '--plugin', plugin, '--payload', payload])
     prepare_tmp(user, src, Path(os.readlink(home / 'tmp')), owner)
     if plugin in SERVERS:
         unit = Path('/etc/systemd/system') / daemon_unit(user, plugin)
@@ -725,6 +730,9 @@ def snapshot(user, plugin, payload, retain_previous=False):
         if (payload / 'installer/common').is_dir():
             (stage / 'installer').mkdir()
             shutil.copytree(payload / 'installer/common', stage / 'installer/common')
+        if updater.is_dir():
+            (stage / 'installer').mkdir(exist_ok=True)
+            shutil.copytree(updater, stage / 'installer/updater')
         shutil.copytree(src, stage / 'src', symlinks=True)
         require(digest(stage / 'src') == entry['info']['abstract'], 'source changed while taking recovery snapshot')
         for p in (stage / 'src').rglob('*'):
@@ -752,7 +760,7 @@ def snapshot(user, plugin, payload, retain_previous=False):
     # Installed entry and port registration use the actual runtime port.
     port_registry(user, plugin, entry['info']['port'])
     atomic(BASE / 'recovery.py', Path(__file__).read_bytes(), 0o700)
-    install_units()
+    install_units(restart=code_changed)
     print('恢复登记完成：' + user + '/' + plugin)
 
 
@@ -765,6 +773,11 @@ def load_generation(directory):
 
 def restore_component(saved, user, plugin):
     payload = saved if (saved / 'scripts').is_dir() else saved / 'payload'
+    updater = payload / 'installer/updater'
+    if updater.is_dir():
+        rule = Path('/etc/sudoers.d') / ('minas-update-' + user + '-' + plugin)
+        if not plain(rule).is_file() or not plain(Path('/data/minas/plugins/updater/updater.py')).is_file():
+            call([sys.executable, '-I', '-B', updater / 'updater.py', 'bootstrap', '--user', user, '--plugin', plugin, '--payload', payload])
     common = payload / 'installer/common'
     if not common.exists(): common = payload / 'common'
     admin = common / 'component_admin.py'
@@ -1197,6 +1210,7 @@ def watch():
 
 def forget(user, plugin):
     identity(user, plugin)
+    plain(Path('/etc/sudoers.d') / ('minas-update-' + user + '-' + plugin)).unlink(missing_ok=True)
     directory = BASE / 'records' / (user + '-' + plugin)
     if directory.is_dir():
         atomic(directory / 'removed', b'explicit manage.sh uninstall\n')

@@ -1,4 +1,11 @@
 #!/bin/sh
+# BEGIN SHARED ONLINE UPDATE CGI
+case "&${QUERY_STRING:-}&" in
+    *action=plugin_update_*)
+        update_entry=$(readlink -f "$0") || exit 1
+        exec /usr/bin/python3 -B "$(dirname "$update_entry")/../files/online_update_cgi.py" 'dockermanager';;
+esac
+# END SHARED ONLINE UPDATE CGI
 set -u
 
 SCRIPT_FILE=$(readlink -f "$0") || exit 1
@@ -63,7 +70,7 @@ printf '%s' "$body" | jq empty >/dev/null 2>&1 || json_error "请求不是有效
 request=$(printf '%s' "$body" | jq --arg action "$action" '. + {action:$action}') || json_error "无法处理请求"
 response=$(printf '%s' "$request" | sudo -n "$HELPER" dockermanager 2>/dev/null) || json_error "无法调用公共 Docker 权限助手"
 printf '%s' "$response" | jq empty >/dev/null 2>&1 || json_error "权限助手返回了无法解析的数据"
-plugin_version=$(jq -r '.version // "1.1.38"' "$INFO_FILE" 2>/dev/null || printf '1.1.38')
+plugin_version=$(jq -r '.version // "1.1.39"' "$INFO_FILE" 2>/dev/null || printf '1.1.39')
 
 json_header
 printf '%s' "$response" | jq --arg pluginVersion "$plugin_version" '. + {pluginVersion:$pluginVersion}'

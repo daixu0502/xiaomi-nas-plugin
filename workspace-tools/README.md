@@ -35,3 +35,7 @@ python3 -B -m unittest discover -s workspace-tools/tests -p test_privileged_comp
 `audit-common-component-packages.py` 检查七包权限组件边界；`audit-plugin-integrity.py` 是 NAS 上的只读源码审计。`source_policy.py` 检查未来仓库索引是否混入测试。测试和固件参考测试夹具保持本地，不上传 GitHub。
 
 历史定向部署、旧 GitHub 多仓库发布脚本、NAS/WSL 实例信息和旧仓库元数据留在父工作区，不属于新仓库的部署入口。恢复服务和真机验收边界见 [根说明](../README.md)。
+
+## 在线更新维护
+
+八插件的代理设置、签名发布、中断恢复和维护命令见 [在线更新组件](plugin-updater/README.md)。构建前运行 `python -B workspace-tools/sync-plugin-updater.py` 和 `python -B workspace-tools/sync-ui-controls.py`，再执行标准打包。Release 附件使用根 `dist/` 中的标准包，构建产物不加入 Git 索引。

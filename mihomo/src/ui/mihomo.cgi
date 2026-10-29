@@ -1,4 +1,11 @@
 #!/bin/sh
+# BEGIN SHARED ONLINE UPDATE CGI
+case "&${QUERY_STRING:-}&" in
+    *action=plugin_update_*)
+        update_entry=$(readlink -f "$0") || exit 1
+        exec /usr/bin/python3 -B "$(dirname "$update_entry")/../files/online_update_cgi.py" 'mihomo';;
+esac
+# END SHARED ONLINE UPDATE CGI
 set -u
 
 # Resolve both UI symlinks and the /dev/fd/N execution used by newer firmware.

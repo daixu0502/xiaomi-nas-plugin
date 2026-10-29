@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+# BEGIN SHARED ONLINE UPDATE CGI
+import sys as _update_sys
+from pathlib import Path as _UpdatePath
+_update_sys.dont_write_bytecode = True
+_update_sys.path.insert(0, str(_UpdatePath(__file__).resolve().parent.parent / 'files'))
+from online_update_cgi import intercept as _online_update_intercept
+_online_update_intercept('mediaeditor')
+# END SHARED ONLINE UPDATE CGI
 """User-side CGI: fixed static assets and the existing narrow sudo broker."""
 import json
 import os

@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+# BEGIN SHARED ONLINE UPDATE CGI
+import sys as _update_sys
+from pathlib import Path as _UpdatePath
+_update_sys.dont_write_bytecode = True
+_update_sys.path.insert(0, str(_UpdatePath(__file__).resolve().parent.parent / 'files'))
+from online_update_cgi import intercept as _online_update_intercept
+_online_update_intercept('quickshare')
+# END SHARED ONLINE UPDATE CGI
 import json
 import os
 import pwd
@@ -100,8 +108,8 @@ try:
     data=body(); base=base_url()
     if action=="status":
         is_running,pid=running(); records=STORE.list(); active=sum(1 for item in records if Store.status(item)=="active")
-        try: version=json.loads((PLUGIN_HOME/"INFO").read_text()).get("version","1.1.63")
-        except Exception: version="1.1.63"
+        try: version=json.loads((PLUGIN_HOME/"INFO").read_text()).get("version","1.1.64")
+        except Exception: version="1.1.64"
         respond({"ok":True,"running":is_running,"pid":pid,"port":PORT,"lanUrl":f"http://{lan_ip()}:{PORT}","baseUrl":base,"activeShares":active,"totalShares":len(records),"pluginVersion":version})
     if action=="list": respond({"ok":True,"shares":[public_record(item,base) for item in STORE.list()]})
     if action=="transfers": respond({"ok":True,**STORE.transfers()})

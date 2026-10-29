@@ -1,4 +1,11 @@
 #!/bin/sh
+# BEGIN SHARED ONLINE UPDATE CGI
+case "&${QUERY_STRING:-}&" in
+    *action=plugin_update_*)
+        update_entry=$(readlink -f "$0") || exit 1
+        exec /usr/bin/python3 -B "$(dirname "$update_entry")/../files/online_update_cgi.py" 'nascenter';;
+esac
+# END SHARED ONLINE UPDATE CGI
 set -u
 SCRIPT_FILE=$(readlink -f "$0") || exit 1
 DIR=$(CDPATH= cd -P "$(dirname "$SCRIPT_FILE")"&&pwd -P);user=$(printf '%s\n' "$DIR"|sed -n 's#^/home/\(u[0-9][0-9]*\)/plugin/nascenter/src/ui$#\1#p;s#^/nas/pool[^/]*/\(u[0-9][0-9]*\)/plugin/pluginsrc/nascenter/ui$#\1#p');[ -n "$user" ]||user=$(stat -c '%U' "$SCRIPT_FILE" 2>/dev/null||true)
@@ -12,4 +19,4 @@ action=$(printf '%s' "${QUERY_STRING:-}"|tr '&' '\n'|sed -n 's/^action=\([A-Za-z
 [ "${REQUEST_METHOD:-GET}" = POST ]||error 'API 仅接受 POST 请求';[ -x "$HELPER" ]||error '权限助手未安装'
 length=${CONTENT_LENGTH:-0};case "$length" in ''|*[!0-9]*)error '请求长度无效';;esac;[ "$length" -le 65536 ]||error '请求过大';body=$(dd bs=1 count="$length" 2>/dev/null);[ -n "$body" ]||body='{}';printf '%s' "$body"|jq empty>/dev/null 2>&1||error '请求不是有效 JSON'
 case "$action" in overview|overview_details|smart|processes|process_network|health_details|service_restart|drop_caches|clean_logs);;*)error '未知操作';;esac
-request=$(printf '%s' "$body"|jq --arg action "$action" --arg pluginUser "$user" '.+{action:$action,pluginUser:$pluginUser}');response=$(printf '%s' "$request"|sudo -n "$HELPER" nascenter 2>/dev/null)||error '无法调用权限助手';printf '%s' "$response"|jq empty>/dev/null 2>&1||error '助手返回无效数据';version=$(jq -r '.version//"1.1.63"' "$INFO" 2>/dev/null||echo 1.1.63);json_header;printf '%s' "$response"|jq --arg pluginVersion "$version" '.+{pluginVersion:$pluginVersion}'
+request=$(printf '%s' "$body"|jq --arg action "$action" --arg pluginUser "$user" '.+{action:$action,pluginUser:$pluginUser}');response=$(printf '%s' "$request"|sudo -n "$HELPER" nascenter 2>/dev/null)||error '无法调用权限助手';printf '%s' "$response"|jq empty>/dev/null 2>&1||error '助手返回无效数据';version=$(jq -r '.version//"1.1.64"' "$INFO" 2>/dev/null||echo 1.1.64);json_header;printf '%s' "$response"|jq --arg pluginVersion "$version" '.+{pluginVersion:$pluginVersion}'

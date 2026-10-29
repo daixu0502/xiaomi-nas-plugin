@@ -23,10 +23,12 @@ def planned():
             targets['client-bridge.js'].append(('SHARED MOBILE NAVIGATION','mobile-navigation.js'))
         targets[sheets[-1]].append(('SHARED WORKBENCH','workbench.css'))
         targets['client-bridge.js'].append(('SHARED WORKBENCH','workbench.js'))
+        targets[sheets[-1]].append(('SHARED ONLINE UPDATE','online-update.css'))
+        targets['client-bridge.js'].append(('SHARED ONLINE UPDATE','online-update.js'))
         for target, templates in targets.items():
             path = ROOT / plugin / 'src/ui' / target
             text = path.read_text(encoding='utf-8').replace('\r\n', '\n')
-            for marker in ('SHARED FORM CONTROLS','SHARED TYPOGRAPHY','SHARED MOBILE NAVIGATION','SHARED WORKBENCH'):
+            for marker in ('SHARED FORM CONTROLS','SHARED TYPOGRAPHY','SHARED MOBILE NAVIGATION','SHARED WORKBENCH','SHARED ONLINE UPDATE'):
                 start='/* BEGIN '+marker+' */';end='/* END '+marker+' */'
                 if start in text:
                     before,rest=text.split(start,1);_,after=rest.split(end,1)

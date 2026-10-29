@@ -55,6 +55,9 @@ def build(only=None):
     spec=importlib.util.spec_from_file_location('shared_ui_controls',ROOT/'workspace-tools/sync-ui-controls.py')
     shared_ui=importlib.util.module_from_spec(spec);spec.loader.exec_module(shared_ui)
     shared_ui.synchronize(check=True)
+    updater_spec=importlib.util.spec_from_file_location('shared_updater',ROOT/'workspace-tools/sync-plugin-updater.py')
+    shared_updater=importlib.util.module_from_spec(updater_spec);updater_spec.loader.exec_module(shared_updater)
+    shared_updater.synchronize(check=True)
     VERSIONS=load()['plugins']
     if only:assert set(only)<=VERSIONS.keys(),'unknown plugin ID'
     synchronize()
