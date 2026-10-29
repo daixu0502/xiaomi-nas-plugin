@@ -194,6 +194,8 @@
 [data-minas-plugin="mihomo"] .node-test-metrics{display:grid;gap:5px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;}
 [data-minas-plugin="mihomo"] .node-test-metrics small{color:var(--muted);}
 [data-minas-plugin="mihomo"] .node-test-metrics .test-error{color:var(--danger,#b42332);}
+/* Overview values remain readable without competing with page headings. */
+[data-minas-plugin="mihomo"].workbench-ui .minas-plugin-body #modeMetric,[data-minas-plugin="mihomo"].workbench-ui .minas-plugin-body #portMetric,[data-minas-plugin="mihomo"].workbench-ui .minas-plugin-body #lanMetric,[data-minas-plugin="mihomo"].workbench-ui .minas-plugin-body #currentNodeSummary{font-size:var(--type-body)!important;line-height:var(--type-body-line)!important;font-weight:400!important}
 
 /* BEGIN SHARED FORM CONTROLS */
 /* [data-minas-plugin="mihomo"] is replaced with the plugin scope by sync-ui-controls.py. */

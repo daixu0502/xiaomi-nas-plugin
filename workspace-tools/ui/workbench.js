@@ -41,25 +41,38 @@
   var refreshRuns = new Map(), refreshDisposed = false;
   var refreshMotion = global.matchMedia('(prefers-reduced-motion: reduce)');
   function stopRefreshAnimation(state) {
-    if (state.animation) { state.animation.cancel(); state.animation = null; }
+    if (state.frame) { global.cancelAnimationFrame(state.frame); state.frame = 0; }
+    if (state.rotor) state.rotor.removeAttribute('transform');
     state.button.removeAttribute('data-workbench-animated');
   }
   function startRefreshAnimation(state) {
     stopRefreshAnimation(state);
     var glyph = state.button.querySelector('svg');
-    if (refreshMotion.matches || !glyph || typeof glyph.animate !== 'function') return;
-    // Drive the actual glyph: desktop micro-app styles share the host's CSS pipeline.
-    // CSS remains the fallback for browsers without Element.animate().
-    try {
-      state.animation = glyph.animate([{transform:'rotate(0deg)'}, {transform:'rotate(360deg)'}], {duration:800, iterations:Infinity});
-      state.button.setAttribute('data-workbench-animated', 'true');
-    } catch (_) {}
+    if (refreshMotion.matches || !glyph) return;
+    // SVG geometry is independent of the desktop host's CSS/WAAPI processing.
+    var rotor = glyph.querySelector('[data-workbench-rotor]');
+    if (!rotor) {
+      rotor = glyph.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'g');
+      rotor.setAttribute('data-workbench-rotor', 'true');
+      Array.from(glyph.children).filter(function (child) { return !['title','desc','defs'].includes(child.localName); }).forEach(function (child) { rotor.appendChild(child); });
+      glyph.appendChild(rotor);
+    }
+    state.rotor = rotor;
+    var box = glyph.viewBox.baseVal, x = box.x + box.width / 2, y = box.y + box.height / 2, start = null;
+    state.button.setAttribute('data-workbench-animated', 'true');
+    function tick(now) {
+      if (refreshDisposed || refreshMotion.matches || !state.button.isConnected) { stopRefreshAnimation(state); return; }
+      if (start === null) start = now;
+      rotor.setAttribute('transform', 'rotate(' + ((now - start) % 800) * .45 + ' ' + x + ' ' + y + ')');
+      state.frame = global.requestAnimationFrame(tick);
+    }
+    state.frame = global.requestAnimationFrame(tick);
   }
-  function refreshMotionChanged() { refreshRuns.forEach(startRefreshAnimation); }
+  function refreshMotionChanged() { refreshRuns.forEach(startRefreshAnimation); if (refreshMotion.matches) motions.forEach(function (motion) { motion.cancel(); }); }
   if (refreshMotion.addEventListener) refreshMotion.addEventListener('change', refreshMotionChanged); else refreshMotion.addListener(refreshMotionChanged);
   function refresh(button, operation) {
     if (refreshRuns.has(button)) return refreshRuns.get(button).promise;
-    var state = {button:button, started:Date.now(), busy:button.getAttribute('aria-busy'), timer:0, release:null, animation:null};
+    var state = {button:button, started:Date.now(), busy:button.getAttribute('aria-busy'), timer:0, release:null, frame:0, rotor:null};
     function clean() {
       stopRefreshAnimation(state);
       button.removeAttribute('data-workbench-refreshing');
@@ -74,7 +87,7 @@
       return new Promise(function (resolve) {
         state.release = function () { global.clearTimeout(state.timer); clean(); resolve(); };
         // A fast response can finish before the browser paints its first frame.
-        var elapsed = state.animation ? (state.animation.currentTime || 0) : Date.now() - state.started;
+        var elapsed = Date.now() - state.started;
         var remaining = Math.max(0, (refreshMotion.matches ? 400 : 800) - elapsed);
         if (refreshDisposed || !remaining) state.release(); else state.timer = global.setTimeout(state.release, remaining);
       });
@@ -105,6 +118,49 @@
     toggle.addEventListener('keydown', closeMenu); body.addEventListener('keydown', closeMenu);
   }
   global.XiaomiPluginWorkbench = { actionsMenu: actionsMenu, alignRow: alignRow, refresh: refresh };
+  var motions = new Map(), motionFrame = 0;
+  function motion(node, duration, values) {
+    if (motions.has(node)) motions.get(node).cancel();
+    if (refreshDisposed || refreshMotion.matches || !node.isConnected) return;
+    var original = {}, frame = 0, start = null;
+    Object.keys(values(0)).forEach(function (key) { original[key] = [node.style.getPropertyValue(key), node.style.getPropertyPriority(key)]; });
+    function cancel() {
+      global.cancelAnimationFrame(frame);
+      Object.keys(original).forEach(function (key) { if (original[key][0]) node.style.setProperty(key, original[key][0], original[key][1]); else node.style.removeProperty(key); });
+      motions.delete(node);
+    }
+    function paint(t) { var next = values(t); Object.keys(next).forEach(function (key) { node.style.setProperty(key, next[key], 'important'); }); }
+    function tick(now) {
+      if (refreshDisposed || !node.isConnected || refreshMotion.matches) { cancel(); return; }
+      if (start === null) start = now;
+      var t = Math.min(1, (now - start) / duration); paint(t);
+      if (t < 1) frame = global.requestAnimationFrame(tick); else cancel();
+    }
+    motions.set(node, {cancel:cancel}); paint(0); frame = global.requestAnimationFrame(tick);
+  }
+  function buttonFeedback(event) {
+    var button = event.target.closest('button');
+    if (!button || !root.contains(button) || button.disabled || button.getAttribute('aria-disabled') === 'true' || button.matches('.refresh-control,[role=switch]')) return;
+    motion(button, 190, function (t) { return {scale:String(.97 + .03 * (1 - Math.pow(1 - t, 3)))}; });
+  }
+  root.addEventListener('click', buttonFeedback, true);
+  function navigationKey() {
+    return Array.from(root.querySelectorAll('.tabs .tab.active,.workbench-subnav [aria-selected=true]')).map(function (node) { return node.dataset.page || node.dataset.section || node.textContent.trim(); }).join('|');
+  }
+  var lastNavigation = navigationKey();
+  function animateNavigation() {
+    motionFrame = 0;
+    var next = navigationKey(); if (next === lastNavigation || refreshDisposed) return;
+    lastNavigation = next;
+    var panels = Array.from(shell.querySelectorAll('.page.active,[data-section-panel],#media-pane,#episode-pane,#relation-pane,#source-pane,#history-pane,#repair-pane')).filter(function (node) { return node.getClientRects().length && global.getComputedStyle(node).display !== 'none'; });
+    panels.filter(function (node) { return !panels.some(function (parent) { return parent !== node && parent.contains(node); }); }).forEach(function (panel) {
+      motion(panel, 220, function (t) { var remaining = Math.pow(1 - t, 3); return {opacity:String(1 - .28 * remaining),translate:'0 ' + (6 * remaining) + 'px'}; });
+    });
+  }
+  var motionObserver = new MutationObserver(function (changes) {
+    if (changes.some(function (change) { return change.target.matches('.tab,[data-section]'); }) && !motionFrame) motionFrame = global.requestAnimationFrame(animateNavigation);
+  });
+  motionObserver.observe(root, {subtree:true,attributes:true,attributeFilter:['class','aria-selected']});
   function text(node, value) { if (node.textContent !== value) node.textContent = value; }
   function updateTitle() {
     var nav = root.querySelector('.desktop-frame > .tabs');
@@ -185,6 +241,8 @@
   decorate();
   function dispose() {
     refreshDisposed = true;
+    motionObserver.disconnect(); if (motionFrame) global.cancelAnimationFrame(motionFrame);
+    motions.forEach(function (item) { item.cancel(); }); root.removeEventListener('click', buttonFeedback, true);
     refreshRuns.forEach(function (state) { if (state.release) state.release(); else state.clean(); });
     if (refreshMotion.removeEventListener) refreshMotion.removeEventListener('change', refreshMotionChanged); else refreshMotion.removeListener(refreshMotionChanged);
     observer.disconnect(); if (navObserver) navObserver.disconnect(); if (versionObserver) versionObserver.disconnect();

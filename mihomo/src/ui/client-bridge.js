@@ -630,25 +630,38 @@
   var refreshRuns = new Map(), refreshDisposed = false;
   var refreshMotion = global.matchMedia('(prefers-reduced-motion: reduce)');
   function stopRefreshAnimation(state) {
-    if (state.animation) { state.animation.cancel(); state.animation = null; }
+    if (state.frame) { global.cancelAnimationFrame(state.frame); state.frame = 0; }
+    if (state.rotor) state.rotor.removeAttribute('transform');
     state.button.removeAttribute('data-workbench-animated');
   }
   function startRefreshAnimation(state) {
     stopRefreshAnimation(state);
     var glyph = state.button.querySelector('svg');
-    if (refreshMotion.matches || !glyph || typeof glyph.animate !== 'function') return;
-    // Drive the actual glyph: desktop micro-app styles share the host's CSS pipeline.
-    // CSS remains the fallback for browsers without Element.animate().
-    try {
-      state.animation = glyph.animate([{transform:'rotate(0deg)'}, {transform:'rotate(360deg)'}], {duration:800, iterations:Infinity});
-      state.button.setAttribute('data-workbench-animated', 'true');
-    } catch (_) {}
+    if (refreshMotion.matches || !glyph) return;
+    // SVG geometry is independent of the desktop host's CSS/WAAPI processing.
+    var rotor = glyph.querySelector('[data-workbench-rotor]');
+    if (!rotor) {
+      rotor = glyph.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'g');
+      rotor.setAttribute('data-workbench-rotor', 'true');
+      Array.from(glyph.children).filter(function (child) { return !['title','desc','defs'].includes(child.localName); }).forEach(function (child) { rotor.appendChild(child); });
+      glyph.appendChild(rotor);
+    }
+    state.rotor = rotor;
+    var box = glyph.viewBox.baseVal, x = box.x + box.width / 2, y = box.y + box.height / 2, start = null;
+    state.button.setAttribute('data-workbench-animated', 'true');
+    function tick(now) {
+      if (refreshDisposed || refreshMotion.matches || !state.button.isConnected) { stopRefreshAnimation(state); return; }
+      if (start === null) start = now;
+      rotor.setAttribute('transform', 'rotate(' + ((now - start) % 800) * .45 + ' ' + x + ' ' + y + ')');
+      state.frame = global.requestAnimationFrame(tick);
+    }
+    state.frame = global.requestAnimationFrame(tick);
   }
-  function refreshMotionChanged() { refreshRuns.forEach(startRefreshAnimation); }
+  function refreshMotionChanged() { refreshRuns.forEach(startRefreshAnimation); if (refreshMotion.matches) motions.forEach(function (motion) { motion.cancel(); }); }
   if (refreshMotion.addEventListener) refreshMotion.addEventListener('change', refreshMotionChanged); else refreshMotion.addListener(refreshMotionChanged);
   function refresh(button, operation) {
     if (refreshRuns.has(button)) return refreshRuns.get(button).promise;
-    var state = {button:button, started:Date.now(), busy:button.getAttribute('aria-busy'), timer:0, release:null, animation:null};
+    var state = {button:button, started:Date.now(), busy:button.getAttribute('aria-busy'), timer:0, release:null, frame:0, rotor:null};
     function clean() {
       stopRefreshAnimation(state);
       button.removeAttribute('data-workbench-refreshing');
@@ -663,7 +676,7 @@
       return new Promise(function (resolve) {
         state.release = function () { global.clearTimeout(state.timer); clean(); resolve(); };
         // A fast response can finish before the browser paints its first frame.
-        var elapsed = state.animation ? (state.animation.currentTime || 0) : Date.now() - state.started;
+        var elapsed = Date.now() - state.started;
         var remaining = Math.max(0, (refreshMotion.matches ? 400 : 800) - elapsed);
         if (refreshDisposed || !remaining) state.release(); else state.timer = global.setTimeout(state.release, remaining);
       });
@@ -694,6 +707,49 @@
     toggle.addEventListener('keydown', closeMenu); body.addEventListener('keydown', closeMenu);
   }
   global.XiaomiPluginWorkbench = { actionsMenu: actionsMenu, alignRow: alignRow, refresh: refresh };
+  var motions = new Map(), motionFrame = 0;
+  function motion(node, duration, values) {
+    if (motions.has(node)) motions.get(node).cancel();
+    if (refreshDisposed || refreshMotion.matches || !node.isConnected) return;
+    var original = {}, frame = 0, start = null;
+    Object.keys(values(0)).forEach(function (key) { original[key] = [node.style.getPropertyValue(key), node.style.getPropertyPriority(key)]; });
+    function cancel() {
+      global.cancelAnimationFrame(frame);
+      Object.keys(original).forEach(function (key) { if (original[key][0]) node.style.setProperty(key, original[key][0], original[key][1]); else node.style.removeProperty(key); });
+      motions.delete(node);
+    }
+    function paint(t) { var next = values(t); Object.keys(next).forEach(function (key) { node.style.setProperty(key, next[key], 'important'); }); }
+    function tick(now) {
+      if (refreshDisposed || !node.isConnected || refreshMotion.matches) { cancel(); return; }
+      if (start === null) start = now;
+      var t = Math.min(1, (now - start) / duration); paint(t);
+      if (t < 1) frame = global.requestAnimationFrame(tick); else cancel();
+    }
+    motions.set(node, {cancel:cancel}); paint(0); frame = global.requestAnimationFrame(tick);
+  }
+  function buttonFeedback(event) {
+    var button = event.target.closest('button');
+    if (!button || !root.contains(button) || button.disabled || button.getAttribute('aria-disabled') === 'true' || button.matches('.refresh-control,[role=switch]')) return;
+    motion(button, 190, function (t) { return {scale:String(.97 + .03 * (1 - Math.pow(1 - t, 3)))}; });
+  }
+  root.addEventListener('click', buttonFeedback, true);
+  function navigationKey() {
+    return Array.from(root.querySelectorAll('.tabs .tab.active,.workbench-subnav [aria-selected=true]')).map(function (node) { return node.dataset.page || node.dataset.section || node.textContent.trim(); }).join('|');
+  }
+  var lastNavigation = navigationKey();
+  function animateNavigation() {
+    motionFrame = 0;
+    var next = navigationKey(); if (next === lastNavigation || refreshDisposed) return;
+    lastNavigation = next;
+    var panels = Array.from(shell.querySelectorAll('.page.active,[data-section-panel],#media-pane,#episode-pane,#relation-pane,#source-pane,#history-pane,#repair-pane')).filter(function (node) { return node.getClientRects().length && global.getComputedStyle(node).display !== 'none'; });
+    panels.filter(function (node) { return !panels.some(function (parent) { return parent !== node && parent.contains(node); }); }).forEach(function (panel) {
+      motion(panel, 220, function (t) { var remaining = Math.pow(1 - t, 3); return {opacity:String(1 - .28 * remaining),translate:'0 ' + (6 * remaining) + 'px'}; });
+    });
+  }
+  var motionObserver = new MutationObserver(function (changes) {
+    if (changes.some(function (change) { return change.target.matches('.tab,[data-section]'); }) && !motionFrame) motionFrame = global.requestAnimationFrame(animateNavigation);
+  });
+  motionObserver.observe(root, {subtree:true,attributes:true,attributeFilter:['class','aria-selected']});
   function text(node, value) { if (node.textContent !== value) node.textContent = value; }
   function updateTitle() {
     var nav = root.querySelector('.desktop-frame > .tabs');
@@ -774,6 +830,8 @@
   decorate();
   function dispose() {
     refreshDisposed = true;
+    motionObserver.disconnect(); if (motionFrame) global.cancelAnimationFrame(motionFrame);
+    motions.forEach(function (item) { item.cancel(); }); root.removeEventListener('click', buttonFeedback, true);
     refreshRuns.forEach(function (state) { if (state.release) state.release(); else state.clean(); });
     if (refreshMotion.removeEventListener) refreshMotion.removeEventListener('change', refreshMotionChanged); else refreshMotion.removeListener(refreshMotionChanged);
     observer.disconnect(); if (navObserver) navObserver.disconnect(); if (versionObserver) versionObserver.disconnect();
@@ -801,15 +859,16 @@
   dialog.setAttribute('aria-labelledby', plugin + '-update-heading');
   // Static markup only. Release notes, errors and versions always use textContent.
   dialog.innerHTML = '<form method="dialog" class="workbench-update-heading"><h2 id="' + plugin + '-update-heading">插件更新</h2><button type="submit" class="secondary" aria-label="关闭插件更新">关闭</button></form>' +
-    '<div class="workbench-update-content"><div class="workbench-update-versions"><div><span>当前版本</span><strong data-update="installed">—</strong></div><div><span>最新版本</span><strong data-update="latest">尚未检查</strong></div></div>' +
+    '<div class="workbench-update-content"><div class="workbench-update-actions"><button type="button" class="secondary" data-update="check">检查更新</button><button type="button" class="primary" data-update="install" disabled>立即更新</button></div>' +
+    '<p data-update="confirm" hidden>更新期间可能短暂重启本插件服务。<button type="button" class="primary" data-update="confirmInstall">确认更新</button><button type="button" class="secondary" data-update="cancelInstall">取消</button></p><p class="workbench-update-error" data-update="error" role="alert" hidden></p>' +
+    '<div class="workbench-update-versions"><div><span>当前版本</span><strong data-update="installed">—</strong></div><div><span>最新版本</span><strong data-update="latest">尚未检查</strong></div></div>' +
     '<p data-update="hint">检查 GitHub 正式发布，更新会保留配置与任务。</p><pre class="workbench-update-notes" data-update="notes" hidden></pre>' +
+    '<div data-update="progressBlock" hidden><progress data-update="progress" max="100" value="0"></progress><p data-update="message" role="status" aria-live="polite"></p><ol class="workbench-update-log" data-update="logs"></ol></div>' +
     '<section class="workbench-update-proxy" aria-label="更新代理设置"><div class="workbench-proxy-heading"><div><h3>更新代理</h3><p>仅用于检查和下载安装包</p></div><label class="workbench-proxy-toggle"><input class="workbench-proxy-switch-input" type="checkbox" role="switch" aria-label="使用更新代理" data-update="proxyEnabled"><span class="workbench-proxy-switch-track" aria-hidden="true"></span></label></div>' +
     '<label class="workbench-proxy-address">代理地址<div class="workbench-proxy-endpoint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7"/></svg><input type="url" data-update="proxyUrl" placeholder="http://127.0.0.1:7890" autocomplete="off" spellcheck="false"></div></label>' +
     '<p class="workbench-proxy-help">支持 HTTP / HTTPS，八个插件共用此设置</p><details class="workbench-proxy-auth"><summary>代理认证<span>可选</span></summary><div class="workbench-update-auth"><label>用户名<input data-update="proxyUsername" placeholder="代理用户名" autocomplete="off"></label><label>密码<input type="password" data-update="proxyPassword" placeholder="代理密码" autocomplete="new-password"></label></div>' +
     '<label class="workbench-update-check"><input type="checkbox" data-update="clearPassword">清除已保存的密码</label></details><div class="workbench-proxy-footer"><span data-update="proxySaved" role="status"></span><button type="button" class="secondary" data-update="saveProxy">保存代理设置</button></div></section>' +
-    '<div data-update="progressBlock" hidden><progress data-update="progress" max="100" value="0"></progress><p data-update="message" role="status" aria-live="polite"></p><ol class="workbench-update-log" data-update="logs"></ol></div>' +
-    '<p class="workbench-update-error" data-update="error" role="alert" hidden></p><div class="workbench-update-actions"><button type="button" class="secondary" data-update="check">检查更新</button><button type="button" class="primary" data-update="install" disabled>立即更新</button></div>' +
-    '<p data-update="confirm" hidden>更新期间可能短暂重启本插件服务。<button type="button" class="primary" data-update="confirmInstall">确认更新</button><button type="button" class="secondary" data-update="cancelInstall">取消</button></p></div>';
+    '</div>';
   (root.querySelector('.desktop-frame') || doc.body).appendChild(dialog);
   var nodes = {}, timer = 0, disposed = false, busy = false, state = null, proxyDirty = false, requestSerial = 0, backgroundWatch = false;
   dialog.querySelectorAll('[data-update]').forEach(function (node) { nodes[node.dataset.update] = node; });
@@ -839,8 +898,8 @@
     }
     var job = value.job || {};
     if (job.running && (job.action === 'check' || job.action === 'install')) backgroundWatch = true;
-    nodes.progressBlock.hidden = !job.message; nodes.message.textContent = job.message || ''; nodes.progress.value = job.percent || 0;
-    nodes.logs.replaceChildren(); (job.logs || []).forEach(function (item) { var li = doc.createElement('li'); li.textContent = new Date(item.time * 1000).toLocaleTimeString() + ' · ' + item.message; nodes.logs.appendChild(li); });
+    nodes.progressBlock.hidden = !job.message && !(job.logs || []).length; nodes.message.textContent = job.message || ''; nodes.message.hidden = !job.message || job.message === nodes.hint.textContent; nodes.progress.hidden = !job.running; nodes.progress.value = job.percent || 0;
+    nodes.logs.replaceChildren(); (job.logs || []).filter(function (item) { return item.message !== nodes.hint.textContent; }).forEach(function (item) { var li = doc.createElement('li'); li.textContent = new Date(item.time * 1000).toLocaleTimeString() + ' · ' + item.message; nodes.logs.appendChild(li); });
     working(Boolean(job.running));
     if (!job.running) backgroundWatch = false;
     if (job.phase === 'failed' || job.phase === 'interrupted') error(job.message);

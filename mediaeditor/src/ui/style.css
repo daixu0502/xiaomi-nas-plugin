@@ -76,6 +76,11 @@
 @media(max-width:760px){[data-minas-plugin="mediaeditor"] .editor-layout{grid-template-columns:1fr}[data-minas-plugin="mediaeditor"] .media-list{max-height:280px;display:grid;grid-template-columns:1fr 1fr}[data-minas-plugin="mediaeditor"] .library-tools{grid-template-columns:1fr}[data-minas-plugin="mediaeditor"] .panel{padding:16px}}
 @media(max-width:460px){[data-minas-plugin="mediaeditor"] .field-grid{grid-template-columns:1fr}[data-minas-plugin="mediaeditor"] .code-grid{grid-template-columns:1fr}[data-minas-plugin="mediaeditor"] .source-search{align-items:stretch;flex-direction:column}[data-minas-plugin="mediaeditor"] .source-search button{align-self:flex-end}[data-minas-plugin="mediaeditor"] .media-list{grid-template-columns:1fr}[data-minas-plugin="mediaeditor"] .changes-table th,[data-minas-plugin="mediaeditor"] .changes-table td{padding-left:5px;padding-right:5px}}
 
+/* Keep a field name and its technical reference on the same label row. */
+[data-minas-plugin="mediaeditor"] .field-caption{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px 8px}
+[data-minas-plugin="mediaeditor"] .minas-plugin-body #media-editor details>summary{font-family:var(--font-ui)!important;font-size:var(--type-body)!important;font-weight:400;line-height:var(--type-body-line)!important}
+[data-minas-plugin="mediaeditor"] .relation-target-selection{margin-top:16px}
+
 /* Media selection is a second-level page; rows never shrink into each other. */
 [data-minas-plugin="mediaeditor"] .media-selection{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:18px;padding:18px 20px;background:var(--surface);border:1px solid var(--line);border-radius:14px}
 [data-minas-plugin="mediaeditor"] .media-selection>div{display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -409,11 +414,22 @@
 [data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[aria-busy=true] svg,
 [data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[data-workbench-refreshing=true] svg,
 [data-minas-plugin="mediaeditor"].workbench-ui .refresh-control.is-loading svg{animation:minas-workbench-refresh .8s linear infinite}
-[data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[data-workbench-animated=true] svg{animation:none}
+[data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[data-workbench-animated=true] svg{animation:none!important;transform:none!important}
 [data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[aria-busy=true]::before{content:none!important;display:none!important}
 [data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[data-workbench-refreshing=true]{cursor:progress}
 @keyframes minas-workbench-refresh{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){[data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[aria-busy=true] svg,[data-minas-plugin="mediaeditor"].workbench-ui .refresh-control[data-workbench-refreshing=true] svg,[data-minas-plugin="mediaeditor"].workbench-ui .refresh-control.is-loading svg{animation:none}}
+
+/* Restrained feedback; never move layout or suggest an operation succeeded. */
+[data-minas-plugin="mediaeditor"].workbench-ui button{transition:background-color .16s ease,border-color .16s ease,box-shadow .16s ease,filter .16s ease}
+[data-minas-plugin="mediaeditor"].workbench-ui button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media(hover:hover) and (pointer:fine){
+[data-minas-plugin="mediaeditor"].workbench-ui button:hover:not(:disabled):not([aria-disabled=true]){border-color:var(--accent);filter:brightness(.96);box-shadow:0 2px 7px #17263c14}
+[data-minas-plugin="mediaeditor"].workbench-ui[data-theme=dark] button:hover:not(:disabled):not([aria-disabled=true]){filter:brightness(1.12)}
+[data-minas-plugin="mediaeditor"].workbench-ui button.danger:hover:not(:disabled),[data-minas-plugin="mediaeditor"].workbench-ui .danger-button:hover:not(:disabled){border-color:var(--danger)}
+}
+[data-minas-plugin="mediaeditor"].workbench-ui button:active:not(:disabled):not([aria-disabled=true]){filter:brightness(.92)}
+@media(prefers-reduced-motion:reduce){[data-minas-plugin="mediaeditor"].workbench-ui button{transition:none}}
 /* END SHARED WORKBENCH */
 
 /* BEGIN SHARED ONLINE UPDATE */
