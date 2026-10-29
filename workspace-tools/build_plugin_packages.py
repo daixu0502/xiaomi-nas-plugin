@@ -89,7 +89,7 @@ def build(only=None):
             for path in sorted(paths):
                 assert not path.is_symlink(),str(path)
                 data=path.read_bytes()
-                if data.startswith(b'#!') or path.suffix in ['.md','.py','.js','.cjs','.html','.css','.cgi','.sh','.svg','.json','.yaml','.conf']:
+                if data.startswith(b'#!') or path.name in ('INFO','config') or path.suffix in ['.md','.py','.js','.cjs','.html','.css','.cgi','.sh','.svg','.json','.yaml','.conf']:
                     data=data.replace(b'\r\n',b'\n')
                 name=path.relative_to(ROOT).as_posix();expected[name]=hashlib.sha256(data).hexdigest()
                 info=tarfile.TarInfo(name);info.size=len(data);info.mode=0o755 if data.startswith(b'#!') else 0o644;tf.addfile(info,io.BytesIO(data))
