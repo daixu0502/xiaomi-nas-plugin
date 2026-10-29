@@ -27,7 +27,7 @@ import urllib.request
 import uuid
 
 sys.dont_write_bytecode = True
-VERSION = '1.0.5'
+VERSION = '1.0.6'
 REPOSITORY = 'daixu0502/xiaomi-nas-plugin'
 BASE = Path('/data/minas/plugins/updater')
 RECOVERY = Path('/data/minas/plugins/recovery')
@@ -575,6 +575,14 @@ def cleanup_locked(user, plugin, r):
             shutil.rmtree(old)
     for job, journal in journals:
         status_value = read(job / 'status.json', {})
+        if status_value.get('running') and time.time() - status_value.get('updatedAt', 0) > 45:
+            unit = 'minas-update-' + job.name + '.service'
+            if subprocess.run(['systemctl', 'is-active', '--quiet', unit], env=ENV).returncode != 0:
+                committed = journal.get('state') == 'committed'
+                report(job, 'complete' if committed else 'interrupted',
+                       '更新已完成，请重新打开插件窗口' if committed else '更新任务已中断，请重新检查更新',
+                       100 if committed else 0, running=False)
+                status_value = read(job / 'status.json', {})
         settled = journal.get('state') in ('committed', 'rolled_back') or (not journal and status_value.get('phase') in ('complete', 'failed', 'interrupted'))
         if not settled or status_value.get('running'):
             continue
@@ -592,13 +600,46 @@ def cleanup_locked(user, plugin, r):
     return True
 
 
-def cleanup_plugin(user, plugin):
+def remove_finished_jobs(directory, queue_locked=False):
+    """Drop settled jobs, keeping only the current result needed by pollers."""
+    jobs = plain(directory / 'jobs')
+    if not jobs.exists():
+        return
+    with contextlib.nullcontext() if queue_locked else lock(directory / 'queue.lock'):
+        current = read(directory / 'current.json', {})
+        for job in jobs.iterdir():
+            if not re.fullmatch('[0-9a-f]{32}', job.name):
+                continue
+            protected(job)
+            journal = read(job / 'journal.json', {})
+            state = read(job / 'status.json', {})
+            if journal.get('state') not in (None, 'committed', 'rolled_back') or state.get('running'):
+                continue
+            if state.get('phase') not in ('complete', 'failed', 'interrupted'):
+                continue
+            # Material removal must have passed snapshot verification first.
+            if any((job / name).exists() for name in ('package.tar.gz', 'package', 'rollback.tar.gz', 'backup')):
+                continue
+            if current.get('id') == job.name:
+                result = {key: state[key] for key in ('id', 'action', 'phase', 'message', 'percent', 'updatedAt', 'installedVersion') if key in state}
+                result['running'] = False
+                current = dict(result=result)
+                save(directory / 'current.json', current)
+            shutil.rmtree(job)
+
+
+def cleanup_plugin(user, plugin, worker_locked=False):
     r = load_recovery()
     record = RECOVERY / 'records' / (user + '-' + plugin)
     if not record.is_dir() or (record / 'removed').exists():
         return
-    with lock(INSTALL_LOCK), r.record_lock(record):
-        cleanup_locked(user, plugin, r)
+    directory = plugin_dir(user, plugin)
+    # External maintenance must wait until the worker has finished reporting.
+    # A worker already owns this lock; flock is not reentrant across handles.
+    with contextlib.nullcontext() if worker_locked else lock(directory / 'worker.lock'):
+        with lock(INSTALL_LOCK), r.record_lock(record):
+            if cleanup_locked(user, plugin, r):
+                remove_finished_jobs(directory)
 
 
 def transaction(user, plugin, archive, payload, job):
@@ -702,9 +743,13 @@ def status(user, plugin):
     _, _, info = identity(user, plugin)
     directory = plugin_dir(user, plugin)
     current = read(directory / 'current.json', {})
-    job = {}
+    job = current.get('result', {})
     if re.fullmatch('[0-9a-f]{32}', current.get('id', '')):
         job = read(directory / 'jobs' / current['id'] / 'status.json', {})
+        if not job:
+            # Cleanup atomically publishes the final result before removing the
+            # job. A poll may have read the old pointer immediately beforehand.
+            job = read(directory / 'current.json', {}).get('result', {})
         if job.get('running') and time.time() - job.get('updatedAt', 0) > 45:
             active = subprocess.run(['systemctl', 'is-active', '--quiet', 'minas-update-' + current['id'] + '.service'], env=ENV).returncode == 0
             if not active:
@@ -749,6 +794,7 @@ def api(user, plugin, request):
             run(['systemd-run', '--quiet', '--collect', '--unit=minas-update-' + job_id, '--property=Type=exec', '--property=UMask=0077', '--property=RuntimeMaxSec=30min', '/usr/bin/python3', '-I', '-B', BASE / 'updater.py', 'worker', '--user', user, '--plugin', plugin, '--job', job_id], timeout=15)
         except Exception:
             report(job, 'failed', '无法启动更新后台任务', 0, running=False)
+            remove_finished_jobs(directory, queue_locked=True)
             raise
         return status(user, plugin)
 
@@ -798,12 +844,7 @@ def worker(user, plugin, job_id):
             # Only root-owned updater records are pruned; user caches are never
             # accessed as root. Interrupted transactions remain recoverable.
             try:
-                cleanup_plugin(user, plugin)
-                jobs = sorted((directory / 'jobs').iterdir(), key=lambda p:p.stat().st_mtime, reverse=True)
-                for old in jobs[4:]:
-                    if old.name != job_id and re.fullmatch('[0-9a-f]{32}', old.name) and read(old / 'journal.json', {}).get('state') != 'prepared' and not read(old / 'status.json', {}).get('running'):
-                        plain(old)
-                        shutil.rmtree(old)
+                cleanup_plugin(user, plugin, worker_locked=True)
             except (OSError, ValueError):
                 pass
 

@@ -52,7 +52,10 @@
 @ROOT@.workbench-ui .workbench-proxy-footer button{flex:0 0 auto}
 @ROOT@.workbench-ui .workbench-update-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px}
 @ROOT@.workbench-ui .workbench-update-content progress{display:block;width:100%;height:8px;accent-color:var(--accent);margin:0 0 12px}
-@ROOT@.workbench-ui .workbench-update-log{max-height:150px;overflow:auto;padding-left:22px;margin-bottom:0;color:var(--muted);line-height:1.6;overflow-wrap:anywhere}
+@ROOT@.workbench-ui .workbench-update-log{max-height:150px;overflow:auto;list-style:none;padding:0;margin:0;color:var(--muted);line-height:1.6;overflow-wrap:anywhere}
+@ROOT@.workbench-ui .workbench-update-log>li+li{margin-top:6px}
+@ROOT@.workbench-ui .workbench-update-log:not(:empty){margin-top:10px}
+@ROOT@.workbench-ui .minas-plugin-body .workbench-update-notes{font-family:var(--font-ui)!important;font-size:var(--type-body)!important;line-height:var(--type-body-line)!important}
 @ROOT@.workbench-ui .workbench-update-error{color:var(--danger,#d02d46)}
 @ROOT@.workbench-ui [data-update=confirm]>button{margin:10px 10px 0 0}
 @ROOT@.workbench-ui [data-update=proxySaved]{color:var(--muted);font-size:var(--type-helper)!important;overflow-wrap:anywhere}

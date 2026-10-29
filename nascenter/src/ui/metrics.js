@@ -69,7 +69,8 @@
   function poll() {
     if (!mode || busy || window.document.hidden || !panel.isConnected) return;
     var token = generation, requestedMode = mode; busy = true; id('refreshProcess').disabled = true;
-    id('refreshProcess').setAttribute('aria-label','采样中…');
+    id('refreshProcess').setAttribute('aria-label','正在采样');
+    id('processStatus').textContent = data ? '正在采样，以下保留上次数据…' : '正在采样，请稍候…';
     return request(mode === 'network' ? 'process_network' : mode === 'health' ? 'health_details' : 'processes', {kind:mode})
       .then(function (d) { if (token !== generation) return; data = d; draw(); id('processStatus').textContent = '更新于 ' + new Date(d.timestamp * 1000).toLocaleTimeString() + ' · 采样后 3 秒自动刷新'; })
       .catch(function (e) { if (token !== generation) return; id('processStatus').textContent = '读取失败：' + e.message + (data ? '（以下保留上次数据）' : ''); })

@@ -21,11 +21,8 @@
 [data-minas-plugin="quickshare"] .status-pill i{width: 7px; height: 7px; border-radius: 50%; background: currentcolor;}
 [data-minas-plugin="quickshare"] .status-pill.online{color: rgb(8, 116, 95); background: rgb(217, 247, 237);}
 [data-minas-plugin="quickshare"] .status-pill.offline{color: rgb(180, 35, 24); background: rgb(255, 235, 232);}
-[data-minas-plugin="quickshare"] .page{display: none; min-width: 0px; animation: 0.17s ease 0s 1 normal none running quickshare-page-in;}
+[data-minas-plugin="quickshare"] .page{display: none; min-width: 0px;}
 [data-minas-plugin="quickshare"] .page.active{display: block;}
-@keyframes quickshare-page-in {
-  0% { opacity: 0.4; transform: translateY(4px); }
-}
 [data-minas-plugin="quickshare"] .panel{margin-bottom: 12px; padding: 18px; border: 1px solid rgba(255, 255, 255, 0.8); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow);}
 [data-minas-plugin="quickshare"] .panel.compact{padding: 16px;}
 [data-minas-plugin="quickshare"] .panel-heading, [data-minas-plugin="quickshare"] .section-heading{display: flex; align-items: center; justify-content: space-between; gap: 13px;}

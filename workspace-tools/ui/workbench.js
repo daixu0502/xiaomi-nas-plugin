@@ -190,7 +190,6 @@
       tab.addEventListener('click', function () { shell.scrollTop = 0; });
       nav.appendChild(tab); frame.insertBefore(nav, shell);
     }
-    var oldBar = frame.querySelector(':scope > .workbench-topbar'); if (oldBar) oldBar.remove();
     if (version && version.parentNode !== nav) {
       version.classList.add('workbench-version'); nav.appendChild(version);
     }

@@ -779,7 +779,6 @@
       tab.addEventListener('click', function () { shell.scrollTop = 0; });
       nav.appendChild(tab); frame.insertBefore(nav, shell);
     }
-    var oldBar = frame.querySelector(':scope > .workbench-topbar'); if (oldBar) oldBar.remove();
     if (version && version.parentNode !== nav) {
       version.classList.add('workbench-version'); nav.appendChild(version);
     }
@@ -833,14 +832,14 @@
     '<p data-update="confirm" hidden>更新期间可能短暂重启本插件服务。<button type="button" class="primary" data-update="confirmInstall">确认更新</button><button type="button" class="secondary" data-update="cancelInstall">取消</button></p><p class="workbench-update-error" data-update="error" role="alert" hidden></p>' +
     '<div class="workbench-update-versions"><div><span>当前版本</span><strong data-update="installed">—</strong></div><div><span>最新版本</span><strong data-update="latest">尚未检查</strong></div></div>' +
     '<p data-update="hint">检查 GitHub 正式发布，更新会保留配置与任务。</p><pre class="workbench-update-notes" data-update="notes" hidden></pre>' +
-    '<div data-update="progressBlock" hidden><progress data-update="progress" max="100" value="0"></progress><p data-update="message" role="status" aria-live="polite"></p><ol class="workbench-update-log" data-update="logs"></ol></div>' +
+    '<div data-update="progressBlock" hidden><progress data-update="progress" max="100" value="0"></progress><p data-update="message" role="status" aria-live="polite"></p><ul class="workbench-update-log" data-update="logs" role="list"></ul></div>' +
     '<section class="workbench-update-proxy" aria-label="更新代理设置"><div class="workbench-proxy-heading"><div><h3>更新代理</h3><p>仅用于检查和下载安装包</p></div><label class="workbench-proxy-toggle"><input class="workbench-proxy-switch-input" type="checkbox" role="switch" aria-label="使用更新代理" data-update="proxyEnabled"><span class="workbench-proxy-switch-track" aria-hidden="true"></span></label></div>' +
     '<label class="workbench-proxy-address">代理地址<div class="workbench-proxy-endpoint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7"/></svg><input type="url" data-update="proxyUrl" placeholder="http://127.0.0.1:7890" autocomplete="off" spellcheck="false"></div></label>' +
     '<p class="workbench-proxy-help">支持 HTTP / HTTPS，八个插件共用此设置</p><details class="workbench-proxy-auth"><summary>代理认证<span>可选</span></summary><div class="workbench-update-auth"><label>用户名<input data-update="proxyUsername" placeholder="代理用户名" autocomplete="off"></label><label>密码<input type="password" data-update="proxyPassword" placeholder="代理密码" autocomplete="new-password"></label></div>' +
     '<label class="workbench-update-check"><input type="checkbox" data-update="clearPassword">清除已保存的密码</label></details><div class="workbench-proxy-footer"><span data-update="proxySaved" role="status"></span><button type="button" class="secondary" data-update="saveProxy">保存代理设置</button></div></section>' +
     '</div>';
   (root.querySelector('.desktop-frame') || doc.body).appendChild(dialog);
-  var nodes = {}, timer = 0, disposed = false, busy = false, state = null, proxyDirty = false, requestSerial = 0, backgroundWatch = false;
+  var nodes = {}, timer = 0, disposed = false, busy = false, state = null, proxyDirty = false, requestSerial = 0, backgroundWatch = false, liveJob = null;
   dialog.querySelectorAll('[data-update]').forEach(function (node) { nodes[node.dataset.update] = node; });
   function error(message) { nodes.error.hidden = !message; nodes.error.textContent = message || ''; }
   function working(on) {
@@ -867,9 +866,14 @@
       nodes.proxyPassword.value = ''; nodes.proxyPassword.placeholder = value.proxy.hasPassword ? '已保存，留空保持原密码' : '未设置'; nodes.clearPassword.checked = false; proxyDirty = false;
     }
     var job = value.job || {};
+    // Finished job directories are removed. Logs already seen by this window
+    // remain in memory only, and are discarded when another task starts.
+    if (!liveJob || liveJob.id !== job.id) liveJob = {id:job.id, logs:[]};
+    if (job.logs) liveJob.logs = job.logs;
+    var logs = liveJob.logs.filter(function (item) { return item.message !== nodes.hint.textContent; });
     if (job.running && (job.action === 'check' || job.action === 'install')) backgroundWatch = true;
-    nodes.progressBlock.hidden = !job.message && !(job.logs || []).length; nodes.message.textContent = job.message || ''; nodes.message.hidden = !job.message || job.message === nodes.hint.textContent; nodes.progress.hidden = !job.running; nodes.progress.value = job.percent || 0;
-    nodes.logs.replaceChildren(); (job.logs || []).filter(function (item) { return item.message !== nodes.hint.textContent; }).forEach(function (item) { var li = doc.createElement('li'); li.textContent = new Date(item.time * 1000).toLocaleTimeString() + ' · ' + item.message; nodes.logs.appendChild(li); });
+    nodes.message.textContent = job.message || ''; nodes.message.hidden = !job.message || job.message === nodes.hint.textContent; nodes.progressBlock.hidden = !job.running && nodes.message.hidden && !logs.length; nodes.progress.hidden = !job.running; nodes.progress.value = job.percent || 0;
+    nodes.logs.replaceChildren(); logs.forEach(function (item) { var li = doc.createElement('li'); li.textContent = new Date(item.time * 1000).toLocaleTimeString() + ' · ' + item.message; nodes.logs.appendChild(li); });
     working(Boolean(job.running));
     if (!job.running) backgroundWatch = false;
     if (job.phase === 'failed' || job.phase === 'interrupted') error(job.message);

@@ -158,7 +158,7 @@
 /* BEGIN SHARED TYPOGRAPHY */
 /* Scoped text metrics. Reuse host fonts; desktop readability has its own scale. */
 [data-minas-plugin="dockermanager"]{--type-body:14px;--type-body-line:22px;--type-title:24px;--type-title-line:32px;--type-heading:16px;--type-heading-line:24px;--type-subheading:15px;--type-subheading-line:22px;--type-dialog:18px;--type-dialog-line:26px;--type-helper:12px;--type-helper-line:18px;--type-notice:13px;--type-notice-line:21px;--type-code:14px;--type-code-line:22px;--type-eyebrow:11px;--type-eyebrow-line:16px;--type-field:14px;--type-field-line:22px;--type-metric:24px;--type-metric-line:32px;--type-table-heading:13px;--type-table-heading-line:20px;--type-selection:16px;--type-selection-line:24px;--font-ui:"MiSans","MiSans VF","PingFang SC","Microsoft YaHei UI","Microsoft YaHei","Noto Sans SC",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;--font-code:ui-monospace,"Cascadia Code",Consolas,"SFMono-Regular",Menlo,var(--font-ui),monospace;--text:#22252a;--muted:#6b7280;font-family:var(--font-ui);font-size:var(--type-body);font-weight:400;line-height:var(--type-body-line);font-synthesis:none;letter-spacing:normal;text-shadow:none;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
-[data-minas-plugin="dockermanager"].desktop-client{--type-body:16px;--type-body-line:24px;--type-title:22px;--type-title-line:30px;--type-heading:18px;--type-heading-line:26px;--type-subheading:16px;--type-subheading-line:24px;--type-dialog:20px;--type-dialog-line:28px;--type-helper:14px;--type-helper-line:21px;--type-notice:14px;--type-notice-line:22px;--type-code:14px;--type-code-line:22px;--type-eyebrow:12px;--type-eyebrow-line:18px;--type-field:16px;--type-field-line:24px;--type-metric:24px;--type-metric-line:32px;--type-table-heading:14px;--type-table-heading-line:22px;--type-selection:17px;--type-selection-line:26px;--text:#20242a;--muted:#596273;-webkit-font-smoothing:auto;-moz-osx-font-smoothing:auto}
+[data-minas-plugin="dockermanager"].desktop-client{--type-body:16px;--type-body-line:24px;--type-title:22px;--type-title-line:30px;--type-heading:18px;--type-heading-line:26px;--type-subheading:16px;--type-subheading-line:24px;--type-dialog:20px;--type-dialog-line:28px;--type-helper:14px;--type-helper-line:21px;--type-notice:16px;--type-notice-line:24px;--type-code:16px;--type-code-line:24px;--type-eyebrow:14px;--type-eyebrow-line:21px;--type-log:14px;--type-log-line:22px;--type-field:16px;--type-field-line:24px;--type-metric:24px;--type-metric-line:32px;--type-table-heading:14px;--type-table-heading-line:22px;--type-selection:17px;--type-selection-line:26px;--text:#20242a;--muted:#596273;-webkit-font-smoothing:auto;-moz-osx-font-smoothing:auto}
 @media(prefers-color-scheme:dark){[data-minas-plugin="dockermanager"]:not(.desktop-client){--text:#e6e8ed;--muted:#aeb5c1}}
 /* Retire legacy business-page sizes through inheritance. Keep semantic tiers
    below authoritative; icon glyph sizes are independent of text metrics. */
@@ -191,15 +191,12 @@
 [data-minas-plugin="dockermanager"] .minas-plugin-body :is(pre,code,.code,.log-view,#logText,#configEditor) *{font-family:inherit!important;font-size:inherit!important;line-height:inherit!important;letter-spacing:0}
 [data-minas-plugin="dockermanager"] .minas-plugin-body :is(.ui-choice-copy,.ui-select-value){font-weight:inherit;line-height:var(--type-body-line)}
 [data-minas-plugin="dockermanager"] .minas-plugin-body .ui-choice-option[aria-selected=true] .ui-choice-copy{font-weight:500}
-[data-minas-plugin="dockermanager"].desktop-client .minas-plugin-body :is(.row-title span,.metric-grid>*>span,.metrics>*>span,.metric>span,.stat-label,.status-label,footer){font-size:var(--type-helper)!important;line-height:var(--type-helper-line)!important}
 /* Values, prose, metadata and multiline logs have distinct, consistent roles. */
-[data-minas-plugin="dockermanager"].desktop-client{--type-code:16px;--type-code-line:24px;--type-eyebrow:14px;--type-eyebrow-line:21px;--type-notice:16px;--type-notice-line:24px;--type-log:14px;--type-log-line:22px}
 [data-minas-plugin="dockermanager"].desktop-client .minas-plugin-body :is(.note,.notice,.security-note,.warning-note,.privacy-note,.field-note,.hint,.help,.form-feedback,.core-status,.connection,.readonly,.toast,.empty-state,.loading,.loading-row,.busy){font-size:var(--type-body)!important;line-height:var(--type-body-line)!important}
 [data-minas-plugin="dockermanager"].desktop-client .minas-plugin-body :is(small,.sub,.technical,.plugin-footer,.plugin-status .status-description,.row-title span,.metric-grid>*>span,.metrics>*>span,.metric>span,.stat-label,.status-label,.status-pill,.mini-badge,.badge,.pill,.chip,.meta-chip,.ui-choice-group,.ui-choice-footer,.file-copy>span,.file-name,.event time,footer){font-size:var(--type-helper)!important;line-height:var(--type-helper-line)!important}
 [data-minas-plugin="dockermanager"].desktop-client .minas-plugin-body :is(.ssh-status-item>span,.network-grid>*>span,.network-grid>*>small){font-size:var(--type-helper)!important;line-height:var(--type-helper-line)!important}
 [data-minas-plugin="dockermanager"].desktop-client .minas-plugin-body :is(th,summary){font-size:var(--type-table-heading)!important;line-height:var(--type-table-heading-line)!important}
 [data-minas-plugin="dockermanager"].desktop-client .minas-plugin-body :is(.metric-value,.metric strong,.metrics strong,.metric-grid strong,.stat-value,.ssh-status-item>strong,.network-grid strong){font-size:var(--type-metric)!important;line-height:var(--type-metric-line)!important}
-[data-minas-plugin="dockermanager"].desktop-client .desktop-frame>.tabs::before{font-size:var(--type-helper)!important;line-height:var(--type-helper-line)!important}
 [data-minas-plugin="dockermanager"].desktop-client .minas-plugin-body :is(pre,.log-view,#logText,#cleanupSamples,.config-editor,#configEditor){font-size:var(--type-log)!important;line-height:var(--type-log-line)!important}
 [data-minas-plugin="dockermanager"].desktop-client .minas-plugin-body :is(pre,.log-view,#logText,#cleanupSamples,.config-editor,#configEditor) *{font-size:inherit!important;line-height:inherit!important}
 @media(max-width:600px){[data-minas-plugin="dockermanager"] .minas-plugin-body :is(input,select,textarea):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not(.code):not(#configEditor){font-size:16px!important;line-height:24px!important}}
@@ -264,7 +261,6 @@
 [data-minas-plugin="dockermanager"].workbench-ui :is(.modal,.dialog,.sheet,.detail-sheet,.mi-picker-sheet,.mi-confirm-dialog,dialog){border-color:var(--line);border-radius:18px;background:var(--surface-solid);color:var(--text)}
 [data-minas-plugin="dockermanager"].workbench-ui .toast{z-index:95}
 /* The host already supplies the window title. Keep only navigation and content. */
-[data-minas-plugin="dockermanager"].workbench-ui .workbench-topbar{display:none!important}
 [data-minas-plugin="dockermanager"].workbench-ui.desktop-client .desktop-frame{display:grid;grid-template-columns:176px minmax(0,1fr);grid-template-rows:minmax(0,1fr);gap:0;background:var(--bg)}
 [data-minas-plugin="dockermanager"].workbench-ui.desktop-client .desktop-frame>.tabs{grid-column:1;grid-row:1;display:flex;flex-direction:column;align-items:stretch;width:100%;height:100%;min-height:0;max-height:none;padding:22px 12px 14px;gap:5px;margin:0;border:0;border-right:1px solid var(--line);border-radius:0;background:var(--surface);overflow:auto}
 [data-minas-plugin="dockermanager"].workbench-ui.desktop-client .desktop-frame>.tabs::before{display:none!important;content:none!important}
@@ -272,14 +268,12 @@
 [data-minas-plugin="dockermanager"].workbench-ui.desktop-client .desktop-frame>.tabs .tab.active{background:var(--soft);color:var(--accent)}
 [data-minas-plugin="dockermanager"].workbench-ui.desktop-client .desktop-frame>.shell{grid-column:2;grid-row:1;display:block;width:100%;height:100%;min-width:0;max-height:100%;padding:28px 28px 34px;margin:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}
 [data-minas-plugin="dockermanager"].workbench-ui .shell{container:workbench-page / inline-size}
-[data-minas-plugin="dockermanager"].workbench-ui.desktop-client .plugin-header .eyebrow{display:none}
 [data-minas-plugin="dockermanager"].workbench-ui.desktop-client .plugin-header{min-height:42px;margin-bottom:22px;align-items:center}
 [data-minas-plugin="dockermanager"].workbench-ui.desktop-client .desktop-frame>.tabs>.workbench-version{display:block!important;flex:0 0 auto;width:100%;min-width:0;max-width:100%;margin-top:auto;padding:28px 10px 0;text-align:left;font-size:var(--type-helper)!important;line-height:var(--type-helper-line)!important;color:var(--muted);overflow-wrap:anywhere}
 [data-minas-plugin="dockermanager"].workbench-ui.desktop-client .workbench-version *{font-size:inherit!important;line-height:inherit!important}
 [data-minas-plugin="dockermanager"].workbench-ui .workbench-version-line{display:block;max-width:100%;overflow-wrap:anywhere}
 [data-minas-plugin="dockermanager"].workbench-ui.desktop-client .desktop-frame.desktop-compact{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
 [data-minas-plugin="dockermanager"].workbench-ui.desktop-client .desktop-frame.desktop-compact>.tabs{grid-column:1;grid-row:1;flex-direction:row;flex-wrap:wrap;align-content:flex-start;height:auto;max-height:180px;width:100%;padding:9px 12px;border-right:0;border-bottom:1px solid var(--line);gap:3px 7px}
-[data-minas-plugin="dockermanager"].workbench-ui.desktop-client .desktop-frame.desktop-compact>.tabs::before{display:none}
 [data-minas-plugin="dockermanager"].workbench-ui.desktop-client .desktop-frame.desktop-compact>.tabs .tab{width:auto;flex:1 0 auto;text-align:center;padding:7px 9px;min-height:36px}
 [data-minas-plugin="dockermanager"].workbench-ui.desktop-client .desktop-frame.desktop-compact>.tabs>.workbench-version{flex-basis:100%;padding:4px 9px 0;margin:0;font-size:var(--type-helper)!important;line-height:var(--type-helper-line)!important}
 [data-minas-plugin="dockermanager"].workbench-ui.desktop-client .desktop-frame.desktop-compact>.shell{grid-column:1;grid-row:2;width:100%;height:100%;padding:20px 16px 28px}
@@ -324,7 +318,6 @@
 [data-minas-plugin="dockermanager"].workbench-ui .workbench-share-metrics>article+article{border-left:1px solid var(--line)}
 [data-minas-plugin="dockermanager"].workbench-ui .share-head{align-items:center}
 [data-minas-plugin="dockermanager"].workbench-ui .share-actions{justify-content:flex-end}
-[data-minas-plugin="dockermanager"].workbench-ui .workbench-section-caption{margin:22px 0 12px}
 [data-minas-plugin="dockermanager"][data-minas-plugin=sshrecovery].workbench-ui .panel{padding:0;overflow:hidden}
 [data-minas-plugin="dockermanager"][data-minas-plugin=sshrecovery].workbench-ui :is(.panel-head,.panel-body,.panel-actions){padding-left:18px;padding-right:18px}
 [data-minas-plugin="dockermanager"][data-minas-plugin=sshrecovery].workbench-ui .panel-head{padding-top:16px;padding-bottom:13px;background:var(--surface)}
@@ -344,11 +337,6 @@
 [data-minas-plugin="dockermanager"].workbench-ui .workbench-more{flex:0 0 auto;min-width:0;max-width:100%}
 [data-minas-plugin="dockermanager"].workbench-ui .workbench-more-body{display:flex;flex:1 0 100%;justify-content:flex-end;flex-wrap:wrap;gap:8px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);max-width:100%}
 [data-minas-plugin="dockermanager"].workbench-ui .workbench-more[aria-expanded=true]{border-color:var(--accent);background:var(--soft);color:var(--accent)}
-[data-minas-plugin="dockermanager"].workbench-ui .workbench-fold>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;font-weight:500;min-height:36px;list-style:none}
-[data-minas-plugin="dockermanager"].workbench-ui .workbench-fold>summary::after{content:'展开';color:var(--muted);font-size:var(--type-helper)}
-[data-minas-plugin="dockermanager"].workbench-ui .workbench-fold[open]>summary::after{content:'收起'}
-[data-minas-plugin="dockermanager"].workbench-ui .workbench-fold[open]>summary{margin-bottom:18px}
-[data-minas-plugin="dockermanager"].workbench-ui .workbench-fold>summary::-webkit-details-marker{display:none}
 [data-minas-plugin="dockermanager"].workbench-ui .workbench-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
 [data-minas-plugin="dockermanager"].workbench-ui .workbench-next{display:flex;flex-wrap:wrap;gap:10px 24px;padding:16px 18px;border:1px solid var(--line);border-radius:var(--card-radius);background:var(--surface);margin-bottom:18px}
 [data-minas-plugin="dockermanager"].workbench-ui .workbench-next>div{min-width:0;flex:1}
@@ -487,7 +475,10 @@
 [data-minas-plugin="dockermanager"].workbench-ui .workbench-proxy-footer button{flex:0 0 auto}
 [data-minas-plugin="dockermanager"].workbench-ui .workbench-update-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px}
 [data-minas-plugin="dockermanager"].workbench-ui .workbench-update-content progress{display:block;width:100%;height:8px;accent-color:var(--accent);margin:0 0 12px}
-[data-minas-plugin="dockermanager"].workbench-ui .workbench-update-log{max-height:150px;overflow:auto;padding-left:22px;margin-bottom:0;color:var(--muted);line-height:1.6;overflow-wrap:anywhere}
+[data-minas-plugin="dockermanager"].workbench-ui .workbench-update-log{max-height:150px;overflow:auto;list-style:none;padding:0;margin:0;color:var(--muted);line-height:1.6;overflow-wrap:anywhere}
+[data-minas-plugin="dockermanager"].workbench-ui .workbench-update-log>li+li{margin-top:6px}
+[data-minas-plugin="dockermanager"].workbench-ui .workbench-update-log:not(:empty){margin-top:10px}
+[data-minas-plugin="dockermanager"].workbench-ui .minas-plugin-body .workbench-update-notes{font-family:var(--font-ui)!important;font-size:var(--type-body)!important;line-height:var(--type-body-line)!important}
 [data-minas-plugin="dockermanager"].workbench-ui .workbench-update-error{color:var(--danger,#d02d46)}
 [data-minas-plugin="dockermanager"].workbench-ui [data-update=confirm]>button{margin:10px 10px 0 0}
 [data-minas-plugin="dockermanager"].workbench-ui [data-update=proxySaved]{color:var(--muted);font-size:var(--type-helper)!important;overflow-wrap:anywhere}

@@ -22,10 +22,7 @@
 [data-minas-plugin="mihomo"] .status-pill.offline{color: var(--red);}
 [data-minas-plugin="mihomo"] .status-pill.offline span{background: var(--red);}
 [data-minas-plugin="mihomo"] .page{display: none; min-width: 0px; max-width: 100%;}
-[data-minas-plugin="mihomo"] .page.active{display: block; animation: 160ms ease-out 0s 1 normal none running mihomo-page-in;}
-@keyframes mihomo-page-in {
-  0% { opacity: 0; transform: translateY(4px); }
-}
+[data-minas-plugin="mihomo"] .page.active{display: block;}
 [data-minas-plugin="mihomo"] .card{border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow);}
 [data-minas-plugin="mihomo"] .card{min-width: 0px; max-width: 100%; margin-bottom: 12px; padding: 17px; border-radius: 20px;}
 [data-minas-plugin="mihomo"] .card-heading{display: flex; min-width: 0px; max-width: 100%; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 15px;}

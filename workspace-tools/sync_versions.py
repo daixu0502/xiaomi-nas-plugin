@@ -33,8 +33,14 @@ def plan(root=ROOT):
         replace(base / 'manage.sh', r"^(PLUGIN_VERSION=')[^'\n]+(')$", version)
         html = base / 'src/ui/index.html'
         # Match only local CSS/JS cache keys and the plugin version footer.
-        pattern = r'((?:href|src)="[^"?:/]+\.(?:css|js)\?v=)' + SEMVER + r'([&"])'
-        expected = {'nascenter': 5, 'quickshare': 5}.get(plugin, 4)
+        pattern = r'((?:href|src)="[^"?:/]+\.(?:css|js)\?v=)[^"&]+([&"])'
+        # Include auxiliary scripts and old date-based keys, not just semver.
+        # Derive the count from actual local assets so a new script cannot be
+        # silently left on an old URL while the rest of the plugin updates.
+        assets = re.findall(r'(?:href|src)="([^"?:/]+\.(?:css|js))(?:\?[^"<>]*)?"', read(html))
+        if not assets or any(not (html.parent / asset).is_file() for asset in assets):
+            raise ValueError(f'{plugin}: missing local UI asset')
+        expected = len(assets)
         replace(html, pattern, version, expected)
         replace(html, r'(插件版本 )' + SEMVER + r'(?=[ <·])()', version)
         cgi = base / ('src/ui/' + plugin + '.cgi')

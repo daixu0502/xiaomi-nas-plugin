@@ -15,11 +15,8 @@
 [data-minas-plugin="nascenter"] .status-pill i{width: 7px; height: 7px; border-radius: 50%; background: currentcolor;}
 [data-minas-plugin="nascenter"] .status-pill.healthy{color: rgb(8, 119, 90); background: rgb(221, 247, 237);}
 [data-minas-plugin="nascenter"] .status-pill.warning{color: rgb(154, 101, 20); background: rgb(255, 240, 207);}
-[data-minas-plugin="nascenter"] .page{display: none; animation: 0.18s ease 0s 1 normal none running nascenter-fade;}
+[data-minas-plugin="nascenter"] .page{display: none;}
 [data-minas-plugin="nascenter"] .page.active{display: block;}
-@keyframes nascenter-fade {
-  0% { opacity: 0.4; transform: translateY(4px); }
-}
 [data-minas-plugin="nascenter"] .panel{border: 1px solid rgba(255, 255, 255, 0.82); background: var(--surface); box-shadow: var(--shadow);}
 [data-minas-plugin="nascenter"] .network-grid span{display: block; color: var(--muted); font-size:13px;}
 [data-minas-plugin="nascenter"] .network-grid small{display: block; color: var(--muted); font-size:13px;}
