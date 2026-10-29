@@ -108,8 +108,8 @@ try:
     data=body(); base=base_url()
     if action=="status":
         is_running,pid=running(); records=STORE.list(); active=sum(1 for item in records if Store.status(item)=="active")
-        try: version=json.loads((PLUGIN_HOME/"INFO").read_text()).get("version","1.1.68")
-        except Exception: version="1.1.68"
+        try: version=json.loads((PLUGIN_HOME/"INFO").read_text()).get("version","1.1.69")
+        except Exception: version="1.1.69"
         respond({"ok":True,"running":is_running,"pid":pid,"port":PORT,"lanUrl":f"http://{lan_ip()}:{PORT}","baseUrl":base,"activeShares":active,"totalShares":len(records),"pluginVersion":version})
     if action=="list": respond({"ok":True,"shares":[public_record(item,base) for item in STORE.list()]})
     if action=="transfers": respond({"ok":True,**STORE.transfers()})

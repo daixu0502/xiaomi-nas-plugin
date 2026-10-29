@@ -27,7 +27,7 @@ import urllib.request
 import uuid
 
 sys.dont_write_bytecode = True
-VERSION = '1.0.4'
+VERSION = '1.0.5'
 REPOSITORY = 'daixu0502/xiaomi-nas-plugin'
 BASE = Path('/data/minas/plugins/updater')
 RECOVERY = Path('/data/minas/plugins/recovery')
@@ -758,7 +758,9 @@ def worker(user, plugin, job_id):
     identity(user, plugin)
     directory = plugin_dir(user, plugin)
     job = protected(directory / 'jobs' / job_id)
-    with lock(directory / 'worker.lock', False):
+    # A previous check can already report its result while still finishing
+    # cleanup. Serialize the accepted next job instead of failing its queue.
+    with lock(directory / 'worker.lock'):
         try:
             recover_plugin(user, plugin, excluding=job_id)
             request = read(job / 'request.json')
