@@ -11,12 +11,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Mihomo</title>
   <link rel="icon" href="../../icon/mihomo.icon">
-  <link rel="stylesheet" href="style.css?v=1.7.58&amp;ui=docker-proxy-state">
-  <link rel="stylesheet" href="palette.css?v=1.7.58&amp;ui=compact-metrics-20260930">
+  <link rel="stylesheet" href="style.css?v=1.7.63&amp;ui=docker-proxy-state">
+  <link rel="stylesheet" href="palette.css?v=1.7.63&amp;ui=compact-metrics-20260930">
 </head>
 <body><div data-minas-plugin="mihomo"><div class="minas-plugin-body">
   <main class="shell">
-    <header class="topbar plugin-header"><div><div class="eyebrow">XIAOMI SMART STORAGE</div><h1>Mihomo</h1></div><button id="refreshButton" class="icon-button refresh-control" type="button" aria-label="刷新"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.2-2.1L20 11M4 13l2.7 4.1A7 7 0 0 0 17.9 15"/></svg></button></header>
+    <header class="topbar plugin-header"><div><div class="eyebrow">XIAOMI SMART STORAGE</div><h1>Mihomo</h1></div><button id="refreshButton" class="icon-button refresh-control" type="button" aria-label="刷新" title="刷新"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button></header>
 <section class="plugin-status"><div class="status-main"><div id="statusPill" class="status-pill waiting"><span></span>检查中</div><h2 class="status-title">代理服务</h2></div><p id="versionText" class="status-description">正在连接核心…</p></section>
 
     <nav class="tabs" aria-label="页面导航">
@@ -48,7 +48,7 @@
           <span>局域网访问</span>
           <strong id="lanMetric">—</strong>
         </article>
-      </div>
+      <article class="metric metric-current-node"><span>当前节点</span><strong id="currentNodeSummary">读取中</strong><small id="currentDelaySummary" hidden></small></article></div>
       <article class="card">
         <div class="card-heading">
           <div>
@@ -83,7 +83,7 @@
           </div>
           <div class="proxy-heading-actions">
             <button id="openNodeTests" class="button secondary" type="button" aria-haspopup="dialog" aria-controls="nodeTestDialog" aria-expanded="false">节点测速</button>
-            <button id="reloadProxies" class="icon-button refresh-control" aria-label="刷新策略" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.2-2.1L20 11M4 13l2.7 4.1A7 7 0 0 0 17.9 15"/></svg></button>
+            <button id="reloadProxies" class="icon-button refresh-control" type="button" aria-label="刷新策略" title="刷新策略"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button>
           </div>
         </div>
         <div id="proxyGroups" class="stack empty-state">正在读取策略组…</div>
@@ -102,10 +102,10 @@
     </section>
 
     <section id="page-settings" class="page">
-      <article class="card">
+      <article class="card"><div class="card-heading"><div><h2>Geo 数据与规则</h2></div></div>
         <div class="card-heading">
           <div>
-            <h2>Geo 数据与规则</h2>
+
             <p id="geoDataSummary">正在读取 GeoIP 和 GeoSite 状态…</p>
           </div>
           <div id="geoDataBadge" class="mini-badge">检查中</div>
@@ -135,10 +135,10 @@
         </div>
         <div class="notice warning network-notice">开放后局域网设备可访问此用户自动分配的混合端口。请确保局域网可信，并在客户端使用 NAS 的局域网 IP 与概览中显示的端口。</div>
       </article>
-      <article class="card">
+      <article class="card"><div class="card-heading"><div><h2>Mihomo 内核更新</h2></div></div>
         <div class="card-heading">
           <div>
-            <h2>Mihomo 内核更新</h2>
+
             <p id="coreUpdateSummary">正在读取内核版本…</p>
           </div>
           <div id="coreUpdateBadge" class="mini-badge">检查中</div>
@@ -149,10 +149,10 @@
         </div>
         <div class="privacy-note">只安装 MetaCubeX 官方 ARM64 Release，并校验官方 SHA-256；启动失败会自动恢复旧内核。</div>
       </article>
-      <article class="card">
+      <article class="card"><div class="card-heading"><div><h2>Docker 守护进程代理</h2></div></div>
         <div class="card-heading">
           <div>
-            <h2>Docker 守护进程代理</h2>
+
             <p id="dockerProxySummary">正在读取 Docker 代理状态…</p>
           </div>
           <div id="dockerProxyBadge" class="mini-badge">检查中</div>
@@ -166,7 +166,7 @@
         <div class="button-row">
           <button id="enableDockerProxy" class="button primary" disabled>启用 Docker 代理</button>
           <button id="disableDockerProxy" class="button danger" disabled>关闭 Docker 代理</button>
-          <button id="refreshDockerProxy" class="button secondary">刷新状态</button>
+          <button id="refreshDockerProxy" class="icon-button refresh-control" type="button" aria-label="刷新状态" title="刷新状态"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button>
         </div>
         <div class="notice warning docker-notice">
           用于 Docker 拉取镜像和构建；操作会重启 docker.service，运行中的容器可能短暂中断。不会自动修改容器内部的代理环境变量。
@@ -175,10 +175,10 @@
     </section>
 
     <section id="page-subscription" class="page">
-      <article class="card">
+      <article class="card"><div class="card-heading"><div><h2>订阅管理</h2></div></div>
         <div class="card-heading">
           <div>
-            <h2>订阅管理</h2>
+
             <p>导入 Clash 格式订阅中的节点，并保存为本地代理提供者。</p>
           </div>
         </div>
@@ -205,10 +205,10 @@
         <div id="subscriptionNodes" class="stack subscription-node-list empty-state">正在读取订阅节点…</div>
       </article>
 
-      <article class="card">
+      <article class="card"><div class="card-heading"><div><h2>导入单条节点</h2></div></div>
         <div class="card-heading">
           <div>
-            <h2>导入单条节点</h2>
+
             <p>支持常见分享链接，也支持单个 Clash JSON 节点。</p>
           </div>
         </div>
@@ -226,15 +226,15 @@
             <h2>手动节点</h2>
             <p>导入后可到“策略”页的 PROXY 组中选择使用。</p>
           </div>
-          <button id="reloadManualNodes" class="icon-button refresh-control" aria-label="刷新手动节点" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.2-2.1L20 11M4 13l2.7 4.1A7 7 0 0 0 17.9 15"/></svg></button>
+          <button id="reloadManualNodes" class="icon-button refresh-control" type="button" aria-label="刷新手动节点" title="刷新手动节点"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button>
         </div>
         <div id="manualNodes" class="stack empty-state">正在读取手动节点…</div>
       </article>
 
-      <article class="card">
+      <article class="card"><div class="card-heading"><div><h2>URL 导入规则提供者</h2></div></div>
         <div class="card-heading">
           <div>
-            <h2>URL 导入规则提供者</h2>
+
             <p>写入 rule-providers，并把 RULE-SET 规则放到最终 MATCH 之前。</p>
           </div>
         </div>
@@ -269,7 +269,7 @@
             <h2>config.yaml</h2>
             <p>保存前自动校验；通过后重启核心。旧配置保留为 config.yaml.bak。</p>
           </div>
-          <button id="loadConfig" class="icon-button refresh-control" aria-label="重新载入配置" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.2-2.1L20 11M4 13l2.7 4.1A7 7 0 0 0 17.9 15"/></svg></button>
+          <button id="loadConfig" class="icon-button refresh-control" type="button" aria-label="重新载入配置" title="重新载入配置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button>
         </div>
         <textarea id="configEditor" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="正在读取配置…"></textarea>
         <div class="editor-actions">
@@ -286,13 +286,13 @@
             <h2>最近 200 行</h2>
             <p>用于排查配置和启动问题。</p>
           </div>
-          <button id="loadLogs" class="icon-button refresh-control" aria-label="刷新日志" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.2-2.1L20 11M4 13l2.7 4.1A7 7 0 0 0 17.9 15"/></svg></button>
+          <button id="loadLogs" class="icon-button refresh-control" type="button" aria-label="刷新日志" title="刷新日志"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button>
         </div>
         <pre id="logViewer">点击刷新读取日志。</pre>
       </article>
     </section>
 
-    <footer id="pluginVersion">插件版本 1.7.58 · 公共权限组件读取中</footer>
+    <footer id="pluginVersion">插件版本 1.7.63 · 公共权限组件读取中</footer>
   </main>
 
   <div id="nodeTestBackdrop" class="mi-picker-backdrop" hidden></div>
@@ -303,7 +303,7 @@
     </div>
     <div class="node-test-content">
       <div class="button-row">
-        <button id="refreshNodeTests" class="button secondary" type="button">刷新节点</button>
+        <button id="refreshNodeTests" class="icon-button refresh-control" type="button" aria-label="刷新节点" title="刷新节点"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button>
         <button id="testAllDelays" class="button primary" type="button">全部测延迟</button>
         <button id="cancelNodeTest" class="button secondary" type="button" hidden>停止测试</button>
       </div>
@@ -342,8 +342,8 @@
   </section>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="client-bridge.js?v=1.7.58&amp;ui=compact-metrics-20260930"></script>
-  <script src="app.js?v=1.7.58&amp;ui=docker-proxy-state"></script>
+  <script src="client-bridge.js?v=1.7.63&amp;ui=compact-metrics-20260930"></script>
+  <script src="app.js?v=1.7.63&amp;ui=docker-proxy-state"></script>
   <script>
     (function () {
       var document = window.XiaomiPluginClient.document;

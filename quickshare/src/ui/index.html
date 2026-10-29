@@ -9,29 +9,29 @@
   <meta name="theme-color" content="#eef1f5" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#171a20" media="(prefers-color-scheme: dark)">
   <title>文件快传</title>
-  <link rel="stylesheet" href="style.css?v=1.1.57&amp;ui=clipboard-20261015">
-  <link rel="stylesheet" href="modal.css?v=1.1.57">
-  <link rel="stylesheet" href="palette.css?v=1.1.57&amp;ui=clipboard-20261015">
+  <link rel="stylesheet" href="style.css?v=1.1.62&amp;ui=clipboard-20261015">
+  <link rel="stylesheet" href="modal.css?v=1.1.62">
+  <link rel="stylesheet" href="palette.css?v=1.1.62&amp;ui=clipboard-20261015">
 </head>
 <body><div data-minas-plugin="quickshare"><div class="minas-plugin-body">
   <main class="shell">
     <header class="topbar plugin-header">
       <div><div class="eyebrow">XIAOMI SMART STORAGE</div><h1>文件快传</h1></div>
-      <button id="refresh" class="icon-button refresh-control" type="button" aria-label="刷新"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M6.1 9a7 7 0 0 1 11.2-2.1L20 11M4 13l2.7 4.1A7 7 0 0 0 17.9 15"/></svg></button>
+      <button id="refresh" class="icon-button refresh-control" type="button" aria-label="刷新" title="刷新"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button>
     </header>
 
     <section class="plugin-status"><div class="status-main"><span id="serviceBadge" class="status-pill"><i></i>检查中</span><h2 class="status-title">临时分享服务</h2></div><p class="status-description" id="endpoint">正在读取访问地址…</p></section>
 
-    <nav class="tabs" aria-label="快传功能"><button type="button" class="tab active" data-page="records">分享链接</button><button type="button" class="tab" data-page="uploads">接收上传</button><button type="button" class="tab" data-page="history">全部记录</button><button type="button" class="tab" data-page="settings">设置</button></nav>
+    <nav class="tabs" aria-label="快传功能"><button type="button" class="tab active" data-page="records">分享链接</button><button type="button" class="tab" data-page="uploads">接收上传</button><button type="button" class="tab" data-page="transfers">传输记录</button><button type="button" class="tab" data-page="settings">设置</button></nav>
 
 
 
     <section id="page-records" class="page active" aria-label="分享记录"><div class="metrics workbench-share-metrics"><article><span>有效分享</span><strong id="shareActiveCount">—</strong></article><article><span>上传入口</span><strong id="shareUploadCount">—</strong></article><article><span>累计访问</span><strong id="shareUseCount">—</strong></article></div>
-      <div class="section-heading section-toolbar records-heading"><div class="records-title"><h2 id="shareHeading">分享链接</h2><p id="recordSummary">正在读取…</p></div><button id="newShare" class="primary-button" type="button">新建分享</button><button id="clearShares" class="danger-button" type="button" hidden>清空记录</button></div>
+      <div class="section-heading section-toolbar records-heading"><div class="records-title"><h2 id="shareHeading">分享链接</h2><p id="recordSummary">正在读取…</p></div><button id="newShare" class="primary-button" type="button">新建分享</button></div>
       <div id="shareList" class="stack loading workbench-list-surface">正在读取分享记录…</div>
     </section>
 
-    <section id="page-settings" class="page">
+    <section id="page-transfers" class="page"><div class="metrics workbench-share-metrics"><article><span>今日传输</span><strong id="transferTodayBytes">—</strong></article><article><span>今日次数</span><strong id="transferTodayCount">—</strong></article><article><span>累计传输</span><strong id="transferTotalBytes">—</strong></article></div><div class="section-heading"><div><h2>最近传输</h2><p>最近 500 条；从本版本开始记录，不包含分享口令或访问链接。</p></div><button id="refreshTransfers" class="icon-button refresh-control" type="button" aria-label="刷新" title="刷新"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button></div><label class="field-label">传输方向<select id="transferDirection"><option value="all">全部传输</option><option value="download">下载</option><option value="upload">上传</option></select></label><div id="transferList" class="stack workbench-list-surface">正在读取…</div><p class="note">流量以服务器确认收发的字节数为准；中断下载只统计确认写出的数据块，完成表示服务器已结束传输。</p></section><section id="page-settings" class="page">
       <article class="panel">
         <div class="panel-heading"><div><h3>分享服务</h3><p>安装时自动分配独立 TCP 端口，避免多用户冲突。</p></div></div>
         <div class="button-row"><button id="startService" class="primary-button" type="button">启动服务</button><button id="stopService" class="danger-button" type="button">停止服务</button></div>
@@ -46,7 +46,7 @@
       <article class="panel compact"><h3>路由器端口转发</h3><p class="router-help">协议选择 TCP，内网主机填写本设备 IP，内网端口使用上方“局域网地址”中的端口；公网端口可以自定义。然后将完整公网地址填写到上方。</p></article>
     </section>
 
-    <footer id="version">插件版本 1.1.57</footer>
+    <footer id="version">插件版本 1.1.62</footer>
   </main>
 
 <section id="page-create" class="dialog create-share-dialog" role="dialog" aria-modal="true" aria-labelledby="createShareTitle" hidden><header class="dialog-head"><h2 id="createShareTitle">新建分享</h2><button id="closeCreateShare" type="button" class="close-button" aria-label="关闭新建分享">×</button></header>
@@ -111,8 +111,8 @@
   </section>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="client-bridge.js?v=1.1.57&amp;ui=clipboard-20261015"></script>
-  <script src="app.js?v=1.1.57&amp;ui=clipboard-20261015"></script>
+  <script src="client-bridge.js?v=1.1.62&amp;ui=clipboard-20261015"></script>
+  <script src="app.js?v=1.1.62&amp;ui=clipboard-20261015"></script>
   <script>
     (function () {
       var document = window.XiaomiPluginClient.document;

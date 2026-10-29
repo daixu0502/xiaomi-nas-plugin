@@ -140,6 +140,7 @@ var document = window.XiaomiPluginClient.document;
     if(!await confirm(title,message,action==='delete'||t.kind==='reboot'||t.kind==='cleanup'||action==='run'))return;
     const r=await request(action,body);toast(r.message);await refresh();
   }
+  function taskToggle(t){const b=button('','workbench-toggle',()=>operate(t,'toggle'));b.setAttribute('role','switch');b.setAttribute('aria-checked',String(!!t.enabled));b.setAttribute('aria-label',(t.enabled?'停用':'启用')+'任务 '+t.name);return b;}
   function taskCard(t,isTemplate) {
     const card=node('article','task-card'), head=node('div','task-head'), left=node('div'); left.append(node('h3','',t.name)); head.append(left,node('span','badge'+(t.enabled?' enabled':''),isTemplate?'模板':t.running?'执行中':t.enabled?'已启用':'已停用')); card.append(head);
     const meta=node('div','task-meta'); [kinds[t.kind],scheduleText(t.schedule),isTemplate?'默认停用':target(t)].forEach(v=>meta.append(node('span','chip',v)));card.append(meta);
@@ -150,12 +151,13 @@ var document = window.XiaomiPluginClient.document;
     if(t.kind==='cleanup'&&!isTemplate)card.append(node('p','',t.cleanupApproved?'已确认清理规则；修改保存后需重新预览。':'启用/立即执行之前会先显示清理预览。'));
     const actions=node('div','actions');
     if(isTemplate)actions.append(button('使用模板','secondary',()=>edit(t,true)));
-    else { actions.append(button('编辑','secondary',()=>edit(t,false),t.running),button(t.enabled?'停用':'启用','secondary',()=>operate(t,'toggle')),button('立即执行','secondary',()=>operate(t,'run'),t.running||!!t.retryAt||!data.scheduler));if(t.kind==='cleanup')actions.append(button('预览清理','secondary',()=>previewCleanup(t),t.running));if(t.retryAt)actions.append(button('取消重试','secondary',()=>operate(t,'cancel_retry')));actions.append(button('删除','danger',()=>operate(t,'delete'),t.running)); }
-    card.append(actions);return card;
+    else { actions.append(button('编辑','secondary',()=>edit(t,false),t.running),taskToggle(t),button('立即执行','secondary',()=>operate(t,'run'),t.running||!!t.retryAt||!data.scheduler));if(t.kind==='cleanup')actions.append(button('预览清理','secondary',()=>previewCleanup(t),t.running));if(t.retryAt)actions.append(button('取消重试','secondary',()=>operate(t,'cancel_retry')));actions.append(button('删除','danger',()=>operate(t,'delete'),t.running)); }
+    if(!isTemplate)window.XiaomiPluginWorkbench.actionsMenu(actions,b=>b.textContent==='编辑'||b.getAttribute('role')==='switch');
+    card.append(actions);window.XiaomiPluginWorkbench.alignRow(card,'.task-head','.actions');return card;
   }
   function runCard(r) {
     const card=node('article','task-card'), head=node('div','task-head');head.append(node('h3','',r.name),node('span','badge'+(['failed','timeout','interrupted'].includes(r.state)?' failed':r.state==='success'?' enabled':''),states[r.state]||r.state));card.append(head,node('p','',timestamp(r.started)+' · '+({manual:'手动执行',retry:'自动重试 #'+r.attempt,dependency:'成功后联动',schedule:'计划执行'}[r.source]||r.source)),node('p','',r.message));
-    const a=node('div','actions');a.append(button('查看输出','secondary',async()=>{const d=await request('log',{id:r.id});$('logTitle').textContent=r.name;$('logText').textContent=d.text;show('logDialog');}));card.append(a);return card;
+    const a=node('div','actions');a.append(button('查看输出','secondary',async()=>{const d=await request('log',{id:r.id});$('logTitle').textContent=r.name;$('logText').textContent=d.text;show('logDialog');}));card.append(a);window.XiaomiPluginWorkbench.alignRow(card,'.task-head','.actions');return card;
   }
   function list(id,items,renderer,empty) { $(id).replaceChildren(...(items.length?items.map(renderer):[node('div','empty',empty)])); }
   function render() {
@@ -170,13 +172,15 @@ var document = window.XiaomiPluginClient.document;
     const failedCount=data.runs.filter(r=>['failed','timeout','interrupted'].includes(r.state)&&Number(r.ended||r.started)>=(data.serverTime||Date.now()/1000)-86400).length;
     $('countFailed').textContent=failedCount;
     $('countFailed').classList.toggle('metric-alert',failedCount>0);
+    const last=data.runs[0];$('lastTaskRun').textContent=last?last.name+' · '+(states[last.state]||last.state)+' · '+timestamp(last.started):'尚未执行';
+    const next=data.tasks.filter(t=>t.enabled&&typeof t.nextRun==='number'&&t.nextRun>0).sort((a,b)=>a.nextRun-b.nextRun)[0];$('nextTaskRun').textContent=!data.scheduler?'调度已停止':next?next.name+' · '+timestamp(next.nextRun):data.tasks.some(t=>t.enabled&&typeof t.nextRun==='string')?'等待开机或前置任务':'没有待执行的定时任务';
     $('taskSummary').textContent=data.tasks.length+' 个任务 · '+data.tasks.filter(t=>t.enabled).length+' 个已启用';
     list('taskList',data.tasks,t=>taskCard(t,false),'暂无任务，可从模板创建。');list('templateList',templates,t=>taskCard(t,true),'正在读取模板…');list('historyList',data.runs,runCard,'还没有执行记录。安装后所有预置任务保持停用。');
     $('version').textContent='插件版本 '+(data.pluginVersion||'未知')+' · 公共权限组件 '+(data.helperVersion||'不可用');
   }
   async function refresh() { if(loading)return; loading=true;try{data=await request('list');if(!templates.length)templates=(await request('templates')).templates;render();}catch(error){$('health').className='badge failed';$('health').textContent='连接失败';throw error;}finally{loading=false;} }
   document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>switchPage(b.dataset.page));
-  $('newTask').onclick=()=>busy($('newTask'),()=>edit());$('refresh').onclick=()=>busy($('refresh'),refresh);$('refreshHistory').onclick=()=>busy($('refreshHistory'),refresh);
+  $('newTask').onclick=()=>busy($('newTask'),()=>edit());$('refresh').onclick=()=>window.XiaomiPluginWorkbench.refresh($('refresh'),()=>busy($('refresh'),refresh));$('refreshHistory').onclick=()=>window.XiaomiPluginWorkbench.refresh($('refreshHistory'),()=>busy($('refreshHistory'),refresh));
   $('schedulerToggle').onclick=()=>busy($('schedulerToggle'),async()=>{
     const enabled=!data.scheduler, count=data.tasks.filter(t=>t.enabled).length;
     const message=enabled?'当前有 '+count+' 个已启用任务。启动后按各自计划运行；请先核对任务列表。':'停止后保留任务和配置，并取消等待中的重试。';

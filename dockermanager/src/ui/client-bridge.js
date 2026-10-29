@@ -578,12 +578,82 @@
   var doc = client.document, root = doc.documentElement;
   var shell = root.querySelector('.shell'), heading = root.querySelector('.plugin-header h1');
   if (!shell || !heading) return;
-  var name = heading.textContent.trim(), navObserver = null, scheduled = 0;
+  var name = heading.textContent.trim(), navObserver = null, scheduled = 0, menuSerial = 0;
   var version = shell.querySelector('footer');
   var originalNext = version && version.nextSibling, originalParent = version && version.parentNode;
   var helperVersion = version && version.querySelector('#helper-version');
   var versionObserver = null;
   root.classList.add('workbench-ui');
+  var themeKey = 'xiaomi-nas-plugin-theme', themeChoice = 'system', themeSelect = doc.createElement('select');
+  var themeMedia = global.matchMedia('(prefers-color-scheme: dark)');
+  themeSelect.id = 'workbenchTheme'; themeSelect.setAttribute('aria-label', '外观主题');
+  [['system','跟随系统'],['light','浅色'],['dark','深色']].forEach(function (item) {
+    var option = doc.createElement('option'); option.value = item[0]; option.textContent = item[1]; themeSelect.appendChild(option);
+  });
+  function readTheme(value) { return ['system','light','dark'].includes(value) ? value : 'system'; }
+  try { themeChoice = readTheme(global.localStorage.getItem(themeKey)); } catch (_) {}
+  function applyTheme() {
+    root.dataset.themePreference = themeChoice;
+    root.dataset.theme = themeChoice === 'system' ? (themeMedia.matches ? 'dark' : 'light') : themeChoice;
+    themeSelect.value = themeChoice;
+  }
+  themeSelect.addEventListener('change', function () {
+    themeChoice = readTheme(themeSelect.value); applyTheme();
+    try { global.localStorage.setItem(themeKey, themeChoice); } catch (_) {}
+  });
+  function themeStorage(event) { if (event.key === themeKey || event.key === null) { themeChoice = readTheme(event.newValue); applyTheme(); } }
+  if (themeMedia.addEventListener) themeMedia.addEventListener('change', applyTheme); else themeMedia.addListener(applyTheme);
+  global.addEventListener('storage', themeStorage);
+  var header = heading.closest('.plugin-header'), headerActions = doc.createElement('div'), themeLabel = doc.createElement('label');
+  headerActions.className = 'workbench-header-actions'; themeLabel.className = 'workbench-theme'; themeLabel.appendChild(themeSelect);
+  headerActions.appendChild(themeLabel);
+  header.querySelectorAll(':scope > button').forEach(function (button) { headerActions.appendChild(button); });
+  header.appendChild(headerActions); applyTheme();
+  client.enhanceSelect(themeSelect);
+  var refreshRuns = new Map(), refreshDisposed = false;
+  function refresh(button, operation) {
+    if (refreshRuns.has(button)) return refreshRuns.get(button).promise;
+    var state = {started:Date.now(), busy:button.getAttribute('aria-busy'), timer:0, release:null};
+    function clean() {
+      button.removeAttribute('data-workbench-refreshing');
+      if (state.busy === null) button.removeAttribute('aria-busy'); else button.setAttribute('aria-busy', state.busy);
+      refreshRuns.delete(button);
+    }
+    button.setAttribute('data-workbench-refreshing', 'true'); button.setAttribute('aria-busy', 'true');
+    refreshRuns.set(button, state);
+    state.promise = Promise.resolve().then(operation).finally(function () {
+      return new Promise(function (resolve) {
+        state.release = function () { global.clearTimeout(state.timer); clean(); resolve(); };
+        var remaining = Math.max(0, 400 - (Date.now() - state.started));
+        if (refreshDisposed || !remaining) state.release(); else state.timer = global.setTimeout(state.release, remaining);
+      });
+    });
+    return state.promise;
+  }
+  function alignRow(card, headSelector, actionsSelector) {
+    var head = card.querySelector(headSelector), actions = card.querySelector(actionsSelector);
+    if (!head || !actions || card.classList.contains('workbench-row')) return;
+    var badge = head.querySelector(':scope > .badge'); if (badge) actions.insertBefore(badge, actions.firstChild);
+    var content = doc.createElement('div'); content.className = 'workbench-row-content';
+    Array.from(card.children).filter(function (item) { return item !== actions; }).forEach(function (item) { content.appendChild(item); });
+    card.insertBefore(content, actions); card.classList.add('workbench-row'); actions.classList.add('workbench-row-actions');
+  }
+  function actionsMenu(actions, keep) {
+    var secondary = Array.from(actions.children).filter(function (item) { return !keep(item); });
+    if (!secondary.length) return;
+    var reference = Array.from(actions.children).find(function (item) { return keep(item) && item.tagName === 'BUTTON' && item.getAttribute('role') !== 'switch'; });
+    var toggle = doc.createElement('button'), body = doc.createElement('div');
+    toggle.type = 'button'; toggle.className = (reference ? reference.className + ' ' : '') + 'workbench-more';
+    toggle.textContent = '更多'; body.className = 'workbench-more-body';
+    body.id = root.dataset.minasPlugin + '-workbench-actions-' + (++menuSerial); body.hidden = true; body.setAttribute('role', 'group'); body.setAttribute('aria-label', '更多操作');
+    toggle.setAttribute('aria-controls', body.id); toggle.setAttribute('aria-expanded', 'false');
+    secondary.forEach(function (item) { body.appendChild(item); }); actions.append(toggle, body);
+    function setOpen(open) { body.hidden = !open; toggle.setAttribute('aria-expanded', String(open)); }
+    toggle.addEventListener('click', function () { setOpen(body.hidden); });
+    function closeMenu(event) { if (event.key === 'Escape') { event.stopPropagation(); setOpen(false); toggle.focus(); } }
+    toggle.addEventListener('keydown', closeMenu); body.addEventListener('keydown', closeMenu);
+  }
+  global.XiaomiPluginWorkbench = { actionsMenu: actionsMenu, alignRow: alignRow, refresh: refresh };
   function text(node, value) { if (node.textContent !== value) node.textContent = value; }
   function updateTitle() {
     var nav = root.querySelector('.desktop-frame > .tabs');
@@ -663,8 +733,12 @@
   }
   decorate();
   function dispose() {
+    refreshDisposed = true;
+    refreshRuns.forEach(function (state) { if (state.release) state.release(); });
     observer.disconnect(); if (navObserver) navObserver.disconnect(); if (versionObserver) versionObserver.disconnect();
     if (scheduled) global.cancelAnimationFrame(scheduled);
+    if (themeMedia.removeEventListener) themeMedia.removeEventListener('change', applyTheme); else themeMedia.removeListener(applyTheme);
+    global.removeEventListener('storage', themeStorage);
     global.removeEventListener('unmount', dispose); global.removeEventListener('pagehide', dispose);
   }
   global.addEventListener('unmount', dispose); global.addEventListener('pagehide', dispose);

@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='sshrecovery'
 PLUGIN_LABEL='SSH 恢复'
-PLUGIN_VERSION='1.1.37'
+PLUGIN_VERSION='1.1.42'
 UNINSTALL_NOTE='仅删除所选用户的插件及恢复材料；不关闭 SSH，不移除已安装的登录公钥。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -403,12 +403,36 @@ nas_prepare() {
     NAS_HOME_WAS_PRESENT=false; [ ! -d "$NAS_HOME" ] || NAS_HOME_WAS_PRESENT=true
     if [ "$NAS_ACTION" = install ]; then
         python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" --help >/dev/null
-        python3 -B - "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" "$NAS_USER" "$NAS_PLUGIN" "$NAS_HOME" <<'MINAS_DIRECT_STATE'
-import importlib.util,os,pwd,sys
+        python3 -B - "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" "$NAS_USER" "$NAS_PLUGIN" "$NAS_HOME" "$NAS_SRC" "$NAS_TMP" "$NAS_WEB_ROOT" <<'MINAS_DIRECT_STATE'
+import importlib.util,os,pwd,stat,subprocess,sys
 from pathlib import Path
 spec=importlib.util.spec_from_file_location('direct_state',sys.argv[1]);r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r)
 user,plugin,home=sys.argv[2],sys.argv[3],Path(sys.argv[4]);owner=pwd.getpwnam(user)
+src,tmp,webroot=map(Path,sys.argv[5:8])
 r.ensure_data_layout()
+# A format/recovery can recreate these shared plugin parents as root:0700.
+# Only repair traversal on these exact public installation parents, never the
+# account root, source contents, persistent state or root SSH material.
+parents=list(dict.fromkeys((home.parent,src.parents[1],src.parent,tmp.parent,webroot/user)))
+def accessible(path):
+    probe=subprocess.run(['runuser','-u',user,'--','/usr/bin/python3','-B','-c',
+                          'import os,sys;raise SystemExit(not os.access(sys.argv[1],os.X_OK))',str(path)],
+                         stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10)
+    return probe.returncode==0
+for account_root in dict.fromkeys((home.parent.parent,src.parents[2],tmp.parents[2],webroot)):
+    r.plain(account_root)
+    if not accessible(account_root):
+        raise RuntimeError('账号或存储池目录不可访问：'+str(account_root)+'；请先在原厂客户端修复账号/存储挂载，不修改私有目录权限。')
+for parent in parents:
+    r.plain(parent)
+    parent.mkdir(mode=0o755,exist_ok=True)
+    metadata=parent.stat()
+    if not stat.S_ISDIR(metadata.st_mode):raise RuntimeError('插件基础路径不是目录：'+str(parent))
+    if not accessible(parent) and metadata.st_uid==0:
+        parent.chmod(stat.S_IMODE(metadata.st_mode)|0o001)
+        print('[信息] 已补齐插件基础目录的访问权限：'+str(parent),flush=True)
+    if not accessible(parent):
+        raise RuntimeError('目标用户无法访问插件基础目录：'+str(parent)+'；请先检查账号目录、存储池及父目录权限，不修改私有目录权限。')
 r.plain(home);home.mkdir(mode=0o700,parents=True,exist_ok=True)
 r.persist_state(user,plugin,home,None,(owner.pw_uid,owner.pw_gid),False)
 MINAS_DIRECT_STATE
@@ -584,8 +608,30 @@ jq -n --arg mpk "$home/INFO" --slurpfile f "$src/ui/config" --slurpfile i "$home
 next=$(mktemp "${NAS_LIST%/*}/.sshrecovery-registry.XXXXXXXX")
 jq --slurpfile e "$backup/entry" '.sshrecovery=$e[0]' "$NAS_LIST" > "$next"
 chmod --reference="$NAS_LIST" "$next"; chown --reference="$NAS_LIST" "$next"; mv -f "$next" "$NAS_LIST"
-runuser -u "$NAS_USER" -- env PLUG_USER="$NAS_USER" PLUG_NAME="$PLUGIN_NAME" PLUG_HOME_DIR="$home" \
-    PLUG_SRC_DIR="$src" PLUG_TMP_DIR="$NAS_TMP" PLUG_STATUS=unverified /usr/bin/plugin.sh verify || nas_fail "系统源码校验未通过"
+if ! runuser -u "$NAS_USER" -- env PLUG_USER="$NAS_USER" PLUG_NAME="$PLUGIN_NAME" PLUG_HOME_DIR="$home" \
+    PLUG_SRC_DIR="$src" PLUG_TMP_DIR="$NAS_TMP" PLUG_STATUS=unverified /usr/bin/plugin.sh verify; then
+    # Diagnose with the same user as the firmware verifier. No file content,
+    # credentials or private keys are printed, and the real check is not skipped.
+    runuser -u "$NAS_USER" -- /usr/bin/python3 -B - "$home" "$src" "$NAS_TMP" "$abstract" <<'SSH_VERIFY_DIAGNOSTIC' || true
+import hashlib,json,os,sys
+from pathlib import Path
+home,src,tmp=map(Path,sys.argv[1:4]);expected=sys.argv[4]
+result={'homeReadable':os.access(home/'INFO',os.R_OK),'sourceAccessible':os.access(src,os.R_OK|os.X_OK),'temporaryWritable':os.access(tmp,os.W_OK|os.X_OK)}
+try:
+    paths=[]
+    def failed(error):raise error
+    for folder,_,names in os.walk(src,followlinks=False,onerror=failed):
+        for name in names:
+            p=Path(folder)/name
+            if p.is_file() and not p.is_symlink():paths.append(p)
+    digest=hashlib.sha256()
+    for p in sorted(paths,key=lambda p:os.fsencode(str(p))):digest.update((hashlib.sha256(p.read_bytes()).hexdigest()+'\n').encode())
+    result.update(sourceFiles=len(paths),digestMatches=digest.hexdigest()==expected)
+except OSError as error:result['accessError']=str(error)
+print('[校验诊断] '+json.dumps(result,ensure_ascii=False))
+SSH_VERIFY_DIAGNOSTIC
+    nas_fail "系统源码校验未通过；已保留原厂校验，请查看上方访问权限与摘要诊断。"
+fi
 python3 -B "$P/installer/common/component_admin.py" install --plugin "$PLUGIN_NAME" --user "$NAS_USER" --payload "$P" --plugin-version "$PLUGIN_VERSION"
 # Reuse the SSH module's root path validation and atomic writer for the private key copy.
 python3 -B - <<'SSH_HOST_SNAPSHOT'

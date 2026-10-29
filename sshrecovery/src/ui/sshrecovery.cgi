@@ -28,7 +28,7 @@ try:
         if not user or pwd.getpwuid(os.geteuid()).pw_name!=user:raise ValueError('身份验证失败')
         if match and not os.path.ismount('/nas/'+match[1]):raise ValueError('存储池未就绪')
         if os.environ.get('REQUEST_METHOD')!='POST' or not os.environ.get('CONTENT_TYPE','').startswith('application/json'):raise ValueError('仅允许 JSON POST 请求')
-        if action not in ('status','recover','import_public','import_private','forget_key','install_boot','save_settings','download_keys','download_emergency'):raise ValueError('未知操作')
+        if action not in ('status','check_emergency','recover','import_public','import_private','forget_key','install_boot','save_settings','download_keys','download_emergency'):raise ValueError('未知操作')
         length=int(os.environ.get('CONTENT_LENGTH','0'))
         if not 0<length<=98304:raise ValueError('请求大小无效')
         data=json.loads(sys.stdin.buffer.read(length))

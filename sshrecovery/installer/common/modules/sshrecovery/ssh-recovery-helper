@@ -377,8 +377,39 @@ class Recovery:
         files['SHA256SUMS']=(''.join(hashlib.sha256(data).hexdigest()+'  '+name+'\n' for name,data in files.items())).encode()
         with zipfile.ZipFile(memory,'w',zipfile.ZIP_DEFLATED) as archive:
             for name,data in files.items():archive.writestr(name,data)
+        atomic(self.state/'keys'/(self.user+'.emergency.json'),json.dumps({'exportedAt':int(time.time())}).encode(),0o600)
         self.log('已导出离线应急包；不包含任何私钥')
         return base64.b64encode(memory.getvalue()).decode()
+
+    def emergency_preparation(self,docker_command):
+        result={'python':os.access('/usr/bin/python3',os.X_OK),'cron':unit_state('crond.service').get('ActiveState')=='active',
+                'publicKey':self.key.is_file(),'rescueImage':None,'rescueContainer':None,'portainer':None}
+        try:
+            # Use the same fixed Docker binary/socket/environment as other plugins.
+            # The firmware Docker executable can belong to its system service user.
+            def docker(*args):
+                reply=docker_command(list(args),timeout=4)
+                require(reply.returncode==0,'Docker 状态暂不可用')
+                return reply.stdout.strip()
+            images=docker('image','ls','--filter','reference=busybox*','--format','{{.ID}}').splitlines()[:16]
+            images=[image for image in images if re.fullmatch(r'[a-f0-9]{12,64}',image)]
+            result['rescueImage']=bool(images and 'linux/arm64' in docker('image','inspect','--format','{{.Os}}/{{.Architecture}}',*images).splitlines())
+            rows=docker('ps','-a','--format','{{.ID}} {{.Image}} {{.State}}').splitlines()[:64]
+            result['portainer']=any('portainer' in row.lower() and row.endswith(' running') for row in rows)
+            result['rescueContainer']=False
+            # Only inspect documented rescue containers, never collect environment variables.
+            template='{"image":{{json .Config.Image}},"user":{{json .Config.User}},"mounts":{{json .Mounts}},"caps":{{json .HostConfig.CapAdd}},"privileged":{{json .HostConfig.Privileged}},"network":{{json .HostConfig.NetworkMode}}}'
+            ids=[p[0] for p in (row.split() for row in rows) if len(p)==3 and 'busybox' in p[1].lower() and re.fullmatch(r'[a-f0-9]{12,64}',p[0])][:8]
+            configurations=docker('inspect','--format',template,*ids).splitlines() if ids else []
+            for value in configurations:
+                config=json.loads(value)
+                root=any(m.get('Source')=='/' and m.get('Destination')=='/nas' and m.get('RW') is True for m in config.get('mounts') or [])
+                caps={str(cap).upper().removeprefix('CAP_') for cap in config.get('caps') or []}
+                capability=config.get('privileged') or 'SYS_CHROOT' in caps
+                user=config.get('user') in ('','0','root','0:0','root:root')
+                if root and capability and user and config.get('network')=='none':result['rescueContainer']=True;break
+        except (RecoveryError,OSError,ValueError,subprocess.TimeoutExpired):pass
+        return result
 
     def settings(self):
         try:value=json.loads(self.settings_file.read_bytes())
@@ -497,7 +528,9 @@ class Recovery:
         if self.host_key.is_file():
             try:host_valid=bool(command(['/usr/sbin/dropbearkey','-y','-f',str(self.host_key)],timeout=5))
             except (RecoveryError,OSError,subprocess.TimeoutExpired):pass
-        return dict(loginAuthorization=self.login_status(),hostKeyValid=host_valid,sshActive=socket.get('ActiveState')=='active',socketSupported=socket.get('LoadState')!='not-found',port=22,
+        try:exported=json.loads((self.state/'keys'/(self.user+'.emergency.json')).read_bytes()).get('exportedAt',0)
+        except (OSError,ValueError):exported=max((e.get('time',0) for e in events if e.get('user')==self.user and '已导出离线应急包' in e.get('message','')),default=0)
+        return dict(emergencyExportedAt=exported,emergencyCommand='chroot /nas /usr/bin/python3 /nas/pool0/'+self.user+'/data/ssh-emergency/recover-ssh.py --local-recover --offline',loginAuthorization=self.login_status(),hostKeyValid=host_valid,sshActive=socket.get('ActiveState')=='active',socketSupported=socket.get('LoadState')!='not-found',port=22,
                     bootFinished=boot,keySaved=bool(fingerprint),fingerprint=fingerprint,hostKey=self.host_key.is_file(),hostBackup=self.host_backup.is_file(),
                     bootService=boot_status(),
                     events=[e for e in reversed(events) if e.get('user')==self.user][:20],settings=self.settings(),generated=self.generated_info())
@@ -696,6 +729,7 @@ def api(user,request):
         action=request.get('action')
         extra={}
         if action=='status':message=''
+        elif action=='check_emergency':extra={'emergencyPreparation':recovery.emergency_preparation(runtime.docker_command)};message='已检查应急准备情况；未修改容器、服务或授权。'
         elif action=='recover':message=recovery.recover()
         elif action=='import_public':message='恢复公钥已保存：'+recovery.save_public(request.get('key'))
         elif action=='import_private':message='已提取并校验公钥，私钥未写入磁盘：'+recovery.save_private(request.get('key'))

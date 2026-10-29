@@ -37,6 +37,7 @@
 [data-minas-plugin="dockermanager"] .section-heading p{color: rgba(255, 255, 255, 0.66);}
 [data-minas-plugin="dockermanager"] .detail-list{display: grid; grid-template-columns: repeat(2, minmax(0px, 1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--line);}
 [data-minas-plugin="dockermanager"] .detail-item{min-width: 0px; padding: 13px; background: rgb(255, 255, 255);}
+[data-minas-plugin="dockermanager"] #systemInfo .detail-item{border-radius:0;}
 [data-minas-plugin="dockermanager"] .detail-item span{display: block; margin-bottom: 4px; color: var(--muted); font-size:13px;}
 [data-minas-plugin="dockermanager"] .detail-item strong{display: block; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap;}
 [data-minas-plugin="dockermanager"] .stack{display: grid; width: 100%; min-width: 0px; gap: 10px;}

@@ -16,7 +16,7 @@ async function api(action,data={}){
 }
 function setBusy(on){
  working=on;
- for(const id of ['refresh','recover','installBoot','saveKey','forgetKey','selectFile','generateKey','downloadKeys','downloadEmergency'])byId(id).disabled=on||!state;
+ for(const id of ['checkEmergency','refresh','recover','installBoot','saveKey','forgetKey','selectFile','generateKey','downloadKeys','downloadEmergency'])byId(id).disabled=on||!state;
  if(!on&&state){byId('recover').disabled=!state.socketSupported||state.bootFinished===false;byId('forgetKey').disabled=!state.keySaved;byId('downloadKeys').disabled=!state.generated?.ready;}
  byId('refresh').classList.toggle('is-loading',on);
  byId('keyType').disabled=on;byId('keyFile').disabled=on;byId('keyText').disabled=on||byId('keyType').value==='import_private';
@@ -30,6 +30,10 @@ function showError(message,target='error'){
 function render(s){
  state=s;byId('sshState').className='status-pill '+(s.sshActive?'online':'offline');byId('sshState').textContent=s.sshActive?'运行中':'已停止';byId('port').textContent=s.port;
  byId('hostState').textContent=(s.hostKeyValid??s.hostKey)?'可用':s.hostBackup?'可恢复':s.hostKey?'待修复':'缺失';byId('keyState').textContent=s.keySaved?'已保存':'未配置';
+ byId('emergencyPublicKey').textContent=s.keySaved?'已保存':'尚未保存';
+ byId('emergencyExported').textContent=s.emergencyExportedAt?new Date(s.emergencyExportedAt*1000).toLocaleString():'尚未导出';
+ byId('emergencyCommand').value=s.emergencyCommand||'';byId('copyEmergencyCommand').disabled=!s.emergencyCommand;
+ if(s.emergencyPreparation){const p=s.emergencyPreparation,mark=v=>v===true?'已准备':v===false?'未准备':'未能检查';byId('emergencyRuntime').textContent=p.python&&p.cron?'可用':'需要检查';byId('emergencyImage').textContent=mark(p.rescueImage);byId('emergencyContainer').textContent=mark(p.rescueContainer);byId('emergencyPortainer').textContent=p.portainer===true?'运行中':p.portainer===false?'未检测到运行入口':'未能检查';byId('emergencyReady').textContent=Object.values(p).every(v=>v===true)?'已准备':'尚未全部就绪';}
  const a=s.loginAuthorization,reasons={home_missing:'目录缺失',ssh_missing:'目录缺失',authorization_missing:'未写入',saved_key_not_installed:'公钥未安装',no_saved_key:'未配置校验',permissions_or_content:'权限或内容异常',ready:'已就绪'};
  byId('authorizationState').textContent=a?(reasons[a.reason]||'待检查'):'待检查';
  byId('authorizationNote').textContent=a?'实际登录目录：'+a.rootHome+'。服务器身份密钥与登录授权分别检查；“恢复公钥已保存”不代表已安装到登录目录。':'正在检查实际登录目录和授权文件。';
@@ -62,7 +66,19 @@ function switchRecoveryPage(page){doc.querySelectorAll('.tab[data-page]').forEac
 doc.querySelectorAll('.tab[data-page]').forEach(tab=>tab.onclick=()=>switchRecoveryPage(tab.dataset.page));
 byId('manageKeys').onclick=()=>window.XiaomiPluginClient.openDialog(byId('keyManager'));
 byId('closeKeyManager').onclick=()=>byId('keyManager').close();
-byId('refresh').onclick=()=>perform('status');
+byId('checkEmergency').onclick=()=>perform('check_emergency');
+byId('copyEmergencyCommand').onclick=async()=>{
+ const field=byId('emergencyCommand'),status=byId('emergencyCopyStatus');if(!field.value)return;
+ const owner=field.ownerDocument,view=owner.defaultView||window,previous=owner.activeElement;
+ field.focus({preventScroll:true});field.select();field.setSelectionRange(0,field.value.length);
+ let copied=false;try{copied=owner.execCommand('copy');}catch(_){}
+ if(!copied&&view.isSecureContext&&view.navigator.clipboard){try{await view.navigator.clipboard.writeText(field.value);copied=true;}catch(_){}}
+ status.textContent=copied?'命令已复制':'命令已选中；电脑按 Ctrl+C，手机可长按复制。';
+ if(copied&&previous)previous.focus({preventScroll:true});
+};
+byId('showEmergencyGuide').onclick=()=>{window.XiaomiPluginClient.openDialog(byId('emergencyGuide'));requestAnimationFrame(()=>{const field=byId('emergencyCommand');field.style.height='auto';field.style.height=(field.scrollHeight+2)+'px';});};
+byId('closeEmergencyGuide').onclick=()=>byId('emergencyGuide').close();
+byId('refresh').onclick=()=>window.XiaomiPluginWorkbench.refresh(byId('refresh'),()=>perform('status'));
 byId('recover').onclick=async()=>{
  const message=state?.keySaved?'将开启 SSH，并按保存的公钥和主机密钥副本恢复。不会覆盖其他登录公钥。':state?.settings?.generateWithoutPublicKey?'将生成新的登录密钥并开启 SSH。请在 15 分钟内领取一次密钥包，私钥不得公开。':'仅开启 SSH，不改动登录公钥、主机密钥或恢复副本。';
  if((await confirmAction('恢复 SSH',message)).ok)perform('recover');

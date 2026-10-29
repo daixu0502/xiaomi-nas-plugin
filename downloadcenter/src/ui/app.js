@@ -106,7 +106,7 @@ var document = window.XiaomiPluginClient.document;
         if (t.status === 'waiting') actions.append(taskButton('移到队首', () => operation(t, 'top')));
         if (['error', 'removed'].includes(t.status)) actions.append(taskButton('重试', () => operation(t, 'retry')));
         actions.append(taskButton('详情 / 文件', () => openDetail(t.id)), taskButton('删除', () => operation(t, 'remove'), 'danger'));
-        card.append(actions); if(old)old.replaceWith(card);if(list.children[index]!==card)list.insertBefore(card,list.children[index]||null);
+        card.append(actions);window.XiaomiPluginWorkbench.alignRow(card,'.task-head','.actions'); if(old)old.replaceWith(card);if(list.children[index]!==card)list.insertBefore(card,list.children[index]||null);
       });
       if (!list.children.length) list.append(text('div', history ? '暂无历史记录' : '暂无下载任务，点击“新建下载”开始', 'empty'));
     }
@@ -206,7 +206,7 @@ var document = window.XiaomiPluginClient.document;
       if (!dialogs().length && !document.querySelector('.task-card [aria-busy=true]')) renderTasks();
     } catch (e) { $('health').className = 'badge failed'; $('health').textContent = '连接失败'; $('errorBanner').hidden = false; $('errorBanner').textContent = e.message; }
   }
-  $('refresh').onclick = () => busy($('refresh'), refresh);
+  $('refresh').onclick = () => window.XiaomiPluginWorkbench.refresh($('refresh'),()=>busy($('refresh'),refresh));
   $('coreCheck').onclick = () => busy($('coreCheck'), async () => { await api('core_check', { proxy: $('coreProxy').checked }); await refresh(); });
   $('qbCheck').onclick = () => busy($('qbCheck'), async () => { await api('qb_check', { proxy: $('qbProxy').checked }); await refresh(); });
   $('qbApply').onclick = () => busy($('qbApply'), async () => {
@@ -247,7 +247,8 @@ var document = window.XiaomiPluginClient.document;
       card.append(actions); list.append(card);
     });
   }
-  $('seedCacheRefresh').onclick = () => busy($('seedCacheRefresh'), loadSeedCache);
+  $('openSeedCache').onclick=$('openSeedCacheTasks').onclick=()=>{show('seedCacheDialog');busy($('seedCacheRefresh'),loadSeedCache);};
+  $('seedCacheRefresh').onclick = () => window.XiaomiPluginWorkbench.refresh($('seedCacheRefresh'),()=>busy($('seedCacheRefresh'),loadSeedCache));
   $('cleanCache').onclick = () => busy($('cleanCache'), async () => {
     const answer = await confirm('清理磁链缓存？', '仅删除插件内已无任务使用的自动种子和临时缓存。保留所有现有任务、下载文件、手动导入的种子及续传数据；不会扫描下载目录。请保持下载服务运行以核对占用。');
     if (!answer.ok) return;

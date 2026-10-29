@@ -112,12 +112,14 @@ var document = window.XiaomiPluginClient.document;
     document.querySelectorAll('.page').forEach(function (section) {
       section.classList.toggle('active', section.id === 'page-' + page);
     });
-    if (page === 'overview') loadOverview();
-    if (page === 'containers') loadContainers();
-    if (page === 'images') loadImages();
-    if (page === 'volumes') loadVolumes();
-    if (page === 'networks') loadNetworks();
+    if (page === 'overview') return loadOverview();
+    if (page === 'containers') return loadContainers();
+    if (page === 'images') return loadImages();
+    if (page === 'volumes') return loadVolumes();
+    if (page === 'networks') return loadNetworks();
   }
+
+  function alignResources(id) { byId(id).querySelectorAll('.resource-card').forEach(function(card){window.XiaomiPluginWorkbench.alignRow(card,'.resource-head','.resource-actions');}); }
 
   function detailItem(label, value) {
     return '<div class="detail-item"><span>' + escapeHtml(label) + '</span><strong title="' + escapeHtml(value) + '">' + escapeHtml(value) + '</strong></div>';
@@ -255,11 +257,13 @@ var document = window.XiaomiPluginClient.document;
       actions.push('<button class="danger-button" data-container-remove="' + escapeHtml(item.id) + '" data-name="' + escapeHtml(item.name) + '" data-running="' + item.running + '">删除</button>');
       return '<article class="resource-card"><div class="resource-head"><div class="resource-title"><h3>' + escapeHtml(item.name || item.id) + '</h3><p>' + escapeHtml(item.image) + '</p></div><span class="badge ' + escapeHtml(item.state) + (item.paused ? ' paused' : '') + '">' + escapeHtml(containerStateLabel(item)) + '</span></div><div class="resource-meta">' + chips.map(function (chip) { return '<span class="meta-chip">' + escapeHtml(chip) + '</span>'; }).join('') + '</div><div class="resource-actions">' + actions.join('') + '</div></article>';
     }).join('');
+    container.querySelectorAll('.resource-actions').forEach(function (actions) { window.XiaomiPluginWorkbench.actionsMenu(actions, function (b) { return b.hasAttribute('data-container-inspect') || ['start','stop','unpause'].includes(b.dataset.containerOp); }); });
+    alignResources('containerList');
   }
   function loadContainers() {
     return api('container_list').then(function (data) {
       state.containers = data.containers || [];
-      renderContainers();
+      renderContainers(); loadContainerStats();
     }).catch(function (error) {
       byId('containerList').className = 'empty-state'; byId('containerList').textContent = error.message; showToast(error.message, true);
     });
@@ -412,6 +416,7 @@ var document = window.XiaomiPluginClient.document;
       var extra = item.tags.slice(1);
       return '<article class="resource-card"><div class="resource-head"><div class="resource-title"><h3>' + escapeHtml(title) + '</h3><p>' + escapeHtml(item.id) + ' · ' + escapeHtml(formatDate(item.created)) + '</p></div><span class="badge">' + escapeHtml(formatBytes(item.size)) + '</span></div><div class="resource-meta"><span class="meta-chip">' + escapeHtml(item.os + '/' + item.architecture) + '</span>' + extra.map(function (tag) { return '<span class="meta-chip">' + escapeHtml(tag) + '</span>'; }).join('') + '</div><div class="resource-actions"><button class="danger-button" data-image-remove="' + escapeHtml(item.fullId) + '" data-name="' + escapeHtml(title) + '">删除镜像</button></div></article>';
     }).join('');
+    alignResources('imageList');
   }
   function pullImage() {
     var image = byId('pullImage').value.trim();
@@ -430,13 +435,16 @@ var document = window.XiaomiPluginClient.document;
     });
   }
 
+  var networks = [];
   function loadNetworks() {
     return api('network_list').then(function (data) {
-      var rows = data.networks || []; byId('networkSummary').textContent = rows.length + ' 个网络';
-      byId('networkList').innerHTML = rows.length ? rows.map(function (n) { return '<article class="resource-card"><div class="resource-head"><div class="resource-title"><h3>' + escapeHtml(n.name) + '</h3><p>' + escapeHtml(n.id || '') + '</p></div><span class="badge">' + escapeHtml(n.driver) + '</span></div><div class="resource-meta">' + escapeHtml(n.scope || 'local') + '</div></article>'; }).join('') : '<p class="empty-state">没有可显示的网络</p>';
+      networks = data.networks || []; byId('networkSummary').textContent = networks.length + ' 个网络';
+      byId('networkList').innerHTML = networks.length ? networks.map(function (n,i) { return '<article class="resource-card"><div class="resource-head"><div class="resource-title"><h3>'+escapeHtml(n.name)+'</h3><p>'+escapeHtml((n.subnets || []).join(' · ') || (n.driver==='host'?'共享主机网络':'无分配子网'))+'</p></div><span class="badge">'+escapeHtml(n.driver)+'</span></div><div class="resource-actions"><button class="action-button" data-network="'+i+'">查看详情</button></div></article>'; }).join('') : '<p class="empty-state">没有可显示的网络</p>';
+      alignResources('networkList');
     }).catch(function (error) { byId('networkSummary').textContent = error.message; });
   }
-  byId('refreshNetworks').onclick = loadNetworks;
+  byId('refreshNetworks').onclick = function(){return window.XiaomiPluginWorkbench.refresh(this,loadNetworks);};
+  byId('networkList').onclick = function (event) { var button=event.target.closest('[data-network]');if(!button)return;var n=networks[Number(button.dataset.network)];if(n)showTextModal(n.name,'网络详情','网络 ID：'+n.id+'\n驱动：'+n.driver+'\n作用域：'+n.scope+'\n子网：'+((n.subnets||[]).join(', ')||'无')+'\n内部网络：'+(n.internal?'是':'否')+'\n允许手动接入：'+(n.attachable?'是':'否')); };
 
   function loadVolumes() {
     return api('volume_list').then(function (data) {
@@ -451,6 +459,7 @@ var document = window.XiaomiPluginClient.document;
     container.innerHTML = state.volumes.map(function (item) {
       return '<article class="resource-card"><div class="resource-head"><div class="resource-title"><h3>' + escapeHtml(item.name) + '</h3><p>' + escapeHtml(item.mountpoint || '—') + '</p></div><span class="badge">' + escapeHtml(item.driver) + '</span></div><div class="resource-meta"><span class="meta-chip">创建于 ' + escapeHtml(formatDate(item.created)) + '</span><span class="meta-chip">作用域 ' + escapeHtml(item.scope || 'local') + '</span></div><div class="resource-actions"><button class="danger-button" data-volume-remove="' + escapeHtml(item.name) + '">删除存储卷</button></div></article>';
     }).join('');
+    alignResources('volumeList');
   }
   function createVolume() {
     var name = byId('volumeName').value.trim();
@@ -545,7 +554,7 @@ var document = window.XiaomiPluginClient.document;
   byId('restartAllContainersButton').addEventListener('click', function () { runBulkContainerAction('restart'); });
   byId('stopAllContainersButton').addEventListener('click', function () { runBulkContainerAction('stop'); });
   byId('confirmAcceptButton').addEventListener('click', acceptConfirm);
-  byId('refreshButton').addEventListener('click', function () { if(state.page==='overview')loadOverview(true);else switchPage(state.page); });
+  byId('refreshButton').addEventListener('click', function () { return window.XiaomiPluginWorkbench.refresh(this,function(){return state.page==='overview'?loadOverview(true):switchPage(state.page);}); });
   byId('pullImage').addEventListener('keydown', function (event) { if (event.key === 'Enter') pullImage(); });
   byId('volumeName').addEventListener('keydown', function (event) { if (event.key === 'Enter') createVolume(); });
 
@@ -577,6 +586,19 @@ var document = window.XiaomiPluginClient.document;
     if (dx > 0 && index > 0) switchPage(pageOrder[index - 1]);
   }, { passive: true });
 
+  var statsTimer=null,statsBusy=false,statsDisposed=false;
+  function memoryBytes(text) {var m=String(text||'').trim().match(/^([\d.]+)\s*([kmgt]?i?b)/i);if(!m)return 0;var unit=m[2].toLowerCase(),index='kmgt'.indexOf(unit[0])+1;return Number(m[1])*Math.pow(unit.includes('i')?1024:1000,index);}
+  function loadContainerStats() {
+    clearTimeout(statsTimer);if(statsBusy||statsDisposed||state.page!=='containers'||document.hidden)return;
+    statsBusy=true;api('container_stats').then(function (data) {
+      var rows=data.stats||[];byId('containerCpu').textContent=rows.reduce(function(sum,r){return sum+(parseFloat(r.CPUPerc)||0);},0).toFixed(1)+'%';
+      byId('containerMemory').textContent=formatBytes(rows.reduce(function(sum,r){return sum+memoryBytes(String(r.MemUsage||'').split('/')[0]);},0));
+      byId('statsNote').textContent='当前 '+rows.length+' 个运行容器 · 每 10 秒更新 · '+new Date().toLocaleTimeString();
+    }).catch(function(){byId('containerCpu').textContent='—';byId('containerMemory').textContent='—';byId('statsNote').textContent='资源采样暂不可用，可稍后刷新';}).finally(function(){statsBusy=false;if(!statsDisposed&&state.page==='containers')statsTimer=setTimeout(loadContainerStats,10000);});
+  }
+  function disposeStats(){statsDisposed=true;clearTimeout(statsTimer);}
+  window.addEventListener('pagehide',disposeStats);window.addEventListener('unmount',disposeStats);
+  document.addEventListener('visibilitychange',function(){if(document.hidden)clearTimeout(statsTimer);else loadContainerStats();});
   loadOverview();
   loadContainers();
 }());

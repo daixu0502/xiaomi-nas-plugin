@@ -69,11 +69,11 @@
   function poll() {
     if (!mode || busy || window.document.hidden || !panel.isConnected) return;
     var token = generation, requestedMode = mode; busy = true; id('refreshProcess').disabled = true;
-    id('refreshProcess').textContent = '采样中…';
-    request(mode === 'network' ? 'process_network' : mode === 'health' ? 'health_details' : 'processes', {kind:mode})
+    id('refreshProcess').setAttribute('aria-label','采样中…');
+    return request(mode === 'network' ? 'process_network' : mode === 'health' ? 'health_details' : 'processes', {kind:mode})
       .then(function (d) { if (token !== generation) return; data = d; draw(); id('processStatus').textContent = '更新于 ' + new Date(d.timestamp * 1000).toLocaleTimeString() + ' · 采样后 3 秒自动刷新'; })
       .catch(function (e) { if (token !== generation) return; id('processStatus').textContent = '读取失败：' + e.message + (data ? '（以下保留上次数据）' : ''); })
-      .finally(function () { busy = false; id('refreshProcess').disabled = false; id('refreshProcess').textContent = '刷新'; if (mode && panel.isConnected) { clearTimeout(timer); timer = setTimeout(poll, token === generation ? 3000 : 0); } });
+      .finally(function () { busy = false; id('refreshProcess').disabled = false; id('refreshProcess').setAttribute('aria-label','刷新'); if (mode && panel.isConnected) { clearTimeout(timer); timer = setTimeout(poll, token === generation ? 3000 : 0); } });
   }
   function open(kind) {
     focus = document.activeElement; generation++; mode = kind; data = null; limit = 50;
@@ -98,7 +98,7 @@
   entry(id('rxSpeed').closest('.panel'), 'network', '查看进程网络');
   entry(id('healthBadge').closest('.plugin-status'), 'health', '查看负载与健康详情');
   id('closeProcess').addEventListener('click', close); id('processBackdrop').addEventListener('click', close);
-  id('refreshProcess').addEventListener('click', function () { clearTimeout(timer); poll(); });
+  id('refreshProcess').addEventListener('click', function () { clearTimeout(timer); return window.XiaomiPluginWorkbench.refresh(this,poll); });
   id('processSearch').addEventListener('input', function () { limit = 50; draw(); });
   document.addEventListener('keydown', function (e) {
     if (panel.hidden) return;

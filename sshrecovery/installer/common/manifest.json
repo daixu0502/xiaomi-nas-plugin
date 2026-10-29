@@ -11,6 +11,6 @@
     "component_admin.py": "8d4832b4794f552ab2bf0a5d2d17ce44e614d28497f7f54c3efa620856ec9257",
     "minas-helper": "df07fa4df8844405e28becc15351154a98e39b8115ee27d18bacb8cbb9639c85",
     "modules/sshrecovery/restore-ssh.sh": "6b8e1aa4a90953773edf184b0ff331808e4cffa3a643f5d138db111cd1f3123f",
-    "modules/sshrecovery/ssh-recovery-helper": "ba4a0b7c0c1de2c2af67591644bc05685d337857249b1bde46ce086b2583c230"
+    "modules/sshrecovery/ssh-recovery-helper": "5aff757914a0c3ad299f739cbf6629d80053744c20e28ccb1e527933d299cc3f"
   }
 }

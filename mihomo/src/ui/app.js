@@ -4,6 +4,7 @@ var document = window.XiaomiPluginClient.document;
 
   var state = {
     configLoaded: false,
+    page: 'overview',
     currentMode: '',
     proxyProviderNames: [],
     proxyProviderSkippedCount: 0,
@@ -581,6 +582,7 @@ var document = window.XiaomiPluginClient.document;
     byId('openNodeTests').setAttribute('aria-expanded', 'false');
     clearTimeout(testTimer);
     restoreFocus(byId('openNodeTests'));
+  if(state.page==='overview')loadProxies();
   }
   function testActive() { return testJob && /^(queued|running)$/.test(testJob.status); }
   function renderNodeTests() {
@@ -627,7 +629,7 @@ var document = window.XiaomiPluginClient.document;
   function loadNodeTests() {
     if (testLoading) return;
     testLoading = true; testError = ''; renderNodeTests();
-    postJson('node_test_list', {}).then(function (packet) {
+    return postJson('node_test_list', {}).then(function (packet) {
       testNodes = packet.nodes || []; testResults = packet.results || {};
       byId('nodeTestStatus').textContent = testNodes.length + ' 个节点' + (packet.partial ? '，本次显示前 200 个' : '');
       return postJson('node_test_status', {});
@@ -662,7 +664,7 @@ var document = window.XiaomiPluginClient.document;
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); restoreFocus(first); }
     }
   });
-  byId('refreshNodeTests').onclick = loadNodeTests;
+  byId('refreshNodeTests').onclick = function(){return window.XiaomiPluginWorkbench.refresh(this,loadNodeTests);};
   byId('testAllDelays').onclick = function () { beginNodeTest('delay', testNodes.map(function (node) { return node.key; })); };
   byId('cancelNodeTest').onclick = function () {
     if (testActive()) postJson('node_test_cancel', { id: testJob.id }).then(function () { byId('nodeTestStatus').textContent = '正在停止测试…'; }).catch(function (error) { toast(error.message, true); });
@@ -687,9 +689,14 @@ var document = window.XiaomiPluginClient.document;
       if (!groups.length) {
         container.className = 'stack empty-state';
         container.textContent = '当前配置没有可选策略组。';
+        byId('currentNodeSummary').textContent = '无策略组';
+        byId('currentDelaySummary').textContent='';byId('currentDelaySummary').hidden=true;
         return;
       }
 
+      var primary=groups.find(function(v){return v.name==='PROXY';})||groups.find(function(v){return v.name!=='GLOBAL';})||groups[0];
+      byId('currentNodeSummary').textContent=primary?(primary.value.now||'未选择'):'无策略组';
+      byId('currentDelaySummary').textContent='';byId('currentDelaySummary').hidden=true;
       groups.forEach(function (item) {
         var row = document.createElement('div');
         row.className = 'group-row';
@@ -713,18 +720,24 @@ var document = window.XiaomiPluginClient.document;
             postJson('select_proxy', { group: item.name, node: node })
             .then(function () {
               currentNode = node;
-              toast(item.name + ' 已切换');
+              toast(item.name + ' 已切换');loadProxies();
             })
             .catch(function (error) { toast(error.message, true); loadProxies(); })
             .finally(function () { select.disabled = false; });
         });
         row.appendChild(title);
         row.appendChild(select);
+        var nodeInfo=proxies[currentNode], history=nodeInfo&&nodeInfo.history||[], last=history[history.length-1];
+        if(!last&&typeof testNodes!=='undefined'){var matches=testNodes.filter(function(n){return n.name===currentNode;});if(matches.length===1){var saved=testResults[matches[0].key]?.delay;if(saved&&!saved.error)last={delay:saved.delayMs};}}
+        if(last&&typeof last.delay==='number'){var latency=textElement('span','badge',last.delay>0?last.delay+' ms':'超时');row.appendChild(latency);if(item===primary){byId('currentDelaySummary').textContent=latency.textContent;byId('currentDelaySummary').hidden=false;}}
+
         container.appendChild(row);
       });
     }).catch(function (error) {
       container.className = 'stack empty-state';
       container.textContent = error.message;
+      byId('currentNodeSummary').textContent = '未能读取';
+      byId('currentDelaySummary').textContent='';byId('currentDelaySummary').hidden=true;
     });
   }
 
@@ -980,6 +993,7 @@ var document = window.XiaomiPluginClient.document;
     if (!tab || !page) return;
     document.querySelectorAll('.tab').forEach(function (item) { item.classList.remove('active'); });
     document.querySelectorAll('.page').forEach(function (item) { item.classList.remove('active'); });
+    state.page=pageName;
     tab.classList.add('active');
     page.classList.add('active');
     if (pageName === 'config' && !state.configLoaded) loadConfig();
@@ -1060,11 +1074,13 @@ var document = window.XiaomiPluginClient.document;
 
   byId('refreshButton').addEventListener('click', function () {
     var button = this;
-    button.disabled = true;
-    button.setAttribute('aria-busy', 'true');
-    loadStatus(true).finally(function () {
-      button.disabled = false;
-      button.removeAttribute('aria-busy');
+    window.XiaomiPluginWorkbench.refresh(button,function(){
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      return loadStatus(true).finally(function () {
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+      });
     });
   });
   byId('checkCoreUpdate').addEventListener('click', function () {
@@ -1126,13 +1142,13 @@ var document = window.XiaomiPluginClient.document;
       }).finally(function () { button.disabled = false; });
     });
   });
-  byId('refreshDockerProxy').addEventListener('click', function () { loadDockerProxy(true); });
-  byId('reloadProxies').addEventListener('click', function () { loadProxies(); loadProviders(); loadRuleProviders(); });
-  byId('reloadManualNodes').addEventListener('click', loadManualNodes);
+  byId('refreshDockerProxy').addEventListener('click', function () {return window.XiaomiPluginWorkbench.refresh(this,function(){return loadDockerProxy(true);});});
+  byId('reloadProxies').addEventListener('click', function () {return window.XiaomiPluginWorkbench.refresh(this,function(){return Promise.all([loadProxies(),loadProviders(),loadRuleProviders()]);});});
+  byId('reloadManualNodes').addEventListener('click', function(){return window.XiaomiPluginWorkbench.refresh(this,loadManualNodes);});
   byId('updateAllProviders').addEventListener('click', function () { updateAllProviders('proxy', this); });
   byId('updateAllRuleProviders').addEventListener('click', function () { updateAllProviders('rule', this); });
-  byId('loadConfig').addEventListener('click', loadConfig);
-  byId('loadLogs').addEventListener('click', loadLogs);
+  byId('loadConfig').addEventListener('click', function(){return window.XiaomiPluginWorkbench.refresh(this,loadConfig);});
+  byId('loadLogs').addEventListener('click', function(){return window.XiaomiPluginWorkbench.refresh(this,loadLogs);});
 
   byId('importSubscription').addEventListener('click', function () {
     var subscriptionUrl = byId('subscriptionUrl').value.trim();

@@ -46,6 +46,10 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "QuickShare/1.0"
     sys_version = ""
 
+    def transfer_event(self, record, name, direction, size, complete, started):
+        try:self.server.store.record_transfer(record,name,direction,size,complete,time.monotonic()-started)
+        except Exception:self.log_message('transfer history unavailable')
+
     def log_message(self, fmt, *args):
         sys.stderr.write("%s %s\n" % (self.address_string(), fmt % args))
 
@@ -155,18 +159,22 @@ class Handler(BaseHTTPRequestHandler):
         mime=mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         disposition="attachment; filename*=UTF-8''"+quote(target.name,safe="")
         self.security_headers(mime,size,200,{"Content-Disposition":disposition,"Accept-Ranges":"none"})
+        sent=0;complete=False;started=time.monotonic()
         try:
             with target.open("rb") as stream:
                 while True:
                     chunk=stream.read(1024*1024)
                     if not chunk: break
                     self.wfile.write(chunk)
-        except (BrokenPipeError,ConnectionResetError): pass
+                    sent+=len(chunk)
+            self.wfile.flush();complete=sent==size
+        except OSError: pass
+        finally:self.transfer_event(record,target.name,'download',sent,complete,started)
 
     def download_folder(self, record):
         if not self.server.archive_slots.acquire(blocking=False):
             return self.send_html("请稍后重试", '<div class="card"><h1>文件夹下载繁忙</h1><p>最多同时下载两个文件夹，请稍后重试；本次不计下载次数。</p></div>', 503, {"Retry-After":"10"})
-        started = False
+        started = False;complete=False;sink=None;began=time.monotonic()
         try:
             with open_folder(self.server.store, record["path"]) as fd:
                 entries = inventory(fd)
@@ -177,7 +185,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.close_connection = True
                 self.connection.settimeout(60)
                 self.security_headers("application/zip", extra={"Content-Disposition":disposition,"Accept-Ranges":"none","Connection":"close"})
-                write_zip(self.wfile, fd, record["name"], entries)
+                class Counter:
+                    def __init__(self,output):self.output=output;self.count=0
+                    def write(self,data):
+                        result=self.output.write(data);self.count+=len(data);return result
+                    def flush(self):return self.output.flush()
+                sink=Counter(self.wfile)
+                write_zip(sink, fd, record["name"], entries);self.wfile.flush();complete=True
         except (ShareError, OSError, ValueError) as exc:
             if started:
                 self.close_connection = True
@@ -188,6 +202,7 @@ class Handler(BaseHTTPRequestHandler):
                 message=str(exc) if isinstance(exc, ShareError) else "文件夹不存在、读取权限不足或内容发生变化，请联系分享者检查。"
                 self.send_html("无法下载文件夹", '<div class="card"><h1>无法下载文件夹</h1><p>'+html.escape(message)+'</p><small>本次未计下载次数。</small></div>', 409)
         finally:
+            if started:self.transfer_event(record,record['name']+'.zip','download',sink.count if sink else 0,complete,began)
             self.server.archive_slots.release()
 
     def do_POST(self):
@@ -237,7 +252,7 @@ class Handler(BaseHTTPRequestHandler):
         target=directory/name; stem,suffix=target.stem,target.suffix; counter=1
         while target.exists(): target=directory/f"{stem} ({counter}){suffix}"; counter+=1
         temp=directory/(".quickshare-upload-"+token[:8]+"-"+str(threading.get_ident()))
-        remaining=length
+        remaining=length;began=time.monotonic();complete=False
         try: self.server.store.consume(token,"upload",self.client_address[0])
         except ShareError as exc: return self.send_json({"ok":False,"error":"链接不可用："+str(exc)},410)
         try:
@@ -248,13 +263,16 @@ class Handler(BaseHTTPRequestHandler):
                     output.write(chunk); remaining-=len(chunk)
                 output.flush(); os.fsync(output.fileno())
             os.replace(temp,target)
+            complete=True
             return self.send_json({"ok":True,"name":target.name,"size":length})
         except (OSError,ConnectionError) as exc:
+            if complete:return
             try: temp.unlink()
             except OSError: pass
             try: self.server.store.rollback_use(token,"upload")
             except ShareError: pass
             return self.send_json({"ok":False,"error":"上传失败："+str(exc)},500)
+        finally:self.transfer_event(record,target.name,'upload',length-remaining,complete,began)
 
 def main():
     parser=argparse.ArgumentParser(); parser.add_argument("--state",required=True); parser.add_argument("--port",type=int,default=19092); args=parser.parse_args()

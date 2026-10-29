@@ -75,6 +75,47 @@ class Store:
             if path.is_dir(): result.append({"name": name, "path": name, "type": "dir"})
         return result
 
+    def _transfer_data(self):
+        try:
+            data=json.loads((self.state_dir/'transfers.json').read_text(encoding='utf-8'))
+            if not isinstance(data,dict) or data.get('version')!=1 or not isinstance(data.get('events'),list) or not isinstance(data.get('days'),dict):
+                raise ValueError('invalid transfer data')
+            return data
+        except FileNotFoundError:
+            return {'version':1,'startedAt':int(time.time()),'events':[],'days':{},'totalBytes':0,'totalTransfers':0}
+        except (ValueError,TypeError) as exc:
+            raise ShareError('传输记录不可读取，请检查 transfers.json') from exc
+
+    def record_transfer(self, record, name, direction, size, complete, duration):
+        if direction not in ('download','upload') or type(size) is not int or size<0:
+            raise ShareError('传输记录参数无效')
+        now=int(time.time());day=time.strftime('%Y-%m-%d',time.localtime(now))
+        with (self.state_dir/'transfers.lock').open('a+') as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX)
+            data=self._transfer_data()
+            event={'id':secrets.token_hex(8),'shareId':str(record['id']),'name':str(name)[:300],
+                   'direction':direction,'bytes':size,'complete':bool(complete),'time':now,'duration':round(max(0,float(duration)),2)}
+            data['events']=([event]+data['events'])[:500]
+            daily=data['days'].setdefault(day,{'bytes':0,'transfers':0,'uploads':0,'downloads':0})
+            daily['bytes']+=size;daily['transfers']+=1;daily['uploads' if direction=='upload' else 'downloads']+=1
+            data['days']={key:value for key,value in data['days'].items() if key>=time.strftime('%Y-%m-%d',time.localtime(now-29*86400))}
+            data['totalBytes']=int(data.get('totalBytes',0))+size;data['totalTransfers']=int(data.get('totalTransfers',0))+1
+            fd,temp=tempfile.mkstemp(prefix='transfers.',suffix='.tmp',dir=str(self.state_dir))
+            try:
+                with os.fdopen(fd,'w',encoding='utf-8') as stream:
+                    json.dump(data,stream,ensure_ascii=False,separators=(',',':'));stream.flush();os.fsync(stream.fileno())
+                os.chmod(temp,0o600);os.replace(temp,self.state_dir/'transfers.json')
+            finally:
+                try:os.unlink(temp)
+                except FileNotFoundError:pass
+
+    def transfers(self):
+        with (self.state_dir/'transfers.lock').open('a+') as lock:
+            fcntl.flock(lock,fcntl.LOCK_SH);data=self._transfer_data()
+        today=data['days'].get(time.strftime('%Y-%m-%d'),{'bytes':0,'transfers':0,'uploads':0,'downloads':0})
+        return {'events':data['events'],'today':today,'totalBytes':data.get('totalBytes',0),
+                'totalTransfers':data.get('totalTransfers',0),'startedAt':data['startedAt'],'retained':500}
+
     def resolve_path(self, relative, expected=None):
         text = str(relative or "").strip().strip("/")
         if not text or "\\" in text or "\x00" in text:
