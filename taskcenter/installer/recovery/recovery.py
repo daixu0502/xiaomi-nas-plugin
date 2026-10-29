@@ -688,8 +688,6 @@ WantedBy=multi-user.target
 
 
 def snapshot(user, plugin, payload, retain_previous=False):
-    coordinator = Path(__file__).read_bytes()
-    code_changed = not (BASE / 'recovery.py').is_file() or (BASE / 'recovery.py').read_bytes() != coordinator
     home, src, owner, entry = normalize(user, plugin, payload)
     updater = payload / 'installer/updater'
     if updater.is_dir():
@@ -760,7 +758,7 @@ def snapshot(user, plugin, payload, retain_previous=False):
     # Installed entry and port registration use the actual runtime port.
     port_registry(user, plugin, entry['info']['port'])
     atomic(BASE / 'recovery.py', Path(__file__).read_bytes(), 0o700)
-    install_units(restart=code_changed)
+    install_units()
     print('恢复登记完成：' + user + '/' + plugin)
 
 

@@ -20,13 +20,14 @@ import sys
 import tarfile
 import tempfile
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 
 sys.dont_write_bytecode = True
-VERSION = '1.0.1'
+VERSION = '1.0.3'
 REPOSITORY = 'daixu0502/xiaomi-nas-plugin'
 BASE = Path('/data/minas/plugins/updater')
 RECOVERY = Path('/data/minas/plugins/recovery')
@@ -112,10 +113,15 @@ def read(path, default=None):
 def lock(path, wait=True):
     protected(path.parent)
     with open(plain(path), 'a') as handle:
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
-        except BlockingIOError:
-            raise ValueError('另一个更新或安装任务仍在执行，请稍后重试') from None
+        deadline = time.monotonic() + (wait if type(wait) in (int, float) else 0)
+        while True:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | (0 if wait is True else fcntl.LOCK_NB))
+                break
+            except BlockingIOError:
+                if wait is False or time.monotonic() >= deadline:
+                    raise ValueError('另一个更新或安装任务仍在执行，请稍后重试') from None
+                time.sleep(0.2)
         yield
 
 
@@ -549,7 +555,7 @@ def transaction(user, plugin, archive, payload, job):
     home, account, before = identity(user, plugin)
     record = RECOVERY / 'records' / (user + '-' + plugin)
     # Lock order matches the installer/recovery service. Downloads happen first.
-    with lock(INSTALL_LOCK, False), r.record_lock(record):
+    with lock(INSTALL_LOCK, 60), r.record_lock(record):
         require(platform.machine() in ('aarch64', 'arm64'), '当前设备不是 ARM64 NAS')
         src = r.source_path(home, user, plugin)
         r.verify(user, plugin, home, src)
@@ -599,6 +605,14 @@ def transaction(user, plugin, archive, payload, job):
             spec.loader.exec_module(new_recovery)
             require(version(new_recovery.VERSION) >= version(r.VERSION), '拒绝降低恢复组件版本')
             new_recovery.snapshot(user, plugin, payload, retain_previous=True)
+            if plugin in r.SERVERS:
+                # The service was deliberately stopped for replacement, not by
+                # the user. Preserve its pre-update intent in the new snapshot
+                # before releasing the record lock to the recovery watcher.
+                saved = new_recovery.load_generation(record)
+                intent = new_recovery.read(saved / 'record.json')
+                intent['running'] = journal['wasRunning']
+                new_recovery.save(saved / 'record.json', intent)
             if journal['wasRunning']:
                 run(['systemctl', 'start', unit], timeout=100)
                 run(['systemctl', 'is-active', '--quiet', unit], timeout=15)
@@ -719,6 +733,9 @@ def worker(user, plugin, job_id):
                 transaction(user, plugin, archive, payload, job)
         except Exception as error:
             journal = read(job / 'journal.json', {})
+            # Root-only diagnostics contain stack frames, never request bodies,
+            # local variable values, proxy settings or authentication headers.
+            save(job / 'failure.json', dict(type=type(error).__name__, trace=''.join(traceback.format_exception(type(error), error, error.__traceback__))[-6000:]))
             message = str(error) if isinstance(error, ValueError) else '更新失败，请查看升级记录或通过 SSH 检查'
             if journal.get('state') == 'rolled_back':
                 message += '；已恢复上一版本'
@@ -747,7 +764,7 @@ def recover_plugin(user, plugin, excluding=None):
             unit = 'minas-update-' + job.name + '.service'
             require(subprocess.run(['systemctl', 'is-active', '--quiet', unit], env=ENV).returncode != 0, '旧更新任务仍在执行')
             r = load_recovery()
-            with lock(INSTALL_LOCK, False), r.record_lock(RECOVERY / 'records' / (user + '-' + plugin)):
+            with lock(INSTALL_LOCK, 60), r.record_lock(RECOVERY / 'records' / (user + '-' + plugin)):
                 rollback(job, journal)
                 report(job, 'failed', '中断的更新已恢复至上一版本，请重新检查更新', 0, running=False)
 

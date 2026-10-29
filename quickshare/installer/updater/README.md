@@ -22,7 +22,7 @@
 python -B workspace-tools/sync-plugin-updater.py
 python -B workspace-tools/sync-ui-controls.py
 python -B workspace-tools/build_plugin_packages.py
-python -B workspace-tools/publish-plugin-release.py --tag v2026.10.29.2 --target 完整源码提交SHA --signing-key local/plugin-update-signing/private.pem --publish
+python -B workspace-tools/publish-plugin-release.py --tag v2026.10.29.3 --target 完整源码提交SHA --signing-key local/plugin-update-signing/private.pem --publish
 ```
 
 不加 `--publish` 只构建和签名。发布工具使用现有 Git 凭据或 `GH_TOKEN`/`GITHUB_TOKEN`，不显示令牌。先上传草稿的八包、`plugin-updates.json`、二进制签名 `plugin-updates.sig` 和 `SHA256SUMS`，校验附件后才公开并标记 latest。正式标签不允许替换附件，每次使用新标签。清单分别记录各插件 INFO 版本、架构、说明、大小和摘要。

@@ -14,10 +14,10 @@
   dialog.innerHTML = '<form method="dialog" class="workbench-update-heading"><h2 id="' + plugin + '-update-heading">插件更新</h2><button type="submit" class="secondary" aria-label="关闭插件更新">关闭</button></form>' +
     '<div class="workbench-update-content"><div class="workbench-update-versions"><div><span>当前版本</span><strong data-update="installed">—</strong></div><div><span>最新版本</span><strong data-update="latest">尚未检查</strong></div></div>' +
     '<p data-update="hint">检查 GitHub 正式发布，更新会保留配置与任务。</p><pre class="workbench-update-notes" data-update="notes" hidden></pre>' +
-    '<details class="workbench-update-proxy"><summary>更新代理</summary><p>按 NAS 账号共用，仅用于检查和下载安装包。支持 HTTP/HTTPS 代理，例如 http://127.0.0.1:7890。</p>' +
-    '<label class="workbench-update-check"><input type="checkbox" data-update="proxyEnabled">使用代理</label><label>代理地址<input type="url" data-update="proxyUrl" placeholder="http://127.0.0.1:7890" autocomplete="off"></label>' +
-    '<div class="workbench-update-auth"><label>用户名（可选）<input data-update="proxyUsername" autocomplete="off"></label><label>密码（可选）<input type="password" data-update="proxyPassword" autocomplete="new-password"></label></div>' +
-    '<label class="workbench-update-check"><input type="checkbox" data-update="clearPassword">清除已保存的代理密码</label><button type="button" class="secondary" data-update="saveProxy">保存代理设置</button><span data-update="proxySaved" role="status"></span></details>' +
+    '<section class="workbench-update-proxy" aria-label="更新代理设置"><div class="workbench-proxy-heading"><div><h3>更新代理</h3><p>仅用于检查和下载安装包</p></div><label class="workbench-proxy-toggle"><input class="workbench-proxy-switch-input" type="checkbox" role="switch" aria-label="使用更新代理" data-update="proxyEnabled"><span class="workbench-proxy-switch-track" aria-hidden="true"></span></label></div>' +
+    '<label class="workbench-proxy-address">代理地址<div class="workbench-proxy-endpoint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7"/></svg><input type="url" data-update="proxyUrl" placeholder="http://127.0.0.1:7890" autocomplete="off" spellcheck="false"></div></label>' +
+    '<p class="workbench-proxy-help">支持 HTTP / HTTPS，八个插件共用此设置</p><details class="workbench-proxy-auth"><summary>代理认证<span>可选</span></summary><div class="workbench-update-auth"><label>用户名<input data-update="proxyUsername" placeholder="代理用户名" autocomplete="off"></label><label>密码<input type="password" data-update="proxyPassword" placeholder="代理密码" autocomplete="new-password"></label></div>' +
+    '<label class="workbench-update-check"><input type="checkbox" data-update="clearPassword">清除已保存的密码</label></details><div class="workbench-proxy-footer"><span data-update="proxySaved" role="status"></span><button type="button" class="secondary" data-update="saveProxy">保存代理设置</button></div></section>' +
     '<div data-update="progressBlock" hidden><progress data-update="progress" max="100" value="0"></progress><p data-update="message" role="status" aria-live="polite"></p><ol class="workbench-update-log" data-update="logs"></ol></div>' +
     '<p class="workbench-update-error" data-update="error" role="alert" hidden></p><div class="workbench-update-actions"><button type="button" class="secondary" data-update="check">检查更新</button><button type="button" class="primary" data-update="install" disabled>立即更新</button></div>' +
     '<p data-update="confirm" hidden>更新期间可能短暂重启本插件服务。<button type="button" class="primary" data-update="confirmInstall">确认更新</button><button type="button" class="secondary" data-update="cancelInstall">取消</button></p></div>';
@@ -73,9 +73,9 @@
   }
   function proxyValue() { return {enabled:nodes.proxyEnabled.checked, url:nodes.proxyUrl.value.trim(), username:nodes.proxyUsername.value, password:nodes.proxyPassword.value, clearPassword:nodes.clearPassword.checked}; }
   function saveProxy() {
-    return perform('proxy', {proxy:proxyValue()}, true).then(function () { if (!nodes.error.hidden) return; nodes.proxySaved.textContent = '已保存'; });
+    return perform('proxy', {proxy:proxyValue()}, true).then(function () { if (!nodes.error.hidden) return; nodes.proxySaved.textContent = '设置已保存'; nodes.proxySaved.dataset.state = 'saved'; });
   }
-  ['proxyEnabled','proxyUrl','proxyUsername','proxyPassword','clearPassword'].forEach(function (key) { nodes[key].addEventListener('input', function () { proxyDirty = true; nodes.proxySaved.textContent = '尚未保存'; working(busy); }); });
+  ['proxyEnabled','proxyUrl','proxyUsername','proxyPassword','clearPassword'].forEach(function (key) { nodes[key].addEventListener('input', function () { proxyDirty = true; nodes.proxySaved.textContent = '有未保存的更改'; nodes.proxySaved.dataset.state = 'dirty'; working(busy); }); });
   function openUpdater() {
     error(''); nodes.confirm.hidden = true;
     if (client.openDialog) client.openDialog(dialog); else dialog.showModal();

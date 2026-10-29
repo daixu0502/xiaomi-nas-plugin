@@ -438,20 +438,48 @@
 [data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-versions span{color:var(--muted)}
 [data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-versions strong{font-weight:500;font-size:var(--type-heading)}
 [data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-notes{margin:0;padding:14px;height:auto!important;min-height:0!important;max-height:180px!important;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);border:1px solid var(--line);border-radius:10px;font-family:inherit}
-[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-proxy{padding:14px;border:1px solid var(--line);border-radius:10px}
-[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-proxy summary{cursor:pointer;font:inherit;font-weight:500}
-[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-proxy[open]>summary{margin-bottom:14px}
-[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-proxy label{display:flex;flex-direction:column;gap:7px;margin:14px 0}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-proxy{padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-heading h3{margin:0 0 4px;font-size:var(--type-heading);font-weight:500}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-heading p,[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-help{color:var(--muted);font-size:var(--type-helper)!important;line-height:var(--type-helper-line)!important}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-proxy label{display:flex;flex-direction:column;gap:8px;margin:0;min-width:0}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-proxy label.workbench-proxy-toggle{position:relative;display:block;flex:0 0 42px;width:42px;height:24px;margin:0;padding:0;cursor:pointer}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-proxy input.workbench-proxy-switch-input{position:absolute;z-index:1;inset:0;opacity:0!important;width:42px!important;height:24px!important;min-width:42px!important;min-height:24px!important;margin:0;padding:0;cursor:pointer}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-switch-track{display:block;box-sizing:border-box;width:42px;height:24px;border:1px solid var(--line);border-radius:20px;background:var(--disabled-bg);transition:background .15s,border-color .15s}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-switch-track::after{content:"";display:block;width:16px;height:16px;margin:3px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-switch-input:checked+.workbench-proxy-switch-track{background:var(--accent);border-color:var(--accent)}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-switch-input:checked+.workbench-proxy-switch-track::after{transform:translateX(18px);background:var(--on-accent)}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-switch-input:focus-visible+.workbench-proxy-switch-track{outline:2px solid var(--accent);outline-offset:3px}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-endpoint{display:flex;align-items:center;gap:10px;min-width:0;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);transition:border-color .15s,box-shadow .15s}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-endpoint:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--soft)}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-endpoint svg{display:block;width:18px;height:18px;flex:0 0 18px;fill:none;stroke:var(--muted);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-endpoint input{box-sizing:border-box;flex:1 1 auto;min-width:0;min-height:44px;padding:10px 0!important;border:0!important;border-radius:0!important;outline:0!important;box-shadow:none!important;background:transparent!important}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-help{margin:8px 0 16px!important}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-auth{padding-top:14px;border-top:1px solid var(--line)}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-auth summary{display:flex;align-items:center;gap:8px;cursor:pointer;font:inherit;font-weight:500;list-style:none}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-auth summary::before{content:"›";color:var(--muted);font-size:18px;line-height:1;transform:rotate(0deg);transition:transform .15s}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-auth[open] summary::before{transform:rotate(90deg)}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-auth summary::-webkit-details-marker{display:none}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-auth summary span{padding:1px 6px;border-radius:5px;background:var(--soft);color:var(--muted);font-size:var(--type-helper)!important;font-weight:400}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-auth[open] .workbench-update-auth{margin-top:16px}
 [data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-proxy label.workbench-update-check{flex-direction:row;justify-content:flex-start;align-items:center;gap:9px}
-[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-proxy input[type=checkbox]{box-sizing:border-box;flex:0 0 20px!important;width:20px!important;height:20px!important;min-width:20px!important;min-height:20px!important;margin:0;padding:0;accent-color:var(--accent)}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-proxy input[type=checkbox]:not(.workbench-proxy-switch-input){box-sizing:border-box;flex:0 0 18px!important;width:18px!important;height:18px!important;min-width:18px!important;min-height:18px!important;margin:0;padding:0;accent-color:var(--accent)}
 [data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-auth{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-auth input{appearance:none;-webkit-appearance:none;box-sizing:border-box;min-height:44px;padding:10px 12px;border:1px solid var(--line)!important;border-radius:8px;background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:var(--type-field);font-weight:400;line-height:var(--type-field-line);outline:0;box-shadow:none;transition:border-color .15s,box-shadow .15s}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-auth input:focus{border-color:var(--accent)!important;box-shadow:0 0 0 3px var(--soft)}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-auth input::placeholder{color:var(--muted);opacity:.85}
 [data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-proxy input:not([type=checkbox]){box-sizing:border-box;width:100%;min-width:0}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-proxy .workbench-update-check{margin-top:14px}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-footer button{flex:0 0 auto}
 [data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px}
 [data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-content progress{display:block;width:100%;height:8px;accent-color:var(--accent);margin:0 0 12px}
 [data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-log{max-height:150px;overflow:auto;padding-left:22px;margin-bottom:0;color:var(--muted);line-height:1.6;overflow-wrap:anywhere}
 [data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-error{color:var(--danger,#d02d46)}
 [data-minas-plugin="downloadcenter"].workbench-ui [data-update=confirm]>button{margin:10px 10px 0 0}
-[data-minas-plugin="downloadcenter"].workbench-ui [data-update=proxySaved]{display:inline-block;margin:8px;color:var(--muted)}
+[data-minas-plugin="downloadcenter"].workbench-ui [data-update=proxySaved]{color:var(--muted);font-size:var(--type-helper)!important;overflow-wrap:anywhere}
+[data-minas-plugin="downloadcenter"].workbench-ui [data-update=proxySaved][data-state=saved]{color:var(--accent)}
 [data-minas-plugin="downloadcenter"].workbench-ui.desktop-client .desktop-frame>dialog.workbench-update-dialog{max-height:calc(100% - 28px)}
-@media(max-width:520px){[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-content{padding:16px;gap:14px}[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-auth{grid-template-columns:minmax(0,1fr);gap:0}}
+@media(max-width:520px){[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-content{padding:16px;gap:14px}[data-minas-plugin="downloadcenter"].workbench-ui .workbench-update-auth{grid-template-columns:minmax(0,1fr);gap:14px}}
+@media(prefers-reduced-motion:reduce){[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-switch-track,[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-switch-track::after,[data-minas-plugin="downloadcenter"].workbench-ui .workbench-proxy-auth summary::before{transition:none}}
 /* END SHARED ONLINE UPDATE */
