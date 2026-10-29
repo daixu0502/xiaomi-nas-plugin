@@ -185,8 +185,11 @@
 @ROOT@.workbench-ui .refresh-control svg{display:block!important;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transform-origin:center}
 @ROOT@.workbench-ui .refresh-control:hover:not(:disabled){background:var(--soft);box-shadow:inset 0 0 0 1px var(--accent)}
 @ROOT@.workbench-ui .refresh-control:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-@ROOT@.workbench-ui .refresh-control:is([aria-busy=true],[data-workbench-refreshing=true],.is-loading) svg{animation:minas-workbench-refresh .8s linear infinite}
+@ROOT@.workbench-ui .refresh-control[aria-busy=true] svg,
+@ROOT@.workbench-ui .refresh-control[data-workbench-refreshing=true] svg,
+@ROOT@.workbench-ui .refresh-control.is-loading svg{animation:minas-workbench-refresh .8s linear infinite}
+@ROOT@.workbench-ui .refresh-control[data-workbench-animated=true] svg{animation:none}
 @ROOT@.workbench-ui .refresh-control[aria-busy=true]::before{content:none!important;display:none!important}
 @ROOT@.workbench-ui .refresh-control[data-workbench-refreshing=true]{cursor:progress}
 @keyframes minas-workbench-refresh{to{transform:rotate(360deg)}}
-@media(prefers-reduced-motion:reduce){@ROOT@.workbench-ui .refresh-control:is([aria-busy=true],[data-workbench-refreshing=true],.is-loading) svg{animation:none}}
+@media(prefers-reduced-motion:reduce){@ROOT@.workbench-ui .refresh-control[aria-busy=true] svg,@ROOT@.workbench-ui .refresh-control[data-workbench-refreshing=true] svg,@ROOT@.workbench-ui .refresh-control.is-loading svg{animation:none}}

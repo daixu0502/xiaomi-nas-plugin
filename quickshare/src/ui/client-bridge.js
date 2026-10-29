@@ -547,20 +547,43 @@
   header.appendChild(headerActions); applyTheme();
   client.enhanceSelect(themeSelect);
   var refreshRuns = new Map(), refreshDisposed = false;
+  var refreshMotion = global.matchMedia('(prefers-reduced-motion: reduce)');
+  function stopRefreshAnimation(state) {
+    if (state.animation) { state.animation.cancel(); state.animation = null; }
+    state.button.removeAttribute('data-workbench-animated');
+  }
+  function startRefreshAnimation(state) {
+    stopRefreshAnimation(state);
+    var glyph = state.button.querySelector('svg');
+    if (refreshMotion.matches || !glyph || typeof glyph.animate !== 'function') return;
+    // Drive the actual glyph: desktop micro-app styles share the host's CSS pipeline.
+    // CSS remains the fallback for browsers without Element.animate().
+    try {
+      state.animation = glyph.animate([{transform:'rotate(0deg)'}, {transform:'rotate(360deg)'}], {duration:800, iterations:Infinity});
+      state.button.setAttribute('data-workbench-animated', 'true');
+    } catch (_) {}
+  }
+  function refreshMotionChanged() { refreshRuns.forEach(startRefreshAnimation); }
+  if (refreshMotion.addEventListener) refreshMotion.addEventListener('change', refreshMotionChanged); else refreshMotion.addListener(refreshMotionChanged);
   function refresh(button, operation) {
     if (refreshRuns.has(button)) return refreshRuns.get(button).promise;
-    var state = {started:Date.now(), busy:button.getAttribute('aria-busy'), timer:0, release:null};
+    var state = {button:button, started:Date.now(), busy:button.getAttribute('aria-busy'), timer:0, release:null, animation:null};
     function clean() {
+      stopRefreshAnimation(state);
       button.removeAttribute('data-workbench-refreshing');
       if (state.busy === null) button.removeAttribute('aria-busy'); else button.setAttribute('aria-busy', state.busy);
       refreshRuns.delete(button);
     }
+    state.clean = clean;
     button.setAttribute('data-workbench-refreshing', 'true'); button.setAttribute('aria-busy', 'true');
     refreshRuns.set(button, state);
+    startRefreshAnimation(state);
     state.promise = Promise.resolve().then(operation).finally(function () {
       return new Promise(function (resolve) {
         state.release = function () { global.clearTimeout(state.timer); clean(); resolve(); };
-        var remaining = Math.max(0, 400 - (Date.now() - state.started));
+        // A fast response can finish before the browser paints its first frame.
+        var elapsed = state.animation ? (state.animation.currentTime || 0) : Date.now() - state.started;
+        var remaining = Math.max(0, (refreshMotion.matches ? 400 : 800) - elapsed);
         if (refreshDisposed || !remaining) state.release(); else state.timer = global.setTimeout(state.release, remaining);
       });
     });
@@ -670,7 +693,8 @@
   decorate();
   function dispose() {
     refreshDisposed = true;
-    refreshRuns.forEach(function (state) { if (state.release) state.release(); });
+    refreshRuns.forEach(function (state) { if (state.release) state.release(); else state.clean(); });
+    if (refreshMotion.removeEventListener) refreshMotion.removeEventListener('change', refreshMotionChanged); else refreshMotion.removeListener(refreshMotionChanged);
     observer.disconnect(); if (navObserver) navObserver.disconnect(); if (versionObserver) versionObserver.disconnect();
     if (scheduled) global.cancelAnimationFrame(scheduled);
     if (themeMedia.removeEventListener) themeMedia.removeEventListener('change', applyTheme); else themeMedia.removeListener(applyTheme);
