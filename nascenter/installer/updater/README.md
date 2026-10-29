@@ -22,7 +22,7 @@
 python -B workspace-tools/sync-plugin-updater.py
 python -B workspace-tools/sync-ui-controls.py
 python -B workspace-tools/build_plugin_packages.py
-python -B workspace-tools/publish-plugin-release.py --tag v2026.10.29.1 --target 完整源码提交SHA --signing-key local/plugin-update-signing/private.pem --publish
+python -B workspace-tools/publish-plugin-release.py --tag v2026.10.29.2 --target 完整源码提交SHA --signing-key local/plugin-update-signing/private.pem --publish
 ```
 
 不加 `--publish` 只构建和签名。发布工具使用现有 Git 凭据或 `GH_TOKEN`/`GITHUB_TOKEN`，不显示令牌。先上传草稿的八包、`plugin-updates.json`、二进制签名 `plugin-updates.sig` 和 `SHA256SUMS`，校验附件后才公开并标记 latest。正式标签不允许替换附件，每次使用新标签。清单分别记录各插件 INFO 版本、架构、说明、大小和摘要。
@@ -34,7 +34,7 @@ python -B workspace-tools/publish-plugin-release.py --tag v2026.10.29.1 --target
 - 后台位于 `/data/minas/plugins/updater/`；代理密码、签名候选清单、任务和回退记录保存在其 root 私有账号目录，不进入可清空缓存。
 - CGI 仅接受 NAS 认证网关下的 JSON POST，通过固定 sudo 命令调用后台。账号须与 sudo UID 一致，不接受浏览器指定下载地址、shell、安装路径或其他账号。
 - 网络始终降为插件用户执行。代理认证经 stdin 传递，不在命令行或日志中出现。root 验证签名、SHA-256、大小、INFO、架构及压缩包路径；拒绝链接、设备、重复成员、特殊权限和越界解压。
-- 更新与原安装器共用全局安装锁及每插件恢复锁。源码在目标同目录暂存，写入和清理由插件用户执行；配置、任务、更新内核和 SSH 材料不作为源码覆盖。注册信息与快照一起更新，最后执行原厂 verify。
+- 更新与原安装器共用全局安装锁及每插件恢复锁。源码在目标同目录暂存，内容写入和清理由插件用户执行；root 通过固定目录句柄创建及切换目录项，不放宽原厂 root:root 源码父目录的权限；配置、任务、更新内核和 SSH 材料不作为源码覆盖。注册信息与快照一起更新，最后执行原厂 verify。
 - 失败恢复源码、控制入口、注册信息、权限模块和快照指针。开机的 `minas-plugin-update-recover.service` 和下次更新会恢复未提交事务。最近四个任务目录保留，未完成事务不清理。
 - 卸载通过原安装器取消该账号、插件的更新 sudo 规则，不影响其他插件。
 

@@ -26,7 +26,7 @@ import urllib.request
 import uuid
 
 sys.dont_write_bytecode = True
-VERSION = '1.0.0'
+VERSION = '1.0.1'
 REPOSITORY = 'daixu0502/xiaomi-nas-plugin'
 BASE = Path('/data/minas/plugins/updater')
 RECOVERY = Path('/data/minas/plugins/recovery')
@@ -375,8 +375,8 @@ def plain(p):
   if n.is_symlink():raise ValueError('redirected path')
 plain(home);plain(src);plain(src.parent)
 stage=src.parent/('.'+plugin+'.update-'+token)
-if stage.exists():raise ValueError('staging path occupied')
-stage.mkdir(mode=0o700)
+plain(stage)
+if not stage.is_dir() or stage.stat().st_uid!=os.getuid():raise ValueError('staging owner mismatch')
 control=None
 try:
  with tarfile.open(fileobj=sys.stdin.buffer,mode='r|gz') as tf:
@@ -393,28 +393,88 @@ try:
   if old.is_file() and not out.exists():
    plain(old);shutil.copy2(old,out)
  if control is None:raise ValueError('control missing')
- old=src.parent/('.'+plugin+'.previous-'+token)
- if old.exists():raise ValueError('backup path occupied')
- if src.exists():os.replace(src,old)
- os.replace(stage,src)
  plain(home/'scripts');(home/'scripts').mkdir(mode=0o700,exist_ok=True);target=home/'scripts/control'
  fd,temp=tempfile.mkstemp(prefix='.control-',dir=target.parent)
  with os.fdopen(fd,'wb') as f:f.write(control);f.flush();os.fsync(f.fileno());os.fchmod(f.fileno(),0o755)
  os.replace(temp,target)
- (src/'INFO').symlink_to(home/'INFO')
-finally:
- if stage.exists():shutil.rmtree(stage)
+ (stage/'INFO').symlink_to(home/'INFO')
+except BaseException:
+ raise
 '''
 
 
+def source_parent(src, user):
+    account = pwd.getpwnam(user)
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    fd = os.open(src.anchor, flags)
+    try:
+        for part in src.parent.parts[1:]:
+            child = os.open(part, flags, dir_fd=fd)
+            os.close(fd)
+            fd = child
+        metadata = os.fstat(fd)
+        require(metadata.st_uid in (0, account.pw_uid) and not metadata.st_mode & 0o002, '源码父目录权限异常')
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 def stage_as_user(user, plugin, src, archive, token):
-    with open(archive, 'rb') as stream:
-        run(['runuser', '-u', user, '--', '/usr/bin/python3', '-I', '-B', '-c', USER_STAGE, HOMES / user / 'plugin' / plugin, src, plugin, token], stdin=stream, timeout=180)
+    require(re.fullmatch('[0-9a-f]{32}', token), '暂存标识无效')
+    account = pwd.getpwnam(user)
+    parent = source_parent(src, user)
+    stage = '.' + plugin + '.update-' + token
+    previous = '.' + plugin + '.previous-' + token
+    try:
+        # Firmware deliberately keeps pluginsrc root-owned and non-writable by
+        # users. Prepare metadata via a pinned directory FD, then drop UID for
+        # every source-content write. Never loosen the shared parent's mode.
+        os.mkdir(stage, 0o700, dir_fd=parent)
+        fd = os.open(stage, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+        try:
+            os.fchown(fd, account.pw_uid, account.pw_gid)
+            original = os.fstat(fd)
+            with open(archive, 'rb') as stream:
+                run(['runuser', '-u', user, '--', '/usr/bin/python3', '-I', '-B', '-c', USER_STAGE, HOMES / user / 'plugin' / plugin, src, plugin, token], stdin=stream, timeout=180)
+            current = os.stat(stage, dir_fd=parent, follow_symlinks=False)
+            require((original.st_dev, original.st_ino) == (current.st_dev, current.st_ino), '暂存目录已变化')
+            try:
+                os.stat(previous, dir_fd=parent, follow_symlinks=False)
+            except FileNotFoundError:
+                pass
+            else:
+                raise ValueError('回退目录已被占用')
+            try:
+                current_source = os.stat(src.name, dir_fd=parent, follow_symlinks=False)
+            except FileNotFoundError:
+                current_source = None
+            if current_source is not None:
+                require(stat.S_ISDIR(current_source.st_mode), '源码目录类型异常')
+                os.rename(src.name, previous, src_dir_fd=parent, dst_dir_fd=parent)
+            os.rename(stage, src.name, src_dir_fd=parent, dst_dir_fd=parent)
+            os.fsync(parent)
+        finally:
+            os.close(fd)
+    finally:
+        os.close(parent)
 
 
 def clean_source_stage(user, plugin, src, tokens):
-    code = '''import re,shutil,sys\nfrom pathlib import Path\nparent=Path(sys.argv[1]);plugin=sys.argv[2]\nfor token in sys.argv[3:]:\n if not re.fullmatch('[0-9a-f]{32}',token):raise ValueError('invalid token')\n for kind in ('previous','update'):\n  p=parent/('.'+plugin+'.'+kind+'-'+token)\n  if p.is_symlink():raise ValueError('redirected cleanup path')\n  if p.is_dir():shutil.rmtree(p)\n'''
+    code = '''import re,shutil,sys\nfrom pathlib import Path\nparent=Path(sys.argv[1]);plugin=sys.argv[2]\nfor token in sys.argv[3:]:\n if not re.fullmatch('[0-9a-f]{32}',token):raise ValueError('invalid token')\n for kind in ('previous','update'):\n  p=parent/('.'+plugin+'.'+kind+'-'+token)\n  if p.is_symlink():raise ValueError('redirected cleanup path')\n  if p.is_dir():\n   for child in p.iterdir():\n    if child.is_symlink() or not child.is_dir():child.unlink()\n    else:shutil.rmtree(child)\n'''
     run(['runuser', '-u', user, '--', '/usr/bin/python3', '-I', '-B', '-c', code, src.parent, plugin, *tokens], timeout=120)
+    parent = source_parent(src, user)
+    try:
+        for token in tokens:
+            require(re.fullmatch('[0-9a-f]{32}', token), '清理标识无效')
+            for kind in ('previous', 'update'):
+                try:
+                    os.rmdir('.' + plugin + '.' + kind + '-' + token, dir_fd=parent)
+                except FileNotFoundError:
+                    pass
+        os.fsync(parent)
+    finally:
+        os.close(parent)
 
 
 def idle(user, plugin, home):

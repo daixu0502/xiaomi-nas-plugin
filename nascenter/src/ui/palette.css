@@ -423,7 +423,8 @@
 [data-minas-plugin="nascenter"].workbench-ui .workbench-update-entry{cursor:pointer;outline-offset:4px;transition:color .15s}
 [data-minas-plugin="nascenter"].workbench-ui .workbench-update-entry:hover{color:var(--accent)}
 [data-minas-plugin="nascenter"].workbench-ui .workbench-update-entry:focus-visible{outline:2px solid var(--accent);border-radius:6px}
-[data-minas-plugin="nascenter"].workbench-ui .workbench-update-entry[data-update-available=true] .workbench-version-line:first-child{display:flex;align-items:center;justify-content:inherit;gap:6px;flex-wrap:wrap}
+[data-minas-plugin="nascenter"].workbench-ui .workbench-update-entry[data-update-available=true] .workbench-version-line:first-child{display:flex;align-items:center;justify-content:inherit;gap:5px;flex-wrap:nowrap;white-space:nowrap}
+[data-minas-plugin="nascenter"].workbench-ui.desktop-client .desktop-frame>.tabs>.workbench-version.workbench-update-entry{padding-left:4px;padding-right:4px}
 [data-minas-plugin="nascenter"].workbench-ui .workbench-update-entry[data-update-available=true] .workbench-version-line:first-child::after{content:"NEW";display:inline-block;flex:0 0 auto;padding:1px 5px;border:1px solid var(--accent);border-radius:5px;background:var(--soft);color:var(--accent);font-family:var(--font-ui);font-size:10px;line-height:15px;font-weight:600;letter-spacing:.3px;vertical-align:middle}
 [data-minas-plugin="nascenter"].workbench-ui:not(.desktop-client) .workbench-update-entry[data-update-available=true] .workbench-version-line:first-child{justify-content:center}
 [data-minas-plugin="nascenter"].workbench-ui .workbench-update-dialog{box-sizing:border-box;width:min(640px,calc(100% - 28px));max-height:calc(100dvh - 32px);padding:0;overflow:auto;border:1px solid var(--line);background:var(--surface-solid);color:var(--text)}
