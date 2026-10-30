@@ -19,7 +19,7 @@ from urllib.parse import urlsplit, parse_qs, unquote
 from urllib.request import Request, build_opener, ProxyHandler
 from urllib.error import HTTPError
 
-VERSION = "1.1.55"
+VERSION = "1.1.58"
 MAX_TORRENT = 4 * 1024 * 1024
 DEFAULTS = {"directory": "", "concurrent": 3, "connections": 4, "downloadKiB": 0,
             "uploadKiB": 1024, "seedRatio": 1.0, "seedMinutes": 60,
@@ -303,6 +303,7 @@ class Manager:
                 'aria': self.rpc('tellActive') + self.rpc('tellWaiting', 0, 1000) + self.rpc('tellStopped', 0, 1000)}
 
     def settings(self):
+        if hasattr(self, '_supervisor_settings'): return dict(self._supervisor_settings)
         data = dict(DEFAULTS)
         try:
             data.update(json.loads(self.settings_path.read_text()))
@@ -395,13 +396,16 @@ class Manager:
 
     def rpc(self, method, *params):
         try:
-            secret = (self.var / "rpc.secret").read_text().strip()
-            port = int((self.var / "rpc.port").read_text())
+            if not hasattr(self, '_rpc_credentials'):
+                self._rpc_credentials = ((self.var / 'rpc.secret').read_text().strip(), int((self.var / 'rpc.port').read_text()))
+            secret, port = self._rpc_credentials
             body = json.dumps({"jsonrpc": "2.0", "id": "downloadcenter", "method": "aria2." + method,
                                "params": ["token:" + secret, *params]}).encode()
             req = Request("http://127.0.0.1:%d/jsonrpc" % port, body, {"Content-Type": "application/json"})
             try:
-                with build_opener(ProxyHandler({})).open(req, timeout=4) as response:
+                if not hasattr(self, '_rpc_opener'):
+                    self._rpc_opener = build_opener(ProxyHandler({}))
+                with self._rpc_opener.open(req, timeout=4) as response:
                     result = json.load(response)
             except HTTPError as response:
                 result = json.load(response)
@@ -611,9 +615,13 @@ class Manager:
             running = True
         except DownloadError as exc:
             error = str(exc)
+        try: live_sample=json.loads((self.runtime/'live-tasks.json').read_text())
+        except (OSError,ValueError): live_sample={}
         tasks = []
         for row in self.rows():
             s = json.loads(row["snapshot"])
+            live=live_sample.get('tasks',{}).get(row['id']) if 0<=time.time()-live_sample.get('at',0)<30 else None
+            if live and live.get('gid')==row['gid']:s.update(live['values'])
             if not running:
                 s.update(downloadSpeed="0", uploadSpeed="0")
             tasks.append(dict(s, id=row["id"], created=row["created"]))

@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='mihomo'
 PLUGIN_LABEL='Mihomo'
-PLUGIN_VERSION='1.7.73'
+PLUGIN_VERSION='1.7.75'
 UNINSTALL_NOTE='卸载会停止该用户的代理；若 Docker 正使用此代理，会撤销它并重启 Docker。其他用户插件和普通文件保留。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -573,6 +573,9 @@ rm -rf "$stage_src"
 mkdir -p "$stage_src"
 cp -R "$PACKAGE_DIR/src/files" "$stage_src/files"
 cp -R "$PACKAGE_DIR/src/ui" "$stage_src/ui"
+# Core validation runs as the plugin user, including under a restrictive root umask.
+chown -R "$PLUGIN_USER:$(id -gn "$PLUGIN_USER")" "$stage_src"
+chmod 0700 "$stage_src"
 
 core_version_of() {
     candidate_core=$1
@@ -691,6 +694,8 @@ config_tmp="$ETC_DIR/.config.ports.$$"
 awk -v port="$MIXED_PORT" 'BEGIN{seen=0} /^[[:space:]]*mixed-port:[[:space:]]*/{print "mixed-port: " port;seen=1;next}{print} END{if(!seen)print "mixed-port: " port}' "$ETC_DIR/config.yaml" > "$config_tmp"
 mv -f "$config_tmp" "$ETC_DIR/config.yaml"
 chmod 0600 "$ETC_DIR/config.yaml" "$ETC_DIR/api.secret" "$PORTS_FILE"
+# etc is a persistent symlink; recursive chown of PLUGIN_HOME does not follow it.
+chown "$PLUGIN_USER:$(id -gn "$PLUGIN_USER")" "$ETC_DIR/config.yaml" "$ETC_DIR/api.secret" "$PORTS_FILE"
 
 rm -f "$PLUGIN_HOME/src" "$PLUGIN_HOME/tmp"
 ln -s "$SRC_DIR" "$PLUGIN_HOME/src"

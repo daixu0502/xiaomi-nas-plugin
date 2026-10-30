@@ -395,7 +395,8 @@ def history(user):
         if plan.get('user')==user and plan.get('state')!='draft':
             value=public_plan(plan);value['canUndo']=plan['state']=='applied';value['applied']=plan.get('applied');value['backup']=plan.get('backup')
             result.append(value)
-    return {'records':result}
+    backups=[p for p in (storage(user)/'backups').glob('*.sqlite3') if p.is_file() and not p.is_symlink()]
+    return {'records':result,'backupCount':len(backups),'backupBytes':sum(p.stat().st_size for p in backups)}
 
 
 def preview_undo(user,plan_id):

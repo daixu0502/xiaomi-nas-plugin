@@ -66,7 +66,7 @@ IPv6 模式同样使用 10 分钟确认和自动回退。它只持久修改 `mi_
 /data/docker/docker network create --ipv6 --subnet fd6d:696e:6173:2::/64 apps-v6
 ```
 
-已有 IPv4-only 自定义网络不会被强制重建，必须按业务计划迁移；`internal`、明确关闭 masquerade 的路由网络继续保持原意图。事件服务随 Docker 启动、停止和重启；订阅 Docker 网络及 daemon 事件、nftables 专用表变化、原生 Netlink IPv6 地址/路由及链路事件。启动后首次同步，后续仅在相关事件发生时同步，短时间内的事件合并处理；空闲时无限期阻塞，不执行每 30 秒或每 10 分钟的周期检查。Docker 或监听连接异常时保留现有规则，由 systemd 仅在进程故障后重新启动并订阅。
+已有 IPv4-only 自定义网络不会被强制重建，必须按业务计划迁移；`internal`、明确关闭 masquerade 的路由网络继续保持原意图。事件服务随 Docker 启动、停止和重启；订阅 Docker 网络及 daemon 事件、nftables 专用表变化、原生 Netlink IPv6 地址/路由及链路事件。启动后首次同步，后续仅在相关事件发生时同步，短时间内的事件合并处理；空闲时无限期阻塞，不执行每 30 秒或每 10 分钟的周期检查。普通链路、IPv6 地址和路由通知（包括 RA 有效期续期）仅从 /proc 读取内核路由并按需恢复转发和 RA 设置，不重新启动 Docker/nft/ip 命令或读取持久配置；Docker 网络、专用防火墙表事件仍执行完整同步。Docker 或监听连接异常时保留现有规则，由 systemd 仅在进程故障后重新启动并订阅。
 
 已启用旧版 IPv6 修复的 NAS 可直接升级维护方式，不重启 Docker 或容器：
 

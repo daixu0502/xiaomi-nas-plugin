@@ -186,6 +186,23 @@ def poll_delay(remote):
     return 3 if aria_busy or qb_busy else 15
 
 
+def semantic_sample(remote):
+    return (tuple(sorted((v['gid'],v.get('status'),tuple(v.get('followedBy',[])),v.get('errorCode'),v.get('totalLength')) for v in remote['aria'])),
+            tuple(sorted((v['hash'],v.get('state'),v.get('size'),v.get('name'),v.get('infohash_v1')) for v in remote['qb'])))
+
+
+def publish_live(m,rows,remote):
+    aria={v['gid']:v for v in remote['aria']};qb={v['hash']:v for v in remote['qb']}
+    tasks={}
+    for row in rows:
+        v=aria.get(row['gid']);values={}
+        if v:values={k:v.get(k,'0') for k in ('downloadSpeed','uploadSpeed','completedLength','totalLength','connections','numSeeders')}
+        v=qb.get(row['gid'])
+        if v:values=dict(downloadSpeed=str(v.get('dlspeed',0)),uploadSpeed=str(v.get('upspeed',0)),completedLength=str(max(0,v.get('size',0)-v.get('amount_left',0))),totalLength=str(v.get('size',0)),connections=str(v.get('num_seeds',0)+v.get('num_leechs',0)))
+        tasks[row['id']]={'gid':row['gid'],'values':values}
+    atomic_json(m.runtime/'live-tasks.json',{'at':time.time(),'tasks':tasks})
+
+
 def _serve_locked(m):
     # Refuse root even if launched outside the lifecycle script.
     if os.geteuid() == 0:
@@ -244,47 +261,64 @@ def _serve_locked(m):
         gateway = start_gateway(m)
         from lan_rpc import Listener
         aria_lan = Listener(m)
-        last_save, last_auto, sync_failures = 0, time.time(), 0
-        tracker_worker = threading.Thread(target=apply_saved_trackers, args=(manager(m.home),), daemon=True)
-        tracker_worker.start()
-        while not stopping[0] and child.poll() is None and qb_child.poll() is None:
-            m.ready(storage=False)  # Pool lost: stop instead of writing into an empty mountpoint.
-            delay = 3
-            try:
-                with m.locked(storage=False):
-                    sampled_rows = m.rows()
-                    sampled_revision = (m.var / 'tasks.sqlite').stat().st_mtime_ns
-                remote = m.fetch_sync(sampled_rows)
-                with m.locked(storage=False):
-                    # Any mutation (including selection/source-only changes) supersedes
-                    # this sample. No task can be resurrected or overwritten by it.
-                    if (m.var / 'tasks.sqlite').stat().st_mtime_ns == sampled_revision:
-                        m.sync(remote=remote)
-                    try:
-                        status = json.loads((m.runtime / "tracker-status.json").read_text())
-                    except (OSError, ValueError):
-                        status = {}
-                    s = m.settings()
-                    update = status.get("state") == "pending" or (s["autoTrackers"] and s["sources"] and time.time() - max(status.get("time", 0), last_auto) > 86400)
-                delay = poll_delay(remote)
-                if time.time() - last_save > (15 if delay == 3 else 120):
-                    m.save_session(); last_save = time.time()
-                if update and not (tracker_worker and tracker_worker.is_alive()):
-                    tracker_worker = threading.Thread(target=update_trackers, args=(manager(m.home),), daemon=True)
-                    tracker_worker.start(); last_auto = time.time()
-                if not stopping[0]:
-                    m.process_job()
-                sync_failures = 0
-                (m.runtime / 'sync-health.json').unlink(missing_ok=True)
-            except DownloadError:
-                sync_failures += 1
-                atomic_json(m.runtime / 'sync-health.json', {'failures': sync_failures, 'at': time.time(), 'message': '下载核心状态暂时不可用，正在重试'})
-                if sync_failures >= 3: raise
-                delay = min(15, 3 * sync_failures)
-            for _ in range(int(delay / .3)):
-                if stopping[0]:
-                    break
-                time.sleep(.3)
+        from event_wait import Events
+        with Events() as events:
+            events.watch(m.var,{'tasks.sqlite','settings.json','job.json','rpc.port','rpc.secret','qb.port','qb.secret'});events.watch(m.runtime,{'tracker-status.json'})
+            rows=[];fingerprint=None;last_auto=time.time();sync_failures=0
+            changes={('startup','')};reload=True;job_pending=False
+            tracker_worker=threading.Thread(target=apply_saved_trackers,args=(manager(m.home),),daemon=True)
+            tracker_worker.start()
+            while not stopping[0] and child.poll() is None and qb_child.poll() is None:
+                m.ready(storage=False)  # /proc only; never probe the pool while absent.
+                try:
+                    reload=reload or any(kind in ('mount','overflow') or name in ('tasks.sqlite','settings.json','job.json','rpc.port','rpc.secret','qb.port','qb.secret') for kind,name in changes)
+                    tracker_changed=reload or any(name=='tracker-status.json' for kind,name in changes)
+                    if reload:
+                        with m.locked(storage=False):
+                            if hasattr(m,'_supervisor_settings'):del m._supervisor_settings
+                            settings=m.settings();m._supervisor_settings=dict(settings)
+                            rows=m.rows()
+                            if hasattr(m,'_rpc_credentials'):del m._rpc_credentials
+                            if hasattr(m.qb,'_port'):del m.qb._port
+                            try:job_pending=json.loads((m.var/'job.json').read_text()).get('state')=='pending'
+                            except (OSError,ValueError):job_pending=False
+                    if tracker_changed:
+                        try:tracker_state=json.loads((m.runtime/'tracker-status.json').read_text())
+                        except (OSError,ValueError):tracker_state={}
+                    remote=m.fetch_sync(rows)  # Loopback only; credentials stay in RAM.
+                    current=semantic_sample(remote)
+                    if reload or current!=fingerprint:
+                        with m.locked(storage=False):
+                            pending=events.wait(timeout=0)
+                            if pending:
+                                changes=pending;reload=True
+                                continue
+                            m.sync(remote=remote)
+                            rows=m.rows()
+                            # Save on actual queue/state transitions, not progress ticks.
+                            if current!=fingerprint:m.save_session()
+                            events.wait(timeout=0)  # Drain our writes while mutation lock is held.
+                        fingerprint=current
+                    if job_pending:
+                        m.process_job()
+                        with m.locked(storage=False):
+                            job_pending=json.loads((m.var/'job.json').read_text()).get('state')=='pending'
+                            rows=m.rows()
+                        fingerprint=None
+                    if (tracker_state.get('state')=='pending' or (settings['autoTrackers'] and settings['sources'] and time.time()-max(tracker_state.get('time',0),last_auto)>86400)) and not tracker_worker.is_alive():
+                        tracker_worker=threading.Thread(target=update_trackers,args=(manager(m.home),),daemon=True)
+                        tracker_worker.start();last_auto=time.time()
+                    publish_live(m,rows,remote)
+                    if sync_failures:(m.runtime/'sync-health.json').unlink(missing_ok=True)
+                    sync_failures=0;reload=False
+                    delay=1 if job_pending else poll_delay(remote)
+                except DownloadError:
+                    sync_failures+=1
+                    atomic_json(m.runtime/'sync-health.json',{'failures':sync_failures,'at':time.time(),'message':'下载核心状态暂不可用，正在重试'})
+                    if sync_failures>=3:raise
+                    delay=min(15,3*sync_failures)
+                changes=events.wait(timeout=delay)
+
     finally:
         if aria_lan:
             aria_lan.shutdown(); aria_lan.server_close()

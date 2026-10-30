@@ -436,6 +436,12 @@
 [data-minas-plugin="quickshare"].workbench-ui .workbench-update-versions>div{display:flex;flex-direction:column;gap:6px;padding:14px;border:1px solid var(--line);border-radius:10px}
 [data-minas-plugin="quickshare"].workbench-ui .workbench-update-versions span{color:var(--muted)}
 [data-minas-plugin="quickshare"].workbench-ui .workbench-update-versions strong{font-weight:500;font-size:var(--type-heading)}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-update-status{min-width:0;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-update-status-row{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:4px 12px}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-update-status-row p{flex:1 1 180px;min-width:0}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-update-package{color:var(--muted);overflow-wrap:anywhere}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-update-details{margin-top:8px}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-update-details summary{width:fit-content;color:var(--muted);cursor:pointer;outline-offset:3px}
 [data-minas-plugin="quickshare"].workbench-ui .workbench-update-notes{margin:0;padding:14px;height:auto!important;min-height:0!important;max-height:180px!important;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);border:1px solid var(--line);border-radius:10px;font-family:inherit}
 [data-minas-plugin="quickshare"].workbench-ui .workbench-update-proxy{padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
 [data-minas-plugin="quickshare"].workbench-ui .workbench-proxy-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
@@ -473,6 +479,7 @@
 [data-minas-plugin="quickshare"].workbench-ui .workbench-proxy-footer button{flex:0 0 auto}
 [data-minas-plugin="quickshare"].workbench-ui .workbench-update-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px}
 [data-minas-plugin="quickshare"].workbench-ui .workbench-update-content progress{display:block;width:100%;height:8px;accent-color:var(--accent);margin:0 0 12px}
+[data-minas-plugin="quickshare"].workbench-ui .workbench-update-status progress{margin:10px 0 0}
 [data-minas-plugin="quickshare"].workbench-ui .workbench-update-log{max-height:150px;overflow:auto;list-style:none;padding:0;margin:0;color:var(--muted);line-height:1.6;overflow-wrap:anywhere}
 [data-minas-plugin="quickshare"].workbench-ui .workbench-update-log>li+li{margin-top:6px}
 [data-minas-plugin="quickshare"].workbench-ui .workbench-update-log:not(:empty){margin-top:10px}

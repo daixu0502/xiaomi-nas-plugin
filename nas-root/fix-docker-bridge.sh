@@ -282,11 +282,24 @@ def ipv6_sysctls():
 
 
 def protect_ipv6_ra():
-    routes = run(['ip', '-6', 'route', 'show', 'default']).stdout
-    for interface in re.findall(r'\bdev ([a-zA-Z0-9_.-]{1,15})\b', routes):
+    # Read the kernel table directly: RA lifetime refreshes also emit route
+    # events, so spawning ip would repeatedly load binaries from persistent media.
+    routes = Path('/proc/net/ipv6_route').read_text().splitlines()
+    interfaces = {fields[-1] for line in routes if len(fields := line.split()) == 10
+                  and fields[0] == '0' * 32 and fields[1] == '00'
+                  and re.fullmatch(r'[a-zA-Z0-9_.-]{1,15}', fields[-1])}
+    for interface in interfaces:
         path = PROC6 / interface / 'accept_ra'
         if path.is_file() and path.read_text().strip() == '1':
             path.write_text('2\n')
+
+
+def sync_route_state():
+    # Route/address/link events cannot change Docker's subnet definitions.
+    # Docker and nft events still run the full network/rule reconciliation.
+    protect_ipv6_ra()
+    if (PROC6 / 'all/forwarding').read_text().strip() != '1':
+        (PROC6 / 'all/forwarding').write_text('1\n')
 
 
 def sync_ipv6():
@@ -307,9 +320,7 @@ def sync_ipv6():
         actual = nft('-j', 'list', 'table', 'ip6', IPV6_TABLE).stdout
         atomic(BASE / 'ipv6-state.json', json.dumps({'desiredDigest': digest, 'actualDigest': nft_digest(actual)}) + '\n')
     # Preserve RA routes on upstream interfaces where the kernel manages RAs.
-    protect_ipv6_ra()
-    if (PROC6 / 'all/forwarding').read_text().strip() != '1':
-        (PROC6 / 'all/forwarding').write_text('1\n')
+    sync_route_state()
 
 
 def event_commands():
@@ -362,6 +373,13 @@ def event_sync():
         sync_ipv6()
 
 
+def sync_events(pending):
+    if pending == {'route'}:
+        sync_route_state()
+    else:
+        event_sync()
+
+
 def watch_ipv6():
     """Block on Docker/netlink events. No periodic timer or idle timeout."""
     secure_dir(WATCH_RUNTIME)
@@ -398,7 +416,8 @@ def watch_ipv6():
                             if not pending: deadline = time.monotonic()+1
                             pending.add(require_event['name'])
                 if pending and time.monotonic() >= deadline:
-                    event_sync(); count += 1
+                    sync_events(pending)
+                    count += 1
                     atomic(WATCH_RUNTIME/'status.json',json.dumps(dict(pid=os.getpid(),syncCount=count,lastTrigger=sorted(pending),lastSync=int(time.time())))+'\n')
                     pending.clear()
         finally:

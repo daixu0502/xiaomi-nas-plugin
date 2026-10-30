@@ -11,6 +11,7 @@ import re
 import sys
 import threading
 import time
+import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -41,17 +42,49 @@ class Server(ThreadingHTTPServer):
     def __init__(self, address, handler, store, secret):
         super().__init__(address, handler); self.store=store; self.secret=secret
         self.archive_slots = threading.BoundedSemaphore(2)
+        self.connection_slots = threading.BoundedSemaphore(32)
+        self.transfer_slots = threading.BoundedSemaphore(8)
+
+    def process_request(self, request, address):
+        if not self.connection_slots.acquire(blocking=False):
+            try:
+                request.settimeout(1)
+                request.sendall(b'HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nRetry-After: 10\r\nContent-Length: 0\r\n\r\n')
+            except OSError: pass
+            self.shutdown_request(request)
+            return
+        try: super().process_request(request, address)
+        except BaseException:
+            self.connection_slots.release()
+            raise
+
+    def process_request_thread(self, request, address):
+        try: super().process_request_thread(request, address)
+        finally: self.connection_slots.release()
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "QuickShare/1.0"
     sys_version = ""
+
+    def setup(self):
+        self.request.settimeout(60)
+        super().setup()
+
+    def transfer(self, operation, token):
+        if not self.server.transfer_slots.acquire(blocking=False):
+            self.close_connection = True
+            return self.send_json({'ok':False,'error':'传输繁忙，请稍后重试'},503)
+        try: return operation(token)
+        finally: self.server.transfer_slots.release()
 
     def transfer_event(self, record, name, direction, size, complete, started):
         try:self.server.store.record_transfer(record,name,direction,size,complete,time.monotonic()-started)
         except Exception:self.log_message('transfer history unavailable')
 
     def log_message(self, fmt, *args):
-        sys.stderr.write("%s %s\n" % (self.address_string(), fmt % args))
+        # Request lines contain bearer share tokens and user-supplied query strings.
+        message = re.sub(r'/(?:s|d|upload|auth)/[^\s"\']+', '/[share]', fmt % args)
+        sys.stderr.write("%s %s\n" % (self.address_string(), message))
 
     def security_headers(self, content_type="text/html; charset=utf-8", length=None, status=200, extra=None):
         self.send_response(status)
@@ -120,7 +153,7 @@ class Handler(BaseHTTPRequestHandler):
         parts=self.path_parts()
         if parts==["health"]: return self.send_json({"ok":True})
         if len(parts)==2 and parts[0]=="s": return self.share_page(parts[1])
-        if len(parts)==2 and parts[0]=="d": return self.download(parts[1])
+        if len(parts)==2 and parts[0]=="d": return self.transfer(self.download,parts[1])
         self.unavailable("not_found")
 
     def share_page(self, token, error=""):
@@ -208,12 +241,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parts=self.path_parts()
         if len(parts)==2 and parts[0]=="auth": return self.auth(parts[1])
-        if len(parts)==2 and parts[0]=="upload": return self.upload(parts[1])
+        if len(parts)==2 and parts[0]=="upload": return self.transfer(self.upload,parts[1])
         self.unavailable("not_found")
 
     def too_many_failures(self, ip, add=False):
         now=time.time()
         with FAIL_LOCK:
+            for key in list(FAILURES):
+                if not FAILURES[key] or now-FAILURES[key][-1]>=600: FAILURES.pop(key,None)
+            if ip not in FAILURES and len(FAILURES)>=4096: return True
             recent=[stamp for stamp in FAILURES.get(ip,[]) if now-stamp<600]
             if add: recent.append(now)
             FAILURES[ip]=recent
@@ -250,8 +286,7 @@ class Handler(BaseHTTPRequestHandler):
             query=parse_qs(urlsplit(self.path).query); name=self.safe_upload_name(query.get("name",[""])[0])
         except ShareError as exc: return self.send_json({"ok":False,"error":str(exc)},400)
         target=directory/name; stem,suffix=target.stem,target.suffix; counter=1
-        while target.exists(): target=directory/f"{stem} ({counter}){suffix}"; counter+=1
-        temp=directory/(".quickshare-upload-"+token[:8]+"-"+str(threading.get_ident()))
+        temp=directory/(".quickshare-upload-"+uuid.uuid4().hex)
         remaining=length;began=time.monotonic();complete=False
         try: self.server.store.consume(token,"upload",self.client_address[0])
         except ShareError as exc: return self.send_json({"ok":False,"error":"链接不可用："+str(exc)},410)
@@ -262,11 +297,26 @@ class Handler(BaseHTTPRequestHandler):
                     if not chunk: raise ConnectionError("上传中断")
                     output.write(chunk); remaining-=len(chunk)
                 output.flush(); os.fsync(output.fileno())
-            os.replace(temp,target)
+            # link() publishes the complete file atomically and NEVER replaces an
+            # existing directory entry, including a symlink or concurrent upload.
+            while True:
+                try:
+                    os.link(temp,target,follow_symlinks=False)
+                    break
+                except FileExistsError:
+                    target=directory/f"{stem} ({counter}){suffix}"; counter+=1
             complete=True
+            temp.unlink()
+            directory_fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY)
+            try: os.fsync(directory_fd)
+            finally: os.close(directory_fd)
             return self.send_json({"ok":True,"name":target.name,"size":length})
         except (OSError,ConnectionError) as exc:
-            if complete:return
+            if complete:
+                # Commit already succeeded: expose the actual name so a caller
+                # can inspect the result instead of submitting the upload twice.
+                return self.send_json({"ok":False,"committed":True,"name":target.name,"size":length,
+                                       "error":"文件已保存，但确认步骤失败，请核对文件后再操作"},500)
             try: temp.unlink()
             except OSError: pass
             try: self.server.store.rollback_use(token,"upload")

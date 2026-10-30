@@ -25,6 +25,7 @@ var document = window.XiaomiPluginClient.document;
   var currentUpdateTask = null;
   var updateMonitors = {};
   var updateTimers = [];
+  function queueUpdateTimer(fn,delay){var timer=window.XiaomiPluginClient.setTimer(function(){updateTimers=updateTimers.filter(function(v){return v!==timer;});fn();},delay);updateTimers.push(timer);}
   var updatePageClosed = false;
   var savedUpdateButtons = [];
 
@@ -77,19 +78,19 @@ var document = window.XiaomiPluginClient.document;
       var failures = 0;
       function poll() {
         if (updatePageClosed) return;
-        if (document.hidden) { updateTimers.push(setTimeout(poll,5000)); return; }
+        if (document.hidden) { queueUpdateTimer(poll,5000); return; }
         postJson('update_task_status', { id: task.id }).then(function (packet) {
           if (!packet.task) throw new Error('后台任务状态暂不可用');
           failures = 0;
           renderUpdateTask(packet.task);
           if (packet.task.status === 'succeeded') { resolve(packet.task.result || {}); return; }
           if (packet.task.status === 'failed') { reject(new Error(packet.task.error || '后台更新失败')); return; }
-          updateTimers.push(setTimeout(poll, 1200));
+          queueUpdateTimer(poll, 1200);
         }).catch(function (error) {
           failures++;
           byId('updateTaskMessage').textContent = '暂时无法读取进度，后台任务不受影响，正在重试…';
           if (failures >= 15) { reject(new Error('连接中断，后台任务可能仍在执行；重新打开页面可查看进度')); return; }
-          updateTimers.push(setTimeout(poll, 2000));
+          queueUpdateTimer(poll, 2000);
         });
       }
       poll();
@@ -116,8 +117,8 @@ var document = window.XiaomiPluginClient.document;
     var element = byId('toast');
     element.textContent = message;
     element.className = 'toast show' + (isError ? ' error' : '');
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { element.className = 'toast'; }, 2800);
+    window.XiaomiPluginClient.clearTimer(toastTimer);
+    toastTimer = window.XiaomiPluginClient.setTimer(function () { element.className = 'toast'; }, 2800);
   }
 
   var pickerState = {
@@ -300,7 +301,7 @@ var document = window.XiaomiPluginClient.document;
     document.body.classList.add('mi-confirm-open');
     return new Promise(function (resolve) {
       confirmState.resolve = resolve;
-      window.setTimeout(function () {
+      window.XiaomiPluginClient.setTimer(function () {
         if (!dialog.hidden) restoreFocus(settings.danger ? byId('confirmCancel') : byId('confirmAccept'));
       }, 0);
     });
@@ -580,7 +581,7 @@ var document = window.XiaomiPluginClient.document;
     testBackground.forEach(function (item) { item.element.inert = item.inert; });
     testBackground = [];
     byId('openNodeTests').setAttribute('aria-expanded', 'false');
-    clearTimeout(testTimer);
+    window.XiaomiPluginClient.clearTimer(testTimer);
     restoreFocus(byId('openNodeTests'));
   if(state.page==='overview')loadProxies();
   }
@@ -616,14 +617,14 @@ var document = window.XiaomiPluginClient.document;
       (testJob.kind === 'speed' && testActive() ? ' · 已接收 ' + ((testJob.bytes || 0) / 1048576).toFixed(1) + ' MiB' : '');
   }
   function pollNodeTest() {
-    clearTimeout(testTimer);
+    window.XiaomiPluginClient.clearTimer(testTimer);
     if (updatePageClosed || byId('nodeTestDialog').hidden) return;
     postJson('node_test_status', {}).then(function (packet) {
       testJob = packet.job; testResults = packet.results || {}; testError = ''; renderNodeTests();
-      if (testActive() && !byId('nodeTestDialog').hidden) testTimer = setTimeout(pollNodeTest, 1000);
+      if (testActive() && !byId('nodeTestDialog').hidden) testTimer = window.XiaomiPluginClient.setTimer(pollNodeTest, 1000);
     }).catch(function (error) {
       testError = error.message + '；可刷新节点重新读取结果'; renderNodeTests();
-      if (testActive() && !byId('nodeTestDialog').hidden) testTimer = setTimeout(pollNodeTest, 3000);
+      if (testActive() && !byId('nodeTestDialog').hidden) testTimer = window.XiaomiPluginClient.setTimer(pollNodeTest, 3000);
     });
   }
   function loadNodeTests() {
@@ -669,8 +670,8 @@ var document = window.XiaomiPluginClient.document;
   byId('cancelNodeTest').onclick = function () {
     if (testActive()) postJson('node_test_cancel', { id: testJob.id }).then(function () { byId('nodeTestStatus').textContent = '正在停止测试…'; }).catch(function (error) { toast(error.message, true); });
   };
-  window.addEventListener('unmount', function () { clearTimeout(testTimer); });
-  window.addEventListener('pagehide', function () { clearTimeout(testTimer); });
+  window.addEventListener('unmount', function () { window.XiaomiPluginClient.clearTimer(testTimer); });
+  window.addEventListener('pagehide', function () { window.XiaomiPluginClient.clearTimer(testTimer); });
 
   function loadProxies() {
     var container = byId('proxyGroups');

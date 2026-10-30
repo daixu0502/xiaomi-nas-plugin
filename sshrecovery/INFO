@@ -2,7 +2,7 @@
   "plugin": "sshrecovery",
   "name": "SSH 恢复",
   "id": 19098,
-  "version": "1.1.52",
+  "version": "1.1.54",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "手动开启 SSH、恢复主机密钥与登录公钥",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "修复检查更新后安装包大小总显示为 0.1 MiB；按大小自动显示 B、KiB、MiB 或 GiB，并提供精确字节数；增加清晰的更新确认卡片与版本提示，保留原有签名、大小及摘要验证",
+  "changelog": "合并更新状态与检查日志；仅有新版本时直接显示安装包大小，按大小自动选择 B、KB、MB 等单位，移除大小悬停提示",
   "system": false,
-  "size": 187657,
+  "size": 193681,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

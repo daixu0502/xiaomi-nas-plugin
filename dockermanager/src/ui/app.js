@@ -9,9 +9,11 @@ var document = window.XiaomiPluginClient.document;
     showIntermediate: false,
     volumes: [],
     engineRunning: false,
+    containersLoaded: false,
     containerFilter: 'all'
   };
   var pageOrder = ['containers', 'images', 'networks', 'volumes', 'overview'];
+  var containerSequence=0;
   var toastTimer = null;
   var confirmCallback = null;
 
@@ -41,8 +43,8 @@ var document = window.XiaomiPluginClient.document;
     var toast = byId('toast');
     toast.textContent = message;
     toast.className = 'toast show' + (error ? ' error' : '');
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toast.className = 'toast'; }, 2800);
+    window.XiaomiPluginClient.clearTimer(toastTimer);
+    toastTimer = window.XiaomiPluginClient.setTimer(function () { toast.className = 'toast'; }, 2800);
   }
   function setBusy(active, text) {
     byId('busy').hidden = !active;
@@ -52,6 +54,7 @@ var document = window.XiaomiPluginClient.document;
     if (!button) return;
     if (active) {
       if (!button.hasAttribute('data-idle-label')) button.setAttribute('data-idle-label', button.textContent.trim());
+      button.dataset.idleDisabled=String(button.disabled);
       button.textContent = '';
       var spinner = document.createElement('span');
       spinner.className = 'button-spinner';
@@ -66,6 +69,7 @@ var document = window.XiaomiPluginClient.document;
       button.textContent = button.getAttribute('data-idle-label') || button.textContent;
       button.removeAttribute('data-idle-label');
       button.classList.remove('button-loading');
+      button.disabled=button.dataset.idleDisabled==='true';delete button.dataset.idleDisabled;
     }
   }
   function setControlGroupLoading(ids, button, active, label) {
@@ -154,8 +158,7 @@ var document = window.XiaomiPluginClient.document;
       byId('engineBadge').className = 'status-pill running';
       byId('engineBadge').innerHTML = '<i></i>运行中';
       byId('engineSubtitle').textContent = (data.name || '小米智能存储') + ' · Docker ' + (data.serverVersion || '未知版本');
-      byId('runningMetric').textContent = data.running;
-      byId('stoppedMetric').textContent = data.stopped;
+      if(!state.containersLoaded){byId('runningMetric').textContent=data.running;byId('stoppedMetric').textContent=data.stopped;}
       byId('imageMetric').textContent = data.images;
       byId('volumeMetric').textContent = '…';
       byId('systemInfo').className = 'detail-list';
@@ -170,7 +173,7 @@ var document = window.XiaomiPluginClient.document;
         detailItem('Docker 数据目录', data.dockerRootDir || '—')
       ].join('');
       byId('diskUsage').className='empty-state';byId('diskUsage').textContent='正在统计空间占用…';
-      var diskRequest=api('system_disk',{force:forceDisk===true}).then(function(result){renderDisk(result.disk||[]);}).catch(function(error){byId('diskUsage').textContent=error.message;});
+      var diskRequest=state.page!=='overview'&&forceDisk!==true?Promise.resolve():api('system_disk',{force:forceDisk===true}).then(function(result){renderDisk(result.disk||[]);}).catch(function(error){byId('diskUsage').textContent=error.message;});
       var volumesRequest=api('volume_list').then(function (volumeData) {
         state.volumes = volumeData.volumes || [];
         byId('volumeMetric').textContent = state.volumes.length;
@@ -233,6 +236,8 @@ var document = window.XiaomiPluginClient.document;
       return true;
     });
     var running = state.containers.filter(function (item) { return item.running; }).length;
+    byId('runningMetric').textContent=running;
+    byId('stoppedMetric').textContent=state.containers.length-running;
     byId('containerSummary').textContent = state.containers.length + ' 个容器 · ' + running + ' 个运行中';
     if (!filtered.length) {
       container.className = 'empty-state';
@@ -261,11 +266,16 @@ var document = window.XiaomiPluginClient.document;
     alignResources('containerList');
   }
   function loadContainers() {
+    var sequence=++containerSequence;
     return api('container_list').then(function (data) {
+      if(sequence!==containerSequence||statsDisposed)return;
+      state.containersLoaded=true;
       state.containers = data.containers || [];
-      renderContainers(); loadContainerStats();
+      renderContainers(); return loadContainerStats();
     }).catch(function (error) {
-      byId('containerList').className = 'empty-state'; byId('containerList').textContent = error.message; showToast(error.message, true);
+      if(sequence!==containerSequence||statsDisposed)return;
+      byId('containerSummary').textContent='刷新失败，当前为上次结果：'+error.message;showToast(error.message,true);
+      if(state.page==='containers')statsTimer=window.XiaomiPluginClient.setTimer(loadContainers,10000);
     });
   }
   function runContainerAction(button, target, operation) {
@@ -286,7 +296,7 @@ var document = window.XiaomiPluginClient.document;
       if (data.state === 'error') throw new Error(data.message || '容器升级失败');
       if (Date.now() - startedAt > 2100000) throw new Error('升级仍在后台进行，请稍后刷新容器列表');
       return new Promise(function (resolve, reject) {
-        setTimeout(function () { waitForContainerUpgrade(taskId, startedAt).then(resolve, reject); }, 1800);
+        window.XiaomiPluginClient.setTimer(function () { waitForContainerUpgrade(taskId, startedAt).then(resolve, reject); }, 1800);
       });
     });
   }
@@ -359,7 +369,7 @@ var document = window.XiaomiPluginClient.document;
       if (data.state === 'error') throw new Error(data.message || '批量操作失败');
       if (Date.now() - startedAt > 360000) throw new Error('批量操作仍在后台进行，请稍后刷新容器列表');
       return new Promise(function (resolve, reject) {
-        setTimeout(function () { waitForBulkContainerTask(taskId, startedAt).then(resolve, reject); }, 1500);
+        window.XiaomiPluginClient.setTimer(function () { waitForBulkContainerTask(taskId, startedAt).then(resolve, reject); }, 1500);
       });
     });
   }
@@ -554,7 +564,7 @@ var document = window.XiaomiPluginClient.document;
   byId('restartAllContainersButton').addEventListener('click', function () { runBulkContainerAction('restart'); });
   byId('stopAllContainersButton').addEventListener('click', function () { runBulkContainerAction('stop'); });
   byId('confirmAcceptButton').addEventListener('click', acceptConfirm);
-  byId('refreshButton').addEventListener('click', function () { return window.XiaomiPluginWorkbench.refresh(this,function(){return state.page==='overview'?loadOverview(true):switchPage(state.page);}); });
+  byId('refreshButton').addEventListener('click', function () { return window.XiaomiPluginWorkbench.refresh(this,function(){return state.page==='overview'?Promise.all([loadOverview(true),loadContainers()]):Promise.all([loadOverview(false),switchPage(state.page)]);}); });
   byId('pullImage').addEventListener('keydown', function (event) { if (event.key === 'Enter') pullImage(); });
   byId('volumeName').addEventListener('keydown', function (event) { if (event.key === 'Enter') createVolume(); });
 
@@ -589,16 +599,17 @@ var document = window.XiaomiPluginClient.document;
   var statsTimer=null,statsBusy=false,statsDisposed=false;
   function memoryBytes(text) {var m=String(text||'').trim().match(/^([\d.]+)\s*([kmgt]?i?b)/i);if(!m)return 0;var unit=m[2].toLowerCase(),index='kmgt'.indexOf(unit[0])+1;return Number(m[1])*Math.pow(unit.includes('i')?1024:1000,index);}
   function loadContainerStats() {
-    clearTimeout(statsTimer);if(statsBusy||statsDisposed||state.page!=='containers'||document.hidden)return;
-    statsBusy=true;api('container_stats').then(function (data) {
+    window.XiaomiPluginClient.clearTimer(statsTimer);if(statsBusy||statsDisposed||state.page!=='containers'||document.hidden)return;
+    statsBusy=true;return api('container_stats').then(function (data) {
       var rows=data.stats||[];byId('containerCpu').textContent=rows.reduce(function(sum,r){return sum+(parseFloat(r.CPUPerc)||0);},0).toFixed(1)+'%';
       byId('containerMemory').textContent=formatBytes(rows.reduce(function(sum,r){return sum+memoryBytes(String(r.MemUsage||'').split('/')[0]);},0));
       byId('statsNote').textContent='当前 '+rows.length+' 个运行容器 · 每 10 秒更新 · '+new Date().toLocaleTimeString();
-    }).catch(function(){byId('containerCpu').textContent='—';byId('containerMemory').textContent='—';byId('statsNote').textContent='资源采样暂不可用，可稍后刷新';}).finally(function(){statsBusy=false;if(!statsDisposed&&state.page==='containers')statsTimer=setTimeout(loadContainerStats,10000);});
+    }).catch(function(){byId('containerCpu').textContent='—';byId('containerMemory').textContent='—';byId('statsNote').textContent='资源采样暂不可用，可稍后刷新';}).finally(function(){statsBusy=false;if(!statsDisposed&&state.page==='containers')statsTimer=window.XiaomiPluginClient.setTimer(loadContainers,10000);});
   }
-  function disposeStats(){statsDisposed=true;clearTimeout(statsTimer);}
+  function disposeStats(){statsDisposed=true;window.XiaomiPluginClient.clearTimer(statsTimer);}
   window.addEventListener('pagehide',disposeStats);window.addEventListener('unmount',disposeStats);
-  document.addEventListener('visibilitychange',function(){if(document.hidden)clearTimeout(statsTimer);else loadContainerStats();});
+  document.addEventListener('visibilitychange',function(){if(document.hidden)window.XiaomiPluginClient.clearTimer(statsTimer);else loadContainerStats();});
   loadOverview();
   loadContainers();
+  api('container_upgrade_status',{}).then(function(task){if(task.state==='running')return waitForContainerUpgrade(task.taskId,Date.now()).then(function(result){showToast(result.message||'升级完成');return loadContainers();});if(task.state==='error')showToast(task.message,true);}).catch(function(error){showToast(error.message,true);});
 }());

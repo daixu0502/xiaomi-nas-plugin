@@ -6,7 +6,7 @@ var toastTimer=null,modalType='',confirmCallback=null,lastFocus=null,modalStack=
 var extendingShare=null,extendBusy=false;
 function id(name){return document.getElementById(name)}
 function el(tag,className,text){var node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node}
-function toast(message,isError){var node=id('toast');node.textContent=message;node.className='toast show'+(isError?' error':'');clearTimeout(toastTimer);toastTimer=setTimeout(function(){node.className='toast'},2800)}
+function toast(message,isError){var node=id('toast');node.textContent=message;node.className='toast show'+(isError?' error':'');window.XiaomiPluginClient.clearTimer(toastTimer);toastTimer=window.XiaomiPluginClient.setTimer(function(){node.className='toast'},2800)}
 function request(action,data){return window.XiaomiPluginClient.request({plugin:'quickshare',cgi:'quickshare.cgi',action:action,options:{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(data||{})}}).then(function(response){return response.json().catch(function(){throw new Error('设备返回了无法解析的数据')})}).then(function(result){if(!result.ok)throw new Error(result.error||'操作失败');return result})}
 function restoreFocus(){if(!lastFocus||!document.documentElement.contains(lastFocus))return;var x=window.pageXOffset,y=window.pageYOffset;try{lastFocus.focus({preventScroll:true})}catch(error){lastFocus.focus()}if(window.pageXOffset!==x||window.pageYOffset!==y)window.scrollTo(x,y)}
 function syncModals(){
@@ -35,7 +35,7 @@ function activatePage(page){
  document.querySelectorAll('.page').forEach(function(node){node.classList.toggle('active',node.id==='page-'+view);});
  if(view==='records'){id('shareHeading').textContent={records:'分享链接',uploads:'接收上传'}[page];id('newShare').textContent=page==='uploads'?'创建上传入口':'新建分享';loadShares();}
  if(page==='settings')loadSettings();
- if(page==='transfers')loadTransfers();else clearTimeout(transferTimer);
+ if(page==='transfers')loadTransfers();else window.XiaomiPluginClient.clearTimer(transferTimer);
 }
 
 function updateServiceControls(){id('startService').disabled=state.serviceBusy||state.running!==false;id('stopService').disabled=state.serviceBusy||state.running!==true}
@@ -77,7 +77,7 @@ function copyText(value){
   return legacyCopy(value)?Promise.resolve():Promise.reject(new Error('manual-copy-required'));
 }
 function manualCopy(value){
-  clearTimeout(toastTimer);id('toast').className='toast';id('toast').textContent='';
+  window.XiaomiPluginClient.clearTimer(toastTimer);id('toast').className='toast';id('toast').textContent='';
   if(modalType!=='linkModal')showShareLink(value,'复制分享链接');
   var selected=selectLink(id('createdLink'));
   id('copyHelp').textContent=selected?'自动复制未成功，链接已选中。电脑按 Ctrl+C（Mac 按 ⌘C），手机可长按复制。':'自动复制未成功。请选中上方链接，电脑按 Ctrl+C（Mac 按 ⌘C），手机可长按复制。';
@@ -178,12 +178,12 @@ function renderTransfers(){
  rows.forEach(function(v){var row=el('article','share-card'),head=el('div','share-head');head.appendChild(el('h3','',v.name));head.appendChild(el('span','badge',v.complete?'已完成':'已中断'));row.appendChild(head);row.appendChild(el('p','',formatTime(v.time)+' · '+(v.direction==='upload'?'上传':'下载')+' · '+formatSize(v.bytes)+' · '+Number(v.duration||0).toFixed(1)+' 秒'));list.appendChild(row);});
 }
 function loadTransfers(){
- clearTimeout(transferTimer);if(transferBusy||transferDisposed)return;transferBusy=true;
- return request('transfers').then(function(data){transferRows=data.events||[];id('transferTodayBytes').textContent=formatSize(data.today.bytes);id('transferTodayCount').textContent=data.today.transfers;id('transferTotalBytes').textContent=formatSize(data.totalBytes);renderTransfers();}).catch(function(error){id('transferList').textContent=error.message;}).finally(function(){transferBusy=false;if(!transferDisposed&&state.page==='transfers'&&!document.hidden)transferTimer=setTimeout(loadTransfers,5000);});
+ window.XiaomiPluginClient.clearTimer(transferTimer);if(transferBusy||transferDisposed)return;transferBusy=true;
+ return request('transfers').then(function(data){transferRows=data.events||[];id('transferTodayBytes').textContent=formatSize(data.today.bytes);id('transferTodayCount').textContent=data.today.transfers;id('transferTotalBytes').textContent=formatSize(data.totalBytes);renderTransfers();}).catch(function(error){id('transferList').textContent=error.message;}).finally(function(){transferBusy=false;if(!transferDisposed&&state.page==='transfers'&&!document.hidden)transferTimer=window.XiaomiPluginClient.setTimer(loadTransfers,5000);});
 }
 id('refreshTransfers').onclick=function(){return window.XiaomiPluginWorkbench.refresh(this,loadTransfers);};id('transferDirection').onchange=renderTransfers;
-function disposeTransfers(){transferDisposed=true;clearTimeout(transferTimer);}
+function disposeTransfers(){transferDisposed=true;window.XiaomiPluginClient.clearTimer(transferTimer);}
 window.addEventListener('unmount',disposeTransfers);window.addEventListener('pagehide',disposeTransfers);
-document.addEventListener('visibilitychange',function(){if(document.hidden)clearTimeout(transferTimer);else if(state.page==='transfers')loadTransfers();});
+document.addEventListener('visibilitychange',function(){if(document.hidden)window.XiaomiPluginClient.clearTimer(transferTimer);else if(state.page==='transfers')loadTransfers();});
 updateServiceControls();loadStatus(false);loadShares();loadSettings();
 })();

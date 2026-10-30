@@ -12,7 +12,7 @@ var document = window.XiaomiPluginClient.document;
     let result; try { result=await r.json(); } catch (_) { throw Error('设备返回了无法解析的数据'); }
     if(!result.ok)throw Error(result.error||'操作失败'); return result;
   }
-  function toast(text,error) { $('toast').textContent=text; $('toast').className='toast'+(error?' error':''); clearTimeout(toastTimer); toastTimer=setTimeout(()=>{$('toast').textContent='';},4500); }
+  function toast(text,error) { $('toast').textContent=text; $('toast').className='toast'+(error?' error':''); window.XiaomiPluginClient.clearTimer(toastTimer); toastTimer=window.XiaomiPluginClient.setTimer(()=>{$('toast').textContent='';},4500); }
   async function busy(button, fn) { if(button.disabled)return; button.disabled=true; button.setAttribute('aria-busy','true'); try { await fn(); } catch(e) { toast(e.message,true); } finally { button.disabled=false; button.removeAttribute('aria-busy'); } }
   function button(text, cls, fn, disabled) { const b=node('button',cls,text); b.type='button'; b.disabled=!!disabled; b.onclick=()=>busy(b,()=>fn(b)); return b; }
   function timestamp(value, timezone=data.timezone) {
@@ -189,9 +189,9 @@ var document = window.XiaomiPluginClient.document;
   });
   refresh().catch(e=>{ $('health').textContent='连接失败';toast(e.message,true); });
   let refreshTimer, disposed=false;
-  function scheduleRefresh(){clearTimeout(refreshTimer);if(disposed||document.hidden)return;refreshTimer=setTimeout(async()=>{if(!dialogs().length)await refresh().catch(()=>{});scheduleRefresh();},15000);}
-  function onVisibility(){if(document.hidden)clearTimeout(refreshTimer);else{refresh().catch(()=>{});scheduleRefresh();}}
-  function dispose(){disposed=true;clearTimeout(refreshTimer);document.removeEventListener('visibilitychange',onVisibility);}
+  function scheduleRefresh(){window.XiaomiPluginClient.clearTimer(refreshTimer);if(disposed||document.hidden)return;refreshTimer=window.XiaomiPluginClient.setTimer(async()=>{if(!dialogs().length)await refresh().catch(()=>{});scheduleRefresh();},15000);}
+  function onVisibility(){if(document.hidden)window.XiaomiPluginClient.clearTimer(refreshTimer);else{refresh().catch(()=>{});scheduleRefresh();}}
+  function dispose(){disposed=true;window.XiaomiPluginClient.clearTimer(refreshTimer);document.removeEventListener('visibilitychange',onVisibility);}
   document.addEventListener('visibilitychange',onVisibility);
   window.addEventListener('pagehide',dispose);window.addEventListener('unmount',dispose);
   scheduleRefresh();

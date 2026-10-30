@@ -8,7 +8,7 @@ from version_catalog import load
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECTS={'dockermanager':'dockermanager','taskcenter':'taskcenter','sshrecovery':'sshrecovery','mihomo':'mihomo','nascenter':'nascenter','quickshare':'quickshare','downloadcenter':'downloadcenter','mediaeditor':'mediaeditor'}
-FILES=('minas-helper','component_admin.py','common/privileged_runtime.py','common/component_admin.py','common/user_state_io.py','common/telemetry_cache.py')
+FILES=('minas-helper','component_admin.py','common/privileged_runtime.py','common/component_admin.py','common/user_state_io.py','common/telemetry_cache.py','common/event_wait.py','common/maintenance_events.py')
 
 
 def sha(data):

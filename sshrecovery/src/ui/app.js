@@ -4,7 +4,7 @@ const doc=window.XiaomiPluginClient?.document||document;
 const byId=id=>doc.getElementById(id);
 let state=null,working=false,importing=false,downloadURL='',toastTimer=null;
 async function api(action,data={}){
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);
+ const controller=new AbortController(),timer=window.XiaomiPluginClient.setTimer(()=>controller.abort(),60000);
  try{
   const options={method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:controller.signal};
   const response=window.XiaomiPluginClient?await window.XiaomiPluginClient.request({plugin:'sshrecovery',cgi:'sshrecovery.cgi',action,options}):await fetch('sshrecovery.cgi?action='+action,options);
@@ -12,7 +12,7 @@ async function api(action,data={}){
   try{result=JSON.parse(raw);}catch{throw Error(raw.trim().startsWith('<')?'接口返回了网页，请重新打开插件刷新客户端授权。':'设备返回的数据格式异常，请稍后刷新。');}
   if(!response.ok||!result.ok)throw Error(result.error||'操作失败');
   return result;
- }finally{clearTimeout(timer);}
+ }finally{window.XiaomiPluginClient.clearTimer(timer);}
 }
 function setBusy(on){
  working=on;
@@ -21,8 +21,8 @@ function setBusy(on){
  byId('refresh').classList.toggle('is-loading',on);
  byId('keyType').disabled=on;byId('keyFile').disabled=on;byId('keyText').disabled=on||byId('keyType').value==='import_private';
 }
-function notify(message,error=false){clearTimeout(toastTimer);const toast=byId('toast');toast.textContent=message;toast.classList.toggle('error',error);toast.hidden=false;toastTimer=setTimeout(()=>toast.hidden=true,error?12000:6000);}
-function clearKeyError(){byId('keyError').hidden=true;byId('keyText').removeAttribute('aria-invalid');byId('keyFile').removeAttribute('aria-invalid');if(byId('toast').classList.contains('error')){clearTimeout(toastTimer);byId('toast').hidden=true;}}
+function notify(message,error=false){window.XiaomiPluginClient.clearTimer(toastTimer);const toast=byId('toast');toast.textContent=message;toast.classList.toggle('error',error);toast.hidden=false;toastTimer=window.XiaomiPluginClient.setTimer(()=>toast.hidden=true,error?12000:6000);}
+function clearKeyError(){byId('keyError').hidden=true;byId('keyText').removeAttribute('aria-invalid');byId('keyFile').removeAttribute('aria-invalid');if(byId('toast').classList.contains('error')){window.XiaomiPluginClient.clearTimer(toastTimer);byId('toast').hidden=true;}}
 function showError(message,target='error'){
  const box=byId(target);box.textContent=message;box.hidden=false;notify(message,true);
  if(target==='keyError'){byId(byId('keyFile').files.length?'keyFile':'keyText').setAttribute('aria-invalid','true');box.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'});try{box.focus({preventScroll:true})}catch{box.focus()}}
@@ -132,6 +132,6 @@ byId('keyForm').onsubmit=async e=>{
  }catch(error){showError(error.message,'keyError');}finally{key='';importing=false;if(saved||type==='import_private')resetFile();}
 };
 byId('forgetKey').onclick=async()=>{if((await confirmAction('移除保存的公钥','只删除插件内的公钥和未领取的生成密钥包，不撤销当前登录授权，不关闭 SSH。')).ok)perform('forget_key');};
-window.addEventListener('unmount',()=>{clearTimeout(toastTimer);if(downloadURL)URL.revokeObjectURL(downloadURL);});
+window.addEventListener('unmount',()=>{window.XiaomiPluginClient.clearTimer(toastTimer);if(downloadURL)URL.revokeObjectURL(downloadURL);});
 perform('status');
 })();

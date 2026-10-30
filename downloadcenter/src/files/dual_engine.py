@@ -103,6 +103,12 @@ class DualManager(Manager):
             for t in result['tasks']:
                 if t.get('engine') == 'qbittorrent': t.update(downloadSpeed='0', uploadSpeed='0')
         result['running'] = all(e['running'] for e in result['engines'].values())
+        from service import live
+        result['supervisorRunning']=bool(live(self))
+        try:result['syncHealth']=json.loads((self.runtime/'sync-health.json').read_text())
+        except (OSError,ValueError):result['syncHealth']={}
+        result['sampledAt']=time.time()
+        if result['syncHealth']:result['error']=result['syncHealth'].get('message','同步异常')
         result['qbUpdate'] = self.qb_update_state()
         from lan_rpc import status as lan_status
         from service import live

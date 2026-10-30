@@ -25,7 +25,7 @@ PLUGIN_DATA = Path('/data/plugin')
 BACKUPS = Path('/data/minas/backups/privileged')
 SUDOERS = Path('/etc/sudoers.d')
 CRON = Path('/etc/cron.d')
-CORE_FILES = ('minas-helper', 'component_admin.py', 'common/privileged_runtime.py', 'common/component_admin.py', 'common/user_state_io.py', 'common/telemetry_cache.py')
+CORE_FILES = ('minas-helper', 'component_admin.py', 'common/privileged_runtime.py', 'common/component_admin.py', 'common/user_state_io.py', 'common/telemetry_cache.py', 'common/event_wait.py', 'common/maintenance_events.py')
 PRIVATE_FILES = {
  'dockermanager': ('docker-manager-helper',),
  'taskcenter': ('task-center-helper','task_schedule.py','task_maintenance.py'),
@@ -110,14 +110,29 @@ def update_cron(data):
     file = CRON / 'minas-privileged-v2'
     if plugins:
         text = 'SHELL=/bin/sh\nPATH=/usr/sbin:/usr/bin:/sbin:/bin:/data/docker\nMAILTO=""\n'
-        if 'taskcenter' in plugins:
-            text += '* * * * * root %s/minas-helper taskcenter tick >/dev/null 2>&1\n' % BASE
-        if 'sshrecovery' in plugins:
-            text += '* * * * * root %s/minas-helper sshrecovery prune >/dev/null 2>&1\n' % BASE
         if 'dockermanager' in plugins:
             text += '@reboot root %s/minas-helper boot >/dev/null 2>&1\n' % BASE
         atomic(file, text, 0o644)
     elif file.exists(): file.unlink()
+    install_event_service(plugins)
+
+
+
+def install_event_service(plugins):
+    if str(BASE) != '/data/minas/privileged': return  # isolated package tests
+    unit='minas-maintenance-events.service'
+    path=Path('/etc/systemd/system')/unit
+    if not plugins.intersection({'taskcenter','sshrecovery'}):
+        subprocess.run(['systemctl','disable','--now',unit],check=False,capture_output=True)
+        path.unlink(missing_ok=True)
+    else:
+        content='[Unit]\nDescription=NAS task deadlines and SSH material expiry\nAfter=local-fs.target\n[Service]\nType=simple\nExecStart=/usr/bin/python3 -I -B '+str(BASE)+'/common/maintenance_events.py\nRestart=on-failure\nRestartSec=15\nUMask=0077\n[Install]\nWantedBy=multi-user.target\n'
+        # -I excludes script directory: launch with a fixed, root-owned bootstrap.
+        content=content.replace('-I -B','-B')
+        atomic(path,content,0o644)
+        subprocess.run(['systemctl','daemon-reload'],check=True)
+        subprocess.run(['systemctl','enable',unit],check=True,capture_output=True)
+        subprocess.run(['systemctl','restart',unit],check=True,capture_output=True)
 
 
 def bundle(payload, plugin):
@@ -352,6 +367,7 @@ def main():
                 saved_cron = backup / ('cron-' + name)
                 if saved_cron.exists(): atomic(CRON / name, saved_cron.read_bytes(), 0o644)
                 elif (CRON / name).exists(): (CRON / name).unlink()
+            install_event_service({p for g in runtime.registry().get('users',{}).values() for p in g})
             raise
         finally:
             if args.action == 'install': shutil.rmtree(backup)

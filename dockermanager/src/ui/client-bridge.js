@@ -246,6 +246,58 @@
   global.XiaomiPluginClient = { request: request, document: document, openDialog: openDialog };
 })(window);
 
+/* BEGIN SHARED REQUEST LIFECYCLE */
+/* Scoped request/timer ownership; never persists a page heartbeat. */
+(function (global) {
+  'use strict';
+  var client=global.XiaomiPluginClient, doc=client.document, send=client.request;
+  var disposed=false, epoch=0, active=new Set(), timers=new Set(), waiting=new Set();
+  var reads=new Set(('status list templates details history files search check_code browse torrent_browse torrent_preview torrent_nas_preview detail logs overview overview_details smart processes process_network health_details container_list container_stats container_logs container_inspect container_upgrade_status container_bulk_status image_list network_list volume_list system_summary system_disk update_task_status node_test_status node_tests proxies providers rule_providers config subscription network_access core_status geodata_status docker_proxy_status transfers settings_get seed_cache_list').split(' '));
+  'network_access_status core_update_status manual_nodes subscription_status config_get node_test_list plugin_update_status credentials_get openlist_info bt_cache_list bt_cache_preview log resources schedule_preview cleanup_preview preview preview_relations preview_repair preview_undo'.split(' ').forEach(function(action){reads.add(action);});
+  function cancelled(){var e=new Error('页面已关闭或读取已取消');e.name='AbortError';e.code='REQUEST_CANCELLED';return e;}
+  client.setTimer=function(fn,delay){if(disposed)return 0;var id=global.setTimeout(function(){timers.delete(id);if(!disposed)fn();},delay);timers.add(id);return id;};
+  client.clearTimer=function(id){timers.delete(id);global.clearTimeout(id);};
+  client.request=function(settings){
+    if(disposed)return Promise.reject(cancelled());
+    var action=settings.action||'status', read=reads.has(action), start;
+    var visible=read&&doc.hidden?new Promise(function(resolve,reject){start={resolve:resolve,reject:reject};waiting.add(start);}):Promise.resolve();
+    return visible.then(function(){
+      if(disposed)throw cancelled();
+      var controller=new AbortController(), original=settings.options||{}, timer, external=original.signal;
+      var entry={controller:controller,read:read}, finished=false, generation=epoch, timedOut=false;
+      function abort(){controller.abort();}
+      function clean(){if(finished)return;finished=true;global.clearTimeout(timer);active.delete(entry);if(external)external.removeEventListener('abort',abort);}
+      if(external){if(external.aborted)abort();else external.addEventListener('abort',abort,{once:true});}
+      active.add(entry);
+      timer=global.setTimeout(function(){timedOut=true;abort();},settings.timeoutMs||(read?15000:120000));
+      var request=Object.assign({},settings,{options:Object.assign({},original,{signal:controller.signal})});
+      return send(request).then(function(response){
+        if(read&&(disposed||generation!==epoch)){clean();throw cancelled();}
+        ['text','json','blob','arrayBuffer'].forEach(function(method){
+          if(!response[method])return;
+          var consume=response[method].bind(response);
+          response[method]=function(){return consume().then(function(value){if(read&&(disposed||generation!==epoch))throw cancelled();return value;}).finally(clean);};
+        });
+        return response;
+      }).catch(function(error){clean();if(error.name==='AbortError'&&timedOut){error=new Error(read?'读取超时，请重试':'请求超时，请查询实际结果后再操作，勿重复提交');error.code='REQUEST_TIMEOUT';}throw error;});
+    });
+  };
+  function visibility(){
+    if(doc.hidden){epoch++;active.forEach(function(entry){if(entry.read)entry.controller.abort();});}
+    else {waiting.forEach(function(entry){entry.resolve();});waiting.clear();}
+  }
+  function dispose(){
+    disposed=true;timers.forEach(global.clearTimeout);timers.clear();
+    waiting.forEach(function(entry){entry.reject(cancelled());});waiting.clear();
+    active.forEach(function(entry){if(entry.read)entry.controller.abort();});
+    doc.removeEventListener('visibilitychange',visibility);
+    global.removeEventListener('unmount',dispose);global.removeEventListener('pagehide',dispose);
+  }
+  doc.addEventListener('visibilitychange',visibility);
+  global.addEventListener('unmount',dispose);global.addEventListener('pagehide',dispose);
+})(window);
+/* END SHARED REQUEST LIFECYCLE */
+
 /* BEGIN SHARED FORM CONTROLS */
 /* Shared scoped form controls. The native fields remain the source of truth. */
 (function (global) {
@@ -814,8 +866,8 @@
     '<div class="workbench-update-content"><div class="workbench-update-actions" data-update="actions"><button type="button" class="secondary" data-update="check">检查更新</button><button type="button" class="primary" data-update="install" disabled>立即更新</button></div>' +
     '<section class="workbench-update-confirm" data-update="confirm" aria-labelledby="' + plugin + '-confirm-heading" hidden><div class="workbench-confirm-heading"><span class="workbench-confirm-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5M5 16v4h14v-4"/></svg></span><div><h3 id="' + plugin + '-confirm-heading">准备更新插件</h3><p>更新至 <strong data-update="confirmVersion"></strong></p></div></div><p class="workbench-confirm-description">更新时，本插件服务可能短暂重启。<br>现有配置、任务和数据会保留。</p><div class="workbench-confirm-actions"><button type="button" class="secondary" data-update="cancelInstall">取消</button><button type="button" class="primary" data-update="confirmInstall">确认并更新</button></div></section><p class="workbench-update-error" data-update="error" role="alert" hidden></p>' +
     '<div class="workbench-update-versions"><div><span>当前版本</span><strong data-update="installed">—</strong></div><div><span>最新版本</span><strong data-update="latest">尚未检查</strong></div></div>' +
-    '<p data-update="hint">检查 GitHub 正式发布，更新会保留配置与任务。</p><pre class="workbench-update-notes" data-update="notes" hidden></pre>' +
-    '<div data-update="progressBlock" hidden><progress data-update="progress" max="100" value="0"></progress><p data-update="message" role="status" aria-live="polite"></p><ul class="workbench-update-log" data-update="logs" role="list"></ul></div>' +
+    '<section class="workbench-update-status" aria-label="更新状态"><div class="workbench-update-status-row"><p data-update="hint" role="status" aria-live="polite">检查 GitHub 正式发布，更新会保留配置与任务。</p><span class="workbench-update-package" data-update="package" hidden></span></div><progress data-update="progress" max="100" value="0" hidden></progress><details class="workbench-update-details" data-update="details" hidden><summary data-update="detailsLabel">检查详情</summary><ul class="workbench-update-log" data-update="logs" role="list"></ul></details></section>' +
+    '<pre class="workbench-update-notes" data-update="notes" hidden></pre>' +
     '<section class="workbench-update-proxy" aria-label="更新代理设置"><div class="workbench-proxy-heading"><div><h3>更新代理</h3><p>仅用于检查和下载安装包</p></div><label class="workbench-proxy-toggle"><input class="workbench-proxy-switch-input" type="checkbox" role="switch" aria-label="使用更新代理" data-update="proxyEnabled"><span class="workbench-proxy-switch-track" aria-hidden="true"></span></label></div>' +
     '<label class="workbench-proxy-address">代理地址<div class="workbench-proxy-endpoint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7"/></svg><input type="url" data-update="proxyUrl" placeholder="http://127.0.0.1:7890" autocomplete="off" spellcheck="false"></div></label>' +
     '<p class="workbench-proxy-help">支持 HTTP / HTTPS，八个插件共用此设置</p><details class="workbench-proxy-auth"><summary>代理认证<span>可选</span></summary><div class="workbench-update-auth"><label>用户名<input data-update="proxyUsername" placeholder="代理用户名" autocomplete="off"></label><label>密码<input type="password" data-update="proxyPassword" placeholder="代理密码" autocomplete="new-password"></label></div>' +
@@ -826,13 +878,6 @@
   dialog.querySelectorAll('[data-update]').forEach(function (node) { nodes[node.dataset.update] = node; });
   function error(message) { nodes.error.hidden = !message; nodes.error.textContent = message || ''; }
   function showConfirm(on) { nodes.confirm.hidden = !on; nodes.actions.hidden = on; }
-  function packageSize(bytes) {
-    if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes <= 0) return '大小未知';
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KiB';
-    if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(2) + ' MiB';
-    return (bytes / 1024 / 1024 / 1024).toFixed(2) + ' GiB';
-  }
   function working(on) {
     busy = on; nodes.check.disabled = on; nodes.saveProxy.disabled = on;
     nodes.install.disabled = on || proxyDirty || !state || !state.latest || !state.latest.available;
@@ -843,6 +888,14 @@
       if (!value.ok) throw new Error(value.error || '在线更新失败'); return value;
     });
   }
+  function packageSize(bytes) {
+    if (!Number.isSafeInteger(bytes) || bytes <= 0) return '大小未知';
+    var units = ['B', 'KB', 'MB', 'GB', 'TB'], unit = 0, size = bytes;
+    while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit++; }
+    // Round before selecting the final unit so boundary values never show 1024 KB.
+    if (unit && Math.round(size * 10) / 10 >= 1024 && unit < units.length - 1) { size /= 1024; unit++; }
+    return size.toLocaleString('zh-CN', {maximumFractionDigits:unit ? 1 : 0}) + ' ' + units[unit];
+  }
   function render(value, loadProxy) {
     state = value;
     var available = Boolean(value.latest && value.latest.available);
@@ -851,8 +904,9 @@
     opener.title = available ? '有新版本 ' + value.latest.version + '，点击更新' : '点击版本号检查更新';
     nodes.installed.textContent = value.installedVersion || '—'; nodes.latest.textContent = value.latest ? value.latest.version : '尚未检查';
     nodes.confirmVersion.textContent = value.latest ? value.latest.version : '';
-    nodes.hint.textContent = value.latest ? (value.latest.available ? '有新版本可用 · ' + packageSize(value.latest.size) : '当前已是最新版本') : '检查 GitHub 正式发布，更新会保留配置与任务。';
-    nodes.hint.title = value.latest && Number.isFinite(value.latest.size) && value.latest.size > 0 ? '安装包：' + value.latest.size.toLocaleString('zh-CN') + ' 字节' : '';
+    var hint = value.latest ? (available ? '有新版本可用' : '当前已是最新版本') : '检查 GitHub 正式发布，更新会保留配置与任务。';
+    nodes.package.hidden = !available;
+    nodes.package.textContent = available ? '安装包：' + packageSize(value.latest.size) : '';
     nodes.notes.textContent = value.latest ? value.latest.notes || '本次发布未提供更新说明。' : ''; nodes.notes.hidden = !value.latest;
     if (loadProxy && value.proxy) {
       nodes.proxyEnabled.checked = value.proxy.enabled; nodes.proxyUrl.value = value.proxy.url || ''; nodes.proxyUsername.value = value.proxy.username || '';
@@ -862,11 +916,15 @@
     if (!available || job.running) showConfirm(false);
     // Finished job directories are removed. Logs already seen by this window
     // remain in memory only, and are discarded when another task starts.
-    if (!liveJob || liveJob.id !== job.id) liveJob = {id:job.id, logs:[]};
+    if (!liveJob || liveJob.id !== job.id) { liveJob = {id:job.id, logs:[]}; nodes.details.open = false; }
     if (job.logs) liveJob.logs = job.logs;
+    nodes.hint.textContent = job.running ? (job.message || (job.action === 'install' ? '正在更新插件…' : '正在检查更新…')) :
+      (job.phase === 'failed' || job.phase === 'interrupted') ? '更新操作未完成，请查看错误信息' :
+      (job.action === 'install' && job.message ? job.message : hint);
     var logs = liveJob.logs.filter(function (item) { return item.message !== nodes.hint.textContent; });
     if (job.running && (job.action === 'check' || job.action === 'install')) backgroundWatch = true;
-    nodes.message.textContent = job.message || ''; nodes.message.hidden = !job.message || job.message === nodes.hint.textContent; nodes.progressBlock.hidden = !job.running && nodes.message.hidden && !logs.length; nodes.progress.hidden = !job.running; nodes.progress.value = job.percent || 0;
+    nodes.progress.hidden = !job.running; nodes.progress.value = job.percent || 0;
+    nodes.details.hidden = !logs.length; nodes.detailsLabel.textContent = job.action === 'install' ? '更新详情' : '检查详情';
     nodes.logs.replaceChildren(); logs.forEach(function (item) { var li = doc.createElement('li'); li.textContent = new Date(item.time * 1000).toLocaleTimeString() + ' · ' + item.message; nodes.logs.appendChild(li); });
     working(Boolean(job.running));
     if (!job.running) backgroundWatch = false;

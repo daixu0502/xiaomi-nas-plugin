@@ -478,10 +478,8 @@ def api(user, req):
                 public = {k: v for k, v in t.items() if k not in ('cleanupPreview', 'cleanupApproval')}
                 pending = retry_pending(state, t['id'])
                 tasks.append(dict(public, nextRun=next_time(t, time.time()), running=running(state, t['id']), retryAt=pending['retryAt'] if pending else None, cleanupApproved=t.get('cleanupApproval', {}).get('revision') == t['revision']))
-            try:
-                heartbeat = read_state(user, 'taskcenter', 'heartbeat.json') or {}
-                last_tick = heartbeat.get('at') if heartbeat.get('boot') == boot_id() and type(heartbeat.get('at')) in (int,float) and 0 <= time.time()-heartbeat['at'] < 600 else None
-            except (OSError, ValueError, subprocess.SubprocessError): last_tick = None
+            probe=subprocess.run(['systemctl','is-active','--quiet','minas-maintenance-events.service'],timeout=5,check=False)
+            last_tick=time.time() if probe.returncode==0 else None
             return {'tasks': tasks, 'runs': list(reversed(state['runs'])), 'scheduler': state['scheduler'], 'lastTick': last_tick, 'serverTime': time.time(), 'timezone': time.strftime('%Z %z'), 'poolReady': pool_ready()}
         if action == 'log':
             ident = valid_id(req.get('id'))

@@ -29,7 +29,7 @@ PLUGINS = {'mihomo', 'dockermanager', 'taskcenter', 'nascenter', 'sshrecovery', 
 SERVERS = {'mihomo', 'quickshare', 'downloadcenter'}
 MANAGED = SERVERS | {'taskcenter'}
 UNIT = 'minas-plugin-recovery-v2'
-VERSION = '1.6.9'
+VERSION = '1.6.11'
 WATCH_UNIT = UNIT + '-watch.service'
 RUNTIME = Path('/run/minas-plugin-recovery-v2')
 
@@ -220,7 +220,8 @@ def daemon_unit(user, plugin):
 
 
 def memory_download(home):
-    try:return tuple(int(n) for n in json.loads((home/'INFO').read_text())['version'].split('.')) >= (1,1,21)
+    minimum={'downloadcenter':(1,1,21),'quickshare':(1,1,73),'mihomo':(1,7,74)}
+    try:return home.name in minimum and tuple(int(n) for n in json.loads((home/'INFO').read_text())['version'].split('.')) >= minimum[home.name]
     except (OSError,ValueError,KeyError):return False
 
 
@@ -232,7 +233,7 @@ if home.is_symlink() or home.parent.is_symlink():raise ValueError('redirected pl
 link=home/'tmp'
 if not link.is_symlink():raise ValueError('official cache link required')
 base=link.resolve(strict=True)
-match=re.fullmatch(r'/nas/(pool[0-9]+)/'+home.parts[2]+r'/plugin/plugintmp/downloadcenter',str(base))
+match=re.fullmatch(r'/nas/(pool[0-9]+)/'+home.parts[2]+r'/plugin/plugintmp/'+home.name,str(base))
 if not match or not os.path.ismount('/nas/'+match[1]):raise ValueError('pool unavailable')
 if base.stat().st_uid!=os.geteuid():raise ValueError('cache owner mismatch')
 directory=base/'runtime'
@@ -247,19 +248,31 @@ sock.sendmsg([b'runtime'],[(socket.SOL_SOCKET,socket.SCM_RIGHTS,array.array('i',
 '''
 
 
-def download_runtime(user, operation='prepare'):
+def download_runtime(user, operation='prepare', plugin='downloadcenter'):
     require(operation in ('prepare','release'), 'invalid runtime operation')
-    home,owner=identity(user,'downloadcenter')
+    require(plugin in SERVERS, 'invalid runtime plugin')
+    home,owner=identity(user,plugin)
     require(owner[0]!=0, 'ordinary plugin user required')
     if os.readlink('/proc/self/ns/mnt')!=os.readlink('/proc/1/ns/mnt'):
         def host_namespace():
             fd=os.open('/proc/1/ns/mnt',os.O_RDONLY)
             try:require(ctypes.CDLL(None,use_errno=True).setns(fd,0)==0, 'host namespace unavailable')
             finally:os.close(fd)
-        subprocess.run([sys.executable,'-B','-','runtime','--user',user,'--plugin','downloadcenter','--operation',operation],input=Path(__file__).read_bytes(),preexec_fn=host_namespace,check=True,timeout=30)
+        subprocess.run([sys.executable,'-B','-','runtime','--user',user,'--plugin',plugin,'--operation',operation],input=Path(__file__).read_bytes(),preexec_fn=host_namespace,check=True,timeout=30)
         return
     protected(RUNTIME)
-    with open(plain(RUNTIME/'download-runtime.lock'),'a') as lock:
+    if plugin == 'downloadcenter' and operation == 'prepare':
+        # qB samples its default destination every 30s even without torrents.
+        # All managed jobs supply persistent destinations. This empty, root-owned
+        # RAM directory rejects accidental implicit downloads; it stores no data.
+        guard=Path('/run/minas-download-default')
+        guard.mkdir(mode=0o555,exist_ok=True)
+        meta=guard.lstat()
+        require(stat.S_ISDIR(meta.st_mode) and meta.st_uid==0 and not meta.st_mode&0o222,'unsafe download default guard')
+        guard.chmod(0o555)
+        libc=ctypes.CDLL(None,use_errno=True);buf=ctypes.create_string_buffer(256)
+        require(libc.statfs(os.fsencode(guard),buf)==0 and ctypes.c_long.from_buffer(buf).value==0x01021994,'download default guard requires RAM filesystem')
+    with open(plain(RUNTIME/(plugin+'-runtime.lock')),'a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
         parent,child=socket.socketpair();parent.settimeout(10);process=None;fd=None
         try:
@@ -279,8 +292,9 @@ def download_runtime(user, operation='prepare'):
             if operation=='release':
                 require(not mounted or libc.umount2(target,2)==0,'cannot release runtime')
             elif not mounted:
-                options=('size=96m,mode=0700,uid=%d,gid=%d'%owner).encode()
-                require(libc.mount(b'minas-download-runtime',target,b'tmpfs',2|4|8,options)==0,'cannot mount memory runtime')
+                size=96 if plugin=='downloadcenter' else 24
+                options=('size=%dm,mode=0700,uid=%d,gid=%d'%(size,*owner)).encode()
+                require(libc.mount(('minas-'+plugin+'-runtime').encode(),target,b'tmpfs',2|4|8,options)==0,'cannot mount memory runtime')
         finally:
             parent.close();child.close()
             if fd is not None:os.close(fd)
@@ -304,7 +318,7 @@ def install_daemon(user, plugin):
         'Environment=MINAS_SERVICE_MANAGED=1 PYTHONDONTWRITEBYTECODE=1 PLUG_USER=' + user +
         ' PLUG_HOME_DIR=' + str(home) + ' PLUG_SRC_DIR=' + str(home / 'src') + '\n'
         'WorkingDirectory=' + str(home) + '\nPIDFile=' + str(home / 'tmp/runtime' / pidfile) + '\n' +
-        ('ExecStartPre=+/usr/bin/python3 -B '+str(BASE/'recovery.py')+' runtime --user '+user+' --plugin downloadcenter --operation prepare\n' if plugin=='downloadcenter' and memory_download(home) else '') +
+        ('ExecStartPre=+/usr/bin/python3 -B '+str(BASE/'recovery.py')+' runtime --user '+user+' --plugin '+plugin+' --operation prepare\n' if memory_download(home) else '') +
         'ExecStart=/bin/sh ' + str(home / 'scripts/control') + ' start\n'
         'ExecStop=/bin/sh ' + str(home / 'scripts/control') + ' stop\n'
         # Explicit systemctl stop (including user/lifecycle stops) suppresses
@@ -366,8 +380,8 @@ def service_operation(user, plugin, operation):
         action = operation.removeprefix('lifecycle-')
         result = call(['systemctl', action, unit], check=False)
         require(result.returncode == 0, '服务操作失败，请查看服务日志：' + unit)
-        if plugin=='downloadcenter' and operation=='lifecycle-stop' and memory_download(identity(user,plugin)[0]):
-            download_runtime(user,'release')
+        if operation=='lifecycle-stop' and memory_download(identity(user,plugin)[0]):
+            download_runtime(user,'release',plugin)
     return 0
 
 
@@ -1315,7 +1329,7 @@ def forget(user, plugin):
         unit = Path('/etc/systemd/system') / daemon_unit(user, plugin)
         if unit.is_file():
             call(['systemctl', 'stop', unit.name])
-            if plugin=='downloadcenter' and memory_download(Path('/home')/user/'plugin'/plugin):download_runtime(user,'release')
+            if memory_download(Path('/home')/user/'plugin'/plugin):download_runtime(user,'release',plugin)
             unit.unlink()
             call(['systemctl', 'daemon-reload'])
         for path in (Path('/etc/sudoers.d') / ('minas-service-' + user + '-' + plugin),
@@ -1354,8 +1368,8 @@ def main():
     # reacquire it. Timer/Cron use a nonblocking lock and retry on the next tick.
     with contextlib.ExitStack() as stack:
         if args.action=='runtime':
-            require(args.plugin=='downloadcenter' and args.user and args.operation in ('prepare','release'),'invalid runtime identity')
-            download_runtime(args.user,args.operation)
+            require(args.plugin in SERVERS and args.user and args.operation in ('prepare','release'),'invalid runtime identity')
+            download_runtime(args.user,args.operation,args.plugin)
             return
         if args.action in ('reconcile', 'bootstrap'):
             lock = stack.enter_context(open(plain(Path('/data/plugin/.local-plugin-installer.lock')), 'a'))

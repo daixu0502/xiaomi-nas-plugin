@@ -108,13 +108,13 @@ def service_list(user):
    state='active' if status and all(value=='active' for value in status) else 'failed' if 'failed' in status else 'inactive'
   row={'id':key,'name':item['label'],'state':state}
   if key=='downloadcenter':
-   cores={}
-   for core,file in [('aria2','rpc.port'),('qbittorrent','qb.port')]:
-    try:
-     port=int((Path('/home')/user/'plugin/downloadcenter/var'/file).read_text())
-     if not 1024<=port<=65535:raise ValueError('port')
-     with socket.create_connection(('127.0.0.1',port),timeout=.2):cores[core]=True
-    except (OSError,ValueError):cores[core]=False
+   cores={'aria2':False,'qbittorrent':False}
+   home=Path('/home')/user/'plugin/downloadcenter'
+   probe="import sys,json;from pathlib import Path;h=Path(sys.argv[1]);sys.path.insert(0,str(h/'src/files'));from dual_engine import DualManager;m=DualManager(h,(h/'src').resolve().parent.parent.parent/'data');r={};\nfor k,fn in [('aria2',lambda:m.rpc('getVersion')),('qbittorrent',lambda:m.qb.request('app/version'))]:\n try:fn();r[k]=True\n except Exception:r[k]=False\nprint(json.dumps(r))"
+   try:
+    readiness=subprocess.run(['/usr/bin/python3','-B','-c',probe,str(home)],env=plugin_environment(user,home),preexec_fn=demote_user(user),capture_output=True,text=True,timeout=15,check=False)
+    if readiness.returncode==0:cores.update(json.loads(readiness.stdout))
+   except (OSError,ValueError,subprocess.TimeoutExpired):pass
    row['cores']=cores
    if state=='active' and not all(cores.values()):row['state']='degraded'
   result.append(row)
@@ -213,7 +213,9 @@ def restart_service(user,key):
   proc=subprocess.run([str(control),'restart'],env=env,preexec_fn=demote_user(user),stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=45,check=False)
  else:proc=run(['systemctl','restart',*item['units']],45)
  if proc.returncode:fail(item['label']+' 重启失败')
- return {'ok':True,'service':key,'state':'active'}
+ row=next((v for v in service_list(user) if v['id']==key),{'state':'unknown'})
+ return {'ok':True,'service':key,'state':row['state'],'sampledAt':time.time(),
+         'message':item['label']+(' 已重启并复核状态' if row['state']=='active' else ' 重启命令已完成，当前状态：'+row['state'])}
 def drop_caches():
  before=meminfo().get('MemAvailable',0);run(['sync'],30)
  Path('/proc/sys/vm/drop_caches').write_text('3\n');time.sleep(.5);after=meminfo().get('MemAvailable',0)

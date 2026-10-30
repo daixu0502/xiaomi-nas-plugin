@@ -40,7 +40,8 @@ class QB:
 
     def request(self, path, data=None, raw=None, content_type=None, binary=False, retry=True):
         try:
-            port = int((self.m.var / 'qb.port').read_text())
+            if not hasattr(self,'_port'): self._port=int((self.m.var/'qb.port').read_text())
+            port=self._port
             url = 'http://127.0.0.1:%d' % port
             headers = {'Referer': url + '/', 'Origin': url}
             if self.cookie:
@@ -53,7 +54,8 @@ class QB:
                 if body is not None:
                     headers['Content-Type'] = 'application/x-www-form-urlencoded'
             request = Request(url + '/api/v2/' + path, body, headers)
-            with build_opener(ProxyHandler({})).open(request, timeout=3) as response:
+            if not hasattr(self, '_opener'): self._opener = build_opener(ProxyHandler({}))
+            with self._opener.open(request, timeout=3) as response:
                 value = response.read(12 * 1024 * 1024 + 1)
                 if len(value) > 12 * 1024 * 1024:
                     raise DownloadError('qBittorrent 返回数据过大')
@@ -158,10 +160,17 @@ class QB:
                             'WebUI\\ServerDomains': '127.0.0.1;localhost', 'WebUI\\UseUPnP': 'false',
                             'Connection\\UPnP': 'false'},
             'BitTorrent': {'Session\\DHTEnabled': 'false', 'Session\\LSDEnabled': 'false',
+                          # DHT/control traffic also dirties aggregate statistics.
+                          # Save these counters on clean shutdown, never by timer;
+                          # torrent resume checkpoints remain independently enabled.
+                          'Session\\SaveStatisticsInterval': '0',
                           'Session\\PeXEnabled': str(self.m.settings()['pex']).lower(),
                           'Session\\Port': (self.m.var / 'peer.port').read_text().strip(),
                           'Session\\InterfaceAddress': '' if self.m.settings()['ipv6'] else '0.0.0.0',
-                          'Session\\DefaultSavePath': str(self.m.var / 'qb-incomplete'),
+                          # No managed request relies on this implicit fallback.
+                          # Root prepares an empty read-only RAM guard; payload and
+                          # metadata destinations remain explicit persistent paths.
+                          'Session\\DefaultSavePath': '/run/minas-download-default',
                           'Session\\DisableAutoTMMByDefault': 'true',
                           'Session\\Preallocation': 'false'},
         }
@@ -186,6 +195,7 @@ class QB:
                 'max_seeding_time_enabled': True, 'max_seeding_time': s['seedMinutes'],
                 'max_ratio_act': 0, 'preallocate_all': False, 'incomplete_files_ext': False,
                 'temp_path_enabled': False, 'auto_tmm_enabled': False, 'save_resume_data_interval': 15,
+                'save_statistics_interval': 0,
                 **self.tracker_preferences(s), 'web_ui_upnp': False}
 
     def tracker_preferences(self, settings=None):

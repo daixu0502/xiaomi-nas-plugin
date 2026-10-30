@@ -22,9 +22,9 @@ var document = window.XiaomiPluginClient.document;
     if (state.state === 'error') message = (state.command === 'apply' ? '更新失败：' : '检查失败：') + (state.message || '请稍后重试。');
     if (el.textContent !== message) el.textContent = message;
   }
-  function toast(message, error = false) { $('toast').textContent = message; $('toast').classList.toggle('error', error); clearTimeout(toast.timer); toast.timer = setTimeout(() => { $('toast').textContent = ''; }, 6000); }
+  function toast(message, error = false) { $('toast').textContent = message; $('toast').classList.toggle('error', error); window.XiaomiPluginClient.clearTimer(toast.timer); toast.timer = window.XiaomiPluginClient.setTimer(() => { $('toast').textContent = ''; }, 6000); }
   async function api(action, data = {}) {
-    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 25000);
+    const controller = new AbortController(), timer = window.XiaomiPluginClient.setTimer(() => controller.abort(), 25000);
     try {
       const response = await window.XiaomiPluginClient.request({ plugin: 'downloadcenter', cgi: 'downloadcenter.cgi', action,
         options: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal: controller.signal } });
@@ -32,7 +32,7 @@ var document = window.XiaomiPluginClient.document;
       try { result = JSON.parse(raw); } catch (_) { throw new Error('设备返回了无法解析的数据，请重新打开插件；不要重复提交下载'); }
       if (!response.ok || !result.ok) throw new Error(result.error || '设备请求失败');
       return result;
-    } finally { clearTimeout(timer); }
+    } finally { window.XiaomiPluginClient.clearTimer(timer); }
   }
   async function busy(button, fn) { if (button.disabled) return; button.disabled = true; button.setAttribute('aria-busy', 'true'); try { await fn(); } catch (e) { toast(e.name === 'AbortError' ? '请求超时，请刷新确认结果后再操作' : e.message, true); } finally {
     const jobButtons = { pauseAll: 'pause', resumeAll: 'resume', clearHistory: 'clear' };
@@ -130,7 +130,7 @@ var document = window.XiaomiPluginClient.document;
     try {
       const packet = await api('status',{includeSettings:!snapshot||fresh||page==='settings'||page==='trackers'});
       snapshot = {...packet,settings:packet.settings||snapshot?.settings}; const s = snapshot;
-      $('health').textContent = s.running ? '运行中' : s.enabled ? '等待启动' : '已停止'; $('health').className = 'badge ' + (s.running ? 'enabled' : s.enabled ? 'warning' : 'stopped');
+      $('health').textContent = s.syncHealth?.failures ? '同步异常' : !s.supervisorRunning && s.enabled ? '调度未就绪' : s.running ? '运行中' : s.enabled ? '等待启动' : '已停止'; $('health').className = 'badge ' + (s.running ? 'enabled' : s.enabled ? 'warning' : 'stopped');
       $('qbEngineVersion').textContent = 'qBittorrent ' + (s.engines?.qbittorrent?.version || '未连接') + ' · BT／磁链';
       $('ariaEngineVersion').textContent = 'aria2 ' + (s.engineVersion || '未连接') + ' · 直链';
       $('version').textContent = '插件版本 ' + s.version; $('down').textContent = bytes(s.stats.downloadSpeed) + '/s'; $('up').textContent = bytes(s.stats.uploadSpeed) + '/s'; $('count').textContent = s.tasks.filter(t => live.includes(t.status)).length; $('free').textContent = bytes(s.free);
@@ -547,7 +547,7 @@ var document = window.XiaomiPluginClient.document;
   async function loadDetail() { const d = await api('detail', { id: detailId, offset: detailOffset }); detailCount = d.fileCount; $('detailTitle').textContent = d.name; $('detailSummary').textContent = pathLabel(d.directory) + ' · 连接 ' + (d.connections || 0) + ' · 种子 ' + (d.numSeeders || 0); $('detailError').textContent = d.errorMessage || ''; d.files.forEach(f => { if (fileEdits.has(f.index)) f.selected = fileEdits.get(f.index) ? 'true' : 'false'; }); fileRows($('detailFiles'), d.files, (i, checked) => fileEdits.set(i, checked), d.status === 'paused' && d.isBT); $('saveFiles').disabled = d.status !== 'paused' || !d.isBT; $('prevFiles').disabled = detailOffset === 0; $('nextFiles').disabled = detailOffset + 200 >= detailCount; $('filePage').textContent = Math.floor(detailOffset / 200) + 1 + ' / ' + Math.max(1, Math.ceil(detailCount / 200)); $('detailTrackers').textContent = d.trackers.flat().join('\n') || '无（也可通过 DHT 发现节点）'; }
   $('prevFiles').onclick = () => busy($('prevFiles'), async () => { detailOffset = Math.max(0, detailOffset - 200); await loadDetail(); }); $('nextFiles').onclick = () => busy($('nextFiles'), async () => { detailOffset += 200; await loadDetail(); });
   $('saveFiles').onclick = () => busy($('saveFiles'), async () => { const chosen = []; for (let offset = 0; offset < detailCount; offset += 200) { const d = await api('detail', { id: detailId, offset }); d.files.forEach(f => { if (fileEdits.has(f.index) ? fileEdits.get(f.index) : f.selected !== 'false') chosen.push(f.index); }); } await api('select_files', { id: detailId, selected: chosen }); toast('文件选择已保存，可继续任务'); await loadDetail(); });
-  async function poll() { if (stopped) return; if (!document.hidden) await refresh(); if (!stopped) setTimeout(poll, 4000); }
+  async function poll() { if (stopped) return; if (!document.hidden) await refresh(); if (!stopped) window.XiaomiPluginClient.setTimer(poll, 4000); }
   window.addEventListener('pagehide', () => { stopped = true; }); window.addEventListener('unmount', () => { stopped = true; });
   poll();
 })();

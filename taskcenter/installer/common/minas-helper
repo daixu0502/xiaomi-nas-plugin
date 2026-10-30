@@ -67,6 +67,9 @@ def main():
             if caller not in (None, 'root'):
                 raise ValueError('禁止调用内部启动模式')
             time.sleep(60)
+            if (runtime.BASE/'modules/dockermanager/docker-manager-helper').is_file():
+                with runtime.docker_transaction():
+                    load('minas_docker_recover','docker-manager-helper').recover_upgrade()
             for user, plugins in runtime.registry().get('users', {}).items():
                 runtime.account(user)
                 if 'dockermanager' in plugins:
