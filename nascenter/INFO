@@ -2,7 +2,7 @@
   "plugin": "nascenter",
   "name": "控制中心",
   "id": 19093,
-  "version": "1.1.72",
+  "version": "1.1.73",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "性能、硬盘健康、网络和服务管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "统一安装、更新和恢复的原厂校验环境，修复中文 locale 导致的校验失败；完善权限、摘要及临时目录诊断，更新回退后保留失败原因；修复关机批量停用被误记为用户停用，保留服务自启与手动停用状态",
+  "changelog": "修复检查更新后安装包大小总显示为 0.1 MiB；按大小自动显示 B、KiB、MiB 或 GiB，并提供精确字节数；保留原有签名、大小及摘要验证",
   "system": false,
-  "size": 226236,
+  "size": 226788,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

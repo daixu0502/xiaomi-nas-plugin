@@ -761,6 +761,13 @@
   var nodes = {}, timer = 0, disposed = false, busy = false, state = null, proxyDirty = false, requestSerial = 0, backgroundWatch = false, liveJob = null;
   dialog.querySelectorAll('[data-update]').forEach(function (node) { nodes[node.dataset.update] = node; });
   function error(message) { nodes.error.hidden = !message; nodes.error.textContent = message || ''; }
+  function packageSize(bytes) {
+    if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes <= 0) return '大小未知';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KiB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / 1024 / 1024).toFixed(2) + ' MiB';
+    return (bytes / 1024 / 1024 / 1024).toFixed(2) + ' GiB';
+  }
   function working(on) {
     busy = on; nodes.check.disabled = on; nodes.saveProxy.disabled = on;
     nodes.install.disabled = on || proxyDirty || !state || !state.latest || !state.latest.available;
@@ -778,7 +785,8 @@
     opener.setAttribute('aria-label', available ? '有新版本 ' + value.latest.version + '，点击版本号更新插件' : '查看插件版本并检查更新');
     opener.title = available ? '有新版本 ' + value.latest.version + '，点击更新' : '点击版本号检查更新';
     nodes.installed.textContent = value.installedVersion || '—'; nodes.latest.textContent = value.latest ? value.latest.version : '尚未检查';
-    nodes.hint.textContent = value.latest ? (value.latest.available ? '有新版本可用 · ' + (value.latest.size / 1024 / 1024).toFixed(1) + ' MiB' : '当前已是最新版本') : '检查 GitHub 正式发布，更新会保留配置与任务。';
+    nodes.hint.textContent = value.latest ? (value.latest.available ? '有新版本可用 · ' + packageSize(value.latest.size) : '当前已是最新版本') : '检查 GitHub 正式发布，更新会保留配置与任务。';
+    nodes.hint.title = value.latest && Number.isFinite(value.latest.size) && value.latest.size > 0 ? '安装包：' + value.latest.size.toLocaleString('zh-CN') + ' 字节' : '';
     nodes.notes.textContent = value.latest ? value.latest.notes || '本次发布未提供更新说明。' : ''; nodes.notes.hidden = !value.latest;
     if (loadProxy && value.proxy) {
       nodes.proxyEnabled.checked = value.proxy.enabled; nodes.proxyUrl.value = value.proxy.url || ''; nodes.proxyUsername.value = value.proxy.username || '';
