@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='downloadcenter'
 PLUGIN_LABEL='下载中心'
-PLUGIN_VERSION='1.1.53'
+PLUGIN_VERSION='1.1.54'
 UNINSTALL_NOTE='停止所选用户下载服务；配置、种子和任务记录先备份。已下载及未完成文件均保留，不影响其他用户。'
 
 # Common installation flow adapted from the existing standalone plugins.
@@ -552,9 +552,7 @@ chown -h "$USER_NAME:$(id -gn "$USER_NAME")" "$WEB_LINK"; chmod 0755 "$SRC/ui"
 runuser -u "$USER_NAME" -- "$SRC/files/aria2c" --version >/dev/null || nas_fail "下载核心不能运行"
 runuser -u "$USER_NAME" -- "$SRC/files/qbittorrent-nox" --version >/dev/null || nas_fail "qBittorrent 不能运行"
 # Exercise the exact check used at boot, before enabling the plugin.
-runuser -u "$USER_NAME" -- env PLUG_USER="$USER_NAME" PLUG_NAME=downloadcenter PLUG_SRC_DIR="$SRC" \
-    PLUG_HOME_DIR="$HOME_DIR" PLUG_TMP_DIR="$TMP" PLUG_STATUS=unverified \
-    /usr/bin/plugin.sh verify || nas_fail "系统完整性校验失败，未启动；请保留暂存目录用于排查。"
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" verify --user "$NAS_USER" --plugin "$PLUGIN_NAME" || nas_fail "系统完整性校验失败，未启动；请查看上方原厂校验诊断。"
 # Register supervision before the first service start, also on a clean NAS.
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture --user "$USER_NAME" --plugin "$PLUGIN_NAME" --package "$INSTALLER_DIR/$PLUGIN_NAME" || nas_fail "规范校验或恢复登记失败"
 if [ "$WAS_ENABLED" = true ]; then

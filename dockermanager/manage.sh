@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='dockermanager'
 PLUGIN_LABEL='docker'
-PLUGIN_VERSION='1.1.45'
+PLUGIN_VERSION='1.1.46'
 UNINSTALL_NOTE='保留 Docker 引擎、容器、镜像、网络和存储卷。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -588,7 +588,7 @@ if [ "$WAS_ENABLED" = true ]; then plugincenter -u "$PLUGIN_USER" -p "$PLUGIN_NA
 
 echo "docker $PLUGIN_VERSION 已安装。"
 echo "APP 插件清单：$LIST_FILE"
-runuser -u "$PLUGIN_USER" -- env PLUG_USER="$PLUGIN_USER" PLUG_NAME="$PLUGIN_NAME" PLUG_HOME_DIR="$PLUGIN_HOME" PLUG_SRC_DIR="$SRC_DIR" PLUG_TMP_DIR="$TMP_DIR" PLUG_STATUS=unverified /usr/bin/plugin.sh verify || nas_fail "系统完整性校验失败"
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" verify --user "$NAS_USER" --plugin "$PLUGIN_NAME" || nas_fail "系统完整性校验失败；请查看上方原厂校验诊断。"
 rm -f "$backup_file"
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture --user "$PLUGIN_USER" --plugin "$PLUGIN_NAME" --package "$INSTALLER_DIR/$PLUGIN_NAME" || nas_fail "规范校验或恢复登记失败"
 NAS_INSTALL_SCRIPT

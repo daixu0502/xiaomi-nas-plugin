@@ -23,6 +23,7 @@ import re
 import shlex
 import shutil
 import signal
+import socket
 import stat
 import subprocess
 import sys
@@ -124,6 +125,10 @@ def rebase_data_text(text):
 def require(condition, message):
     if not condition:
         raise RuntimeError(message)
+
+
+class ContainerRestoreError(RuntimeError):
+    """The verified engine is healthy; individual workloads need attention."""
 
 
 def plain(path):
@@ -660,6 +665,39 @@ def runtime_selection():
     return result
 
 
+def startup_running(row):
+    if row['State']['Running']:
+        return True
+    # A factory daemon may attempt a published HostIp before DHCP is ready.
+    # Do not snapshot that failed autostart as an explicit user stop.
+    if row['State'].get('Error') and row['HostConfig']['RestartPolicy'].get('Name') in ('always','unless-stopped'):
+        path=DATA/'containers'/row['Id']/'config.v2.json'
+        return path.is_file() and read(path).get('HasBeenManuallyStopped') is False
+    return False
+
+
+def wait_container_addresses(state, timeout=60):
+    addresses=set()
+    for item in state['before']['containers']:
+        if not item['running']:continue
+        path=DATA/'containers'/item['id']/'hostconfig.json'
+        if not path.is_file():continue
+        for bindings in read(path).get('PortBindings',{}).values():
+            for binding in bindings or []:
+                address=binding.get('HostIp','')
+                if address not in ('','0.0.0.0','::'):addresses.add(address)
+    deadline=time.monotonic()+timeout
+    while addresses:
+        for address in list(addresses):
+            try:
+                with socket.socket(socket.AF_INET6 if ':' in address else socket.AF_INET,socket.SOCK_STREAM) as probe:
+                    probe.bind((address,0))
+                addresses.remove(address)
+            except OSError:pass
+        if not addresses or time.monotonic()>=deadline:return
+        time.sleep(1)
+
+
 def repair_startup(folder,state,automatic=False):
     """Reconcile cached factory units; never restore or roll back Docker data."""
     require(state['phase']=='installed','仅已成功安装的升级事务允许开机校正')
@@ -693,7 +731,7 @@ def repair_startup(folder,state,automatic=False):
                     '未完成校正后的容器集合已改变，请先评估状态')
         else:
             plan=dict(id=state['id'],phase='captured',bootId=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),before=dict(containers=[
-                dict(id=row['Id'],running=row['State']['Running'],restart=row['HostConfig']['RestartPolicy']) for row in rows]))
+                dict(id=row['Id'],running=startup_running(row),restart=row['HostConfig']['RestartPolicy']) for row in rows]))
     else:
         ids={p.name for p in (DATA/'containers').iterdir() if p.is_dir()}
         require(pending and ids=={row['id'] for row in plan['before']['containers']},'离线校正的容器集合已改变')
@@ -707,13 +745,19 @@ def repair_startup(folder,state,automatic=False):
             running=docker('ps','-q','--no-trunc').stdout.split()
             if running:docker('stop','--time','30',*running,timeout=180)
         stop_engine();require_data_environment(state)
-        start_engine(new=True);verify_engine(plan)
+        start_engine(new=True);verify_engine(plan,startup=True)
         plan['phase']='complete';atomic(plan_file,plan)
         return dict(changed=True,**runtime_selection())
-    except BaseException:
+    except ContainerRestoreError as error:
+        # Do not take every healthy workload down because one application has
+        # an invalid network/port. Engine integrity errors still fail closed.
+        plan.update(phase='complete',containerErrors=str(error),time=int(time.time()))
+        atomic(plan_file,plan)
+        return dict(changed=True,containersRestored=False,containerErrors=str(error),**runtime_selection())
+    except BaseException as error:
         # Preserve data and desired container states for explicit retry.
         # rollback() must never run here: it would restore old engine metadata.
-        plan['phase']='failed';atomic(plan_file,plan)
+        plan.update(phase='failed',error=str(error),time=int(time.time()));atomic(plan_file,plan)
         guards(True)
         run(['systemctl','stop','docker.socket','docker.service'],check=False,timeout=180)
         raise
@@ -743,15 +787,47 @@ def restore_policies(state, new=False):
         docker('update','--restart='+value,item['id'],new=new)
 
 
-def restore_running(state, new=False):
+def startup_order(wanted):
+    """Start default-bridge link targets before their dependent containers."""
+    names,hosts={},{}
+    for ident in wanted:
+        folder=DATA/'containers'/ident
+        if (folder/'config.v2.json').is_file():
+            names[read(folder/'config.v2.json').get('Name','').lstrip('/')]=ident
+        hosts[ident]=read(folder/'hostconfig.json') if (folder/'hostconfig.json').is_file() else {}
+    dependencies={ident:{names[link.split(':',1)[0].lstrip('/')] for link in hosts[ident].get('Links') or []
+                         if link.split(':',1)[0].lstrip('/') in names} for ident in wanted}
+    order=[]
+    while dependencies:
+        ready=sorted(ident for ident,needs in dependencies.items() if not needs.intersection(dependencies))
+        # A cyclic or invalid application dependency must not block other apps.
+        if not ready:order.extend(sorted(dependencies));break
+        for ident in ready:order.append(ident);del dependencies[ident]
+    return order
+
+
+def restore_running(state, new=False, startup=False):
     before = state['before']['containers']; wanted = {c['id'] for c in before if c['running']}
     current = set(docker('ps','-q','--no-trunc',new=new).stdout.split())
     for ident in sorted(current-wanted): docker('stop','--time','30',ident,new=new,timeout=120)
-    restore_policies(state,new)
-    for ident in sorted(wanted-current): docker('start',ident,new=new,timeout=120)
+    if not startup:restore_policies(state,new)
+    errors=[]
+    if startup:
+        wait_container_addresses(state)
+        # Restore every policy even when a different container cannot start.
+        for item in before:
+            try:restore_policies(dict(before=dict(containers=[item])),new)
+            except (RuntimeError,OSError,subprocess.SubprocessError) as error:errors.append(item['id']+': '+str(error))
+    for ident in startup_order(wanted-current) if startup else sorted(wanted-current):
+        try:docker('start',ident,new=new,timeout=120)
+        except (RuntimeError,OSError,subprocess.SubprocessError) as error:
+            if not startup:raise
+            errors.append(ident+': '+str(error))
     actual = set(docker('ps','-q','--no-trunc',new=new).stdout.split())
-    require(actual == wanted, '容器运行集合与升级前不一致')
     require(set(docker('ps','-aq','--no-trunc',new=new).stdout.split()) == {c['id'] for c in before}, '容器数量或 ID 发生变化')
+    if startup and (errors or actual!=wanted):
+        raise ContainerRestoreError('部分容器未恢复：'+'; '.join(errors or sorted(wanted ^ actual)))
+    require(actual == wanted, '容器运行集合与升级前不一致')
 
 
 def start_engine(new=False):
@@ -766,7 +842,7 @@ def start_engine(new=False):
     raise RuntimeError('Docker 启动后未能就绪')
 
 
-def verify_engine(state):
+def verify_engine(state, startup=False):
     info = json.loads(docker('info','--format','{{json .}}',new=True).stdout)
     require(info['ServerVersion'] == VERSION and info['Driver'] == 'overlay2' and info['DockerRootDir'] == str(DATA), '升级后版本或存储模式不符')
     pid = int(run(['systemctl','show','docker.service','-p','MainPID','--value']).stdout)
@@ -776,7 +852,7 @@ def verify_engine(state):
     require(all(exe.startswith(str(RUNTIME)+'/') for _,exe in processes), '新旧容器运行时混用')
     # Legacy CLI is used by the factory NAS and existing plugins.
     require(json.loads(docker('version','--format','{{json .Server}}').stdout)['Version'] == VERSION, '原厂客户端 API 无法连接新引擎')
-    restore_running(state,new=True)
+    restore_running(state,new=True,startup=startup)
 
 
 def backup_data(folder, state):
@@ -1155,7 +1231,7 @@ def boot_reconcile(ident):
                 selection=runtime_selection()
                 if selection['serverVersion'] is None:raise RuntimeError('等待 Docker 开机接口')
                 result=repair_startup(folder,state,automatic=True)
-                atomic(BASE/'startup-last.json',dict(id=ident,ok=True,time=int(time.time()),
+                atomic(BASE/'startup-last.json',dict(id=ident,ok=result.get('containersRestored',True),time=int(time.time()),
                        bootId=Path('/proc/sys/kernel/random/boot_id').read_text().strip(),**result))
                 print(json.dumps(result,ensure_ascii=False));return
         except (RuntimeError,OSError,ValueError,subprocess.SubprocessError) as error:

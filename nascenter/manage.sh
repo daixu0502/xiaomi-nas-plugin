@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='nascenter'
 PLUGIN_LABEL='控制中心'
-PLUGIN_VERSION='1.1.71'
+PLUGIN_VERSION='1.1.72'
 UNINSTALL_NOTE='保留被管理的系统服务及用户文件。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -487,7 +487,7 @@ python3 "$P/installer/common/component_admin.py" install --plugin "$name" --user
 chown "$u:$(id -gn "$u")" "$tmp"
 chown -R "$u:$u" "$home" "$src";chown -h "$u:$u" "$home/src" "$home/tmp" "$web";chmod 0700 "$home" "$src";chmod 0755 "$src/ui"
 printf '{"action":"overview","pluginUser":"%s"}' "$u"|runuser -u "$u" -- sudo -n "$helper" nascenter|jq -e '.ok==true'>/dev/null||{ echo '错误：控制中心自检失败'>&2;exit 1;};if [ "$was_enabled" = true ];then plugincenter -u "$u" -p "$name" enable>/dev/null 2>&1||true;fi
-runuser -u "$u" -- env PLUG_USER="$u" PLUG_NAME="$name" PLUG_HOME_DIR="$home" PLUG_SRC_DIR="$src" PLUG_TMP_DIR="$tmp" PLUG_STATUS=unverified /usr/bin/plugin.sh verify || nas_fail "系统完整性校验失败"
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" verify --user "$NAS_USER" --plugin "$PLUGIN_NAME" || nas_fail "系统完整性校验失败；请查看上方原厂校验诊断。"
 rm -f "$backup"
 echo "控制中心 $version 已安装；完整性校验通过，安装暂存备份已清理。"
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture --user "$PLUGIN_USER" --plugin "$PLUGIN_NAME" --package "$INSTALLER_DIR/$PLUGIN_NAME" || nas_fail "规范校验或恢复登记失败"

@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='sshrecovery'
 PLUGIN_LABEL='SSH 恢复'
-PLUGIN_VERSION='1.1.50'
+PLUGIN_VERSION='1.1.51'
 UNINSTALL_NOTE='仅删除所选用户的插件及恢复材料；不关闭 SSH，不移除已安装的登录公钥。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -608,30 +608,7 @@ jq -n --arg mpk "$home/INFO" --slurpfile f "$src/ui/config" --slurpfile i "$home
 next=$(mktemp "${NAS_LIST%/*}/.sshrecovery-registry.XXXXXXXX")
 jq --slurpfile e "$backup/entry" '.sshrecovery=$e[0]' "$NAS_LIST" > "$next"
 chmod --reference="$NAS_LIST" "$next"; chown --reference="$NAS_LIST" "$next"; mv -f "$next" "$NAS_LIST"
-if ! runuser -u "$NAS_USER" -- env PLUG_USER="$NAS_USER" PLUG_NAME="$PLUGIN_NAME" PLUG_HOME_DIR="$home" \
-    PLUG_SRC_DIR="$src" PLUG_TMP_DIR="$NAS_TMP" PLUG_STATUS=unverified /usr/bin/plugin.sh verify; then
-    # Diagnose with the same user as the firmware verifier. No file content,
-    # credentials or private keys are printed, and the real check is not skipped.
-    runuser -u "$NAS_USER" -- /usr/bin/python3 -B - "$home" "$src" "$NAS_TMP" "$abstract" <<'SSH_VERIFY_DIAGNOSTIC' || true
-import hashlib,json,os,sys
-from pathlib import Path
-home,src,tmp=map(Path,sys.argv[1:4]);expected=sys.argv[4]
-result={'homeReadable':os.access(home/'INFO',os.R_OK),'sourceAccessible':os.access(src,os.R_OK|os.X_OK),'temporaryWritable':os.access(tmp,os.W_OK|os.X_OK)}
-try:
-    paths=[]
-    def failed(error):raise error
-    for folder,_,names in os.walk(src,followlinks=False,onerror=failed):
-        for name in names:
-            p=Path(folder)/name
-            if p.is_file() and not p.is_symlink():paths.append(p)
-    digest=hashlib.sha256()
-    for p in sorted(paths,key=lambda p:os.fsencode(str(p))):digest.update((hashlib.sha256(p.read_bytes()).hexdigest()+'\n').encode())
-    result.update(sourceFiles=len(paths),digestMatches=digest.hexdigest()==expected)
-except OSError as error:result['accessError']=str(error)
-print('[校验诊断] '+json.dumps(result,ensure_ascii=False))
-SSH_VERIFY_DIAGNOSTIC
-    nas_fail "系统源码校验未通过；已保留原厂校验，请查看上方访问权限与摘要诊断。"
-fi
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" verify --user "$NAS_USER" --plugin "$PLUGIN_NAME" || nas_fail "系统源码校验未通过；请查看上方原厂校验诊断。"
 python3 -B "$P/installer/common/component_admin.py" install --plugin "$PLUGIN_NAME" --user "$NAS_USER" --payload "$P" --plugin-version "$PLUGIN_VERSION"
 # Reuse the SSH module's root path validation and atomic writer for the private key copy.
 python3 -B - <<'SSH_HOST_SNAPSHOT'

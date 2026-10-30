@@ -29,7 +29,7 @@ PLUGINS = {'mihomo', 'dockermanager', 'taskcenter', 'nascenter', 'sshrecovery', 
 SERVERS = {'mihomo', 'quickshare', 'downloadcenter'}
 MANAGED = SERVERS | {'taskcenter'}
 UNIT = 'minas-plugin-recovery-v2'
-VERSION = '1.6.7'
+VERSION = '1.6.9'
 WATCH_UNIT = UNIT + '-watch.service'
 RUNTIME = Path('/run/minas-plugin-recovery-v2')
 
@@ -175,7 +175,9 @@ def source_path(home, user, plugin):
 def digest(src):
     result = hashlib.sha256()
     files = []
-    for parent, dirs, names in os.walk(src, followlinks=False):
+    def failed(error):
+        raise error
+    for parent, dirs, names in os.walk(src, followlinks=False, onerror=failed):
         for name in names:
             path = Path(parent) / name
             if stat.S_ISREG(path.lstat().st_mode):
@@ -460,13 +462,23 @@ def native_intents():
 
 
 def parse_native_intents(output):
-    pending, intents = {}, {}
+    pending, intents, lifecycle = {}, {}, set()
     for line in output.splitlines():
         try:
             row = json.loads(line)
             if not isinstance(row, dict):
                 continue
             message, pid = row.get('MESSAGE', ''), row.get('SYSLOG_PID', row.get('_PID'))
+            # Firmware shutdown/unmount runs do_disable for every plugin in a
+            # pool, with the same per-plugin success lines as a user toggle.
+            # The leading batch marker identifies that process as lifecycle.
+            # Keep earlier genuine toggles and ignore every member of the batch.
+            if re.search(r'\[do_(?:enable|disable):[0-9]+\] start to (?:disbale|disable|enable) .* plugin in pool ', message):
+                lifecycle.add(pid)
+                pending.pop(pid, None)
+                continue
+            if pid is None or pid in lifecycle:
+                continue
             started = re.search(r'\[do_(enable|disable):[0-9]+\] (u[0-9]+) (enable|disable) plugin ([a-z0-9]+)$', message)
             if started:
                 if started[1] == started[3] and started[4] in PLUGINS:
@@ -628,8 +640,96 @@ def port_registry(user, plugin, port, remove=False):
             save(path, data)
 
 
-def verify(user, plugin, home, src):
-    call(['runuser', '-u', user, '--', '/usr/bin/plugin.sh', 'verify'], environment=env(user, plugin, home, src))
+class VerificationError(ValueError):
+    """Credential-free, structured failure shared by installer/update/recovery."""
+    def __init__(self, diagnostic):
+        self.diagnostic = diagnostic
+        super().__init__('原厂校验失败：' + json.dumps(diagnostic, ensure_ascii=False, sort_keys=True))
+
+
+VERIFY_LOCALE = {'LC_ALL': 'C', 'LC_COLLATE': 'C', 'LANG': 'C'}
+VERIFY_DIAGNOSTIC = r'''
+import hashlib,json,os,stat,sys
+from pathlib import Path
+home,src,tmp=map(Path,sys.argv[1:4])
+result=dict(homeReadable=os.access(home/'INFO',os.R_OK),
+            sourceAccessible=os.access(src,os.R_OK|os.X_OK),temporaryWritable=os.access(tmp,os.W_OK|os.X_OK))
+try:
+    expected=json.loads((home/'INFO').read_bytes()).get('abstract')
+    paths=[]
+    def failed(error):raise error
+    for parent,dirs,names in os.walk(src,followlinks=False,onerror=failed):
+        for name in names:
+            path=Path(parent)/name
+            if stat.S_ISREG(path.lstat().st_mode):paths.append(path)
+    digest=hashlib.sha256()
+    for path in sorted(paths,key=lambda p:os.fsencode(str(p))):
+        part=hashlib.sha256()
+        with path.open('rb') as stream:
+            for block in iter(lambda:stream.read(1024*1024),b''):part.update(block)
+        digest.update((part.hexdigest()+'\n').encode())
+    # Firmware uses shell word splitting and glob expansion, not a safe read
+    # loop. Report names it cannot verify, without printing source contents.
+    unsupported=sum(any(ch in str(p) for ch in ' \t\r\n*?[') for p in paths)
+    result.update(sourceFiles=len(paths),unsupportedFileNames=unsupported,
+                  expectedDigest=expected if isinstance(expected,str) and len(expected)==64 and all(c in '0123456789abcdef' for c in expected) else None,
+                  calculatedDigest=digest.hexdigest(),digestMatches=digest.hexdigest()==expected)
+except OSError as error:result.update(diagnosticError=type(error).__name__,errno=error.errno)
+except (ValueError,TypeError):result['diagnosticError']='invalid INFO'
+print(json.dumps(result))
+'''
+
+
+def verification_environment(user, plugin, home, src, temporary=None):
+    environment = env(user, plugin, home, src)
+    environment.update(VERIFY_LOCALE, PATH='/usr/sbin:/usr/bin:/sbin:/bin')
+    if temporary is not None:
+        environment['PLUG_TMP_DIR'] = str(temporary)
+    return environment
+
+
+def verify(user, plugin, home, src, temporary=None):
+    environment = verification_environment(user, plugin, home, src, temporary)
+    # Set the locale after runuser/PAM too. Never change the login environment,
+    # use PLUG_STATUS=installing to rewrite INFO, or replace the factory check.
+    command = ['runuser', '-u', user, '--', '/usr/bin/env',
+               *[key+'='+value for key,value in VERIFY_LOCALE.items()], '/usr/bin/plugin.sh', 'verify']
+    failure = None
+    try:
+        result = call(command, environment=environment, check=False)
+        if result.returncode == 0:
+            return
+        code, stdout, stderr = result.returncode, result.stdout, result.stderr
+    except (OSError, subprocess.TimeoutExpired) as error:
+        code, stdout, stderr = None, b'', b''
+        failure = type(error).__name__
+    diagnostic = dict(plugin=plugin, user=user, verifier='/usr/bin/plugin.sh',
+                      exitCode=code, effectiveLocale=VERIFY_LOCALE.copy(),
+                      inheritedLocale={key:os.environ.get(key,'')[:120] for key in VERIFY_LOCALE},
+                      stdoutBytes=len(stdout or b''), stderrBytes=len(stderr or b''))
+    if failure:
+        diagnostic['executionError'] = failure
+    try:
+        probe = call(['runuser','-u',user,'--','/usr/bin/python3','-I','-B','-c',VERIFY_DIAGNOSTIC,
+                      home,src,environment['PLUG_TMP_DIR']], environment=environment,check=False)
+        if probe.returncode == 0:
+            value = json.loads(probe.stdout)
+            if isinstance(value,dict):diagnostic.update(value)
+        else:diagnostic['diagnosticExitCode'] = probe.returncode
+    except (OSError,ValueError,subprocess.TimeoutExpired) as error:
+        diagnostic['diagnosticError'] = type(error).__name__
+    if not diagnostic.get('homeReadable',True) or not diagnostic.get('sourceAccessible',True):
+        reason = '插件用户无法访问 INFO 或源码目录'
+    elif not diagnostic.get('temporaryWritable',True):reason = '插件用户不能写入原厂校验临时目录'
+    elif diagnostic.get('diagnosticError'):reason = '无法完整读取源码或 INFO，未将不完整扫描当作有效摘要'
+    elif diagnostic.get('unsupportedFileNames'):reason = '源码文件名包含原厂校验器不支持的空白或通配字符'
+    elif diagnostic.get('digestMatches') is False:reason = '源码摘要与 INFO 不一致'
+    elif diagnostic.get('sourceFiles') == 0:reason = '源码目录没有普通文件'
+    else:reason = '独立摘要检查不能代替原厂结果；请查看 journalctl -t plugin.sh 中的 verify 记录'
+    diagnostic['reason'] = reason
+    # Raw subprocess output may include user-controlled names. Expose only
+    # selected metadata; both CLI and updater retain this structured detail.
+    raise VerificationError(diagnostic)
 
 
 def install_units():
@@ -917,11 +1017,10 @@ def restore_locked_record(directory, intents=None, check_source=True):
         port_registry(user, plugin, expected_info['port'])
         # Merge exactly one entry; all official/other-user entries remain intact.
         if repair:
-            # A reconstructed installation is registered enabled, like a fresh
-            # install. Its separately saved daemon/scheduler intent is retained.
-            record['enabled'] = True
-            record['entry'].update(enable=True, status='running', changetime=int(time.time()))
-            record['intent_time'] = max(record.get('intent_time', 0), time.time())
+            # Restoring files is not a new user enable action. Preserve both
+            # the native toggle and the separate daemon/scheduler intent.
+            record['entry'].update(enable=record['enabled'],
+                                   status='running' if record['enabled'] else 'disable')
             save(saved / 'record.json', record)
         entry = dict(record['entry'], enable=record['enabled'])
         if data.get(plugin) != entry:
@@ -1227,7 +1326,7 @@ def forget(user, plugin):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('capture', 'normalize', 'reconcile', 'bootstrap', 'forget', 'status', 'service', 'watch','runtime'))
+    parser.add_argument('action', choices=('capture', 'normalize', 'reconcile', 'bootstrap', 'forget', 'status', 'service', 'watch','runtime','verify'))
     parser.add_argument('--user')
     parser.add_argument('--plugin', choices=sorted(PLUGINS))
     parser.add_argument('--package', '--payload', dest='payload', type=Path)
@@ -1235,6 +1334,11 @@ def main():
     parser.add_argument('--operation', choices=('start', 'stop', 'restart', 'status', 'lifecycle-start', 'lifecycle-stop', 'update-start', 'update-stop', 'update-finish','prepare','release'))
     args = parser.parse_args()
     require(os.geteuid() == 0, 'root required')
+    if args.action=='verify':
+        require(args.user and args.plugin,'user/plugin required for verification')
+        home, _ = identity(args.user,args.plugin)
+        verify(args.user,args.plugin,home,source_path(home,args.user,args.plugin))
+        return
     if args.action=='status':
         directory=BASE
         if not directory.exists():return

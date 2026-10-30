@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='mediaeditor'
 PLUGIN_LABEL='影视编辑'
-PLUGIN_VERSION='1.1.25'
+PLUGIN_VERSION='1.1.26'
 UNINSTALL_NOTE='不修改官方影视库，受保护的编辑备份与历史保留在 /data/minas/plugins/data/<账号>/mediaeditor/protected/。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -487,7 +487,7 @@ python3 "$P/installer/common/component_admin.py" install --plugin "$name" --user
 chown "$u:$(id -gn "$u")" "$tmp"
 chown -R "$u:$u" "$home" "$src";chown -h "$u:$u" "$home/src" "$home/tmp" "$web";chmod 0700 "$home" "$src";chmod 0755 "$src/ui"
 printf '{"action":"status","pluginUser":"%s"}' "$u"|runuser -u "$u" -- sudo -n "$helper" mediaeditor|jq -e '.ok==true'>/dev/null||{ echo '错误：影视编辑自检失败'>&2;exit 1;};if [ "$was_enabled" = true ];then plugincenter -u "$u" -p "$name" enable>/dev/null 2>&1||true;fi
-runuser -u "$u" -- env PLUG_USER="$u" PLUG_NAME="$name" PLUG_HOME_DIR="$home" PLUG_SRC_DIR="$src" PLUG_TMP_DIR="$tmp" PLUG_STATUS=unverified /usr/bin/plugin.sh verify || nas_fail "系统完整性校验失败"
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" verify --user "$NAS_USER" --plugin "$PLUGIN_NAME" || nas_fail "系统完整性校验失败；请查看上方原厂校验诊断。"
 rm -f "$backup"
 echo "影视编辑 $version 已安装；完整性校验通过，安装暂存备份已清理。"
 python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" capture --user "$PLUGIN_USER" --plugin "$PLUGIN_NAME" --package "$INSTALLER_DIR/$PLUGIN_NAME" || nas_fail "规范校验或恢复登记失败"

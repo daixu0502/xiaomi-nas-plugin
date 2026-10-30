@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='quickshare'
 PLUGIN_LABEL='文件快传'
-PLUGIN_VERSION='1.1.70'
+PLUGIN_VERSION='1.1.71'
 UNINSTALL_NOTE='停止该用户的分享服务，现有分享链接失效；分享记录先备份，已上传的用户文件保留。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -527,7 +527,7 @@ fi
 
 echo "文件快传 $PLUGIN_VERSION 已安装，局域网服务：http://设备IP:$PORT"
 echo "APP 插件清单：$LIST"
-runuser -u "$PLUGIN_USER" -- env PLUG_USER="$PLUGIN_USER" PLUG_NAME="$PLUGIN_NAME" PLUG_HOME_DIR="$HOME_DIR" PLUG_SRC_DIR="$SRC" PLUG_TMP_DIR="$TMP" PLUG_STATUS=unverified /usr/bin/plugin.sh verify || nas_fail "系统完整性校验失败"
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" verify --user "$NAS_USER" --plugin "$PLUGIN_NAME" || nas_fail "系统完整性校验失败；请查看上方原厂校验诊断。"
 rm -f "$backup"
 # Preserve the native entry flag independently of its background service.
 exec 9>"/data/plugin/.$PLUGIN_USER.plugins.lock"; flock -x 9

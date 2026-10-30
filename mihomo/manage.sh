@@ -4,7 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME='mihomo'
 PLUGIN_LABEL='Mihomo'
-PLUGIN_VERSION='1.7.71'
+PLUGIN_VERSION='1.7.72'
 UNINSTALL_NOTE='卸载会停止该用户的代理；若 Docker 正使用此代理，会撤销它并重启 Docker。其他用户插件和普通文件保留。'
 
 # Shared frontend; keep this section consistent across the four manage.sh files.
@@ -860,7 +860,7 @@ echo "APP 插件清单：$LIST_FILE"
 echo "配置文件：$ETC_DIR/config.yaml"
 echo "代理端口：$MIXED_PORT；控制端口：$CONTROLLER_PORT"
 echo "运行日志：$PLUGIN_HOME/tmp/runtime/mihomo.log"
-runuser -u "$PLUGIN_USER" -- env PLUG_USER="$PLUGIN_USER" PLUG_NAME="$PLUGIN_NAME" PLUG_HOME_DIR="$PLUGIN_HOME" PLUG_SRC_DIR="$SRC_DIR" PLUG_TMP_DIR="$TMP_DIR" PLUG_STATUS=unverified /usr/bin/plugin.sh verify || nas_fail "系统完整性校验失败"
+python3 -B "$INSTALLER_DIR/$PLUGIN_NAME/installer/recovery/recovery.py" verify --user "$NAS_USER" --plugin "$PLUGIN_NAME" || nas_fail "系统完整性校验失败；请查看上方原厂校验诊断。"
 rm -f "$backup_file"
 # Preserve the native entry flag independently of its background service.
 exec 9>"/data/plugin/.$PLUGIN_USER.plugins.lock"; flock -x 9

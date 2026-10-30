@@ -27,7 +27,7 @@ import urllib.request
 import uuid
 
 sys.dont_write_bytecode = True
-VERSION = '1.0.6'
+VERSION = '1.0.7'
 REPOSITORY = 'daixu0502/xiaomi-nas-plugin'
 BASE = Path('/data/minas/plugins/updater')
 RECOVERY = Path('/data/minas/plugins/recovery')
@@ -621,7 +621,7 @@ def remove_finished_jobs(directory, queue_locked=False):
             if any((job / name).exists() for name in ('package.tar.gz', 'package', 'rollback.tar.gz', 'backup')):
                 continue
             if current.get('id') == job.name:
-                result = {key: state[key] for key in ('id', 'action', 'phase', 'message', 'percent', 'updatedAt', 'installedVersion') if key in state}
+                result = {key: state[key] for key in ('id', 'action', 'phase', 'message', 'percent', 'updatedAt', 'installedVersion', 'verification') if key in state}
                 result['running'] = False
                 current = dict(result=result)
                 save(directory / 'current.json', current)
@@ -714,7 +714,12 @@ def transaction(user, plugin, archive, payload, job):
             journal['state'] = 'committed'
             save(job / 'journal.json', journal)
             report(job, 'complete', '更新完成，请关闭插件窗口后重新打开', 100, installedVersion=info['version'], running=False)
-        except BaseException:
+        except BaseException as error:
+            diagnostic = getattr(error, 'diagnostic', None)
+            if isinstance(diagnostic, dict):
+                # Preserve the original verifier failure even if rollback
+                # encounters a different error while restoring old files.
+                save(job / 'verification-failure.json', diagnostic)
             report(job, 'rollback', '更新失败，正在恢复上一版本', 90)
             rollback(job, journal)
             raise
@@ -835,11 +840,15 @@ def worker(user, plugin, job_id):
             journal = read(job / 'journal.json', {})
             # Root-only diagnostics contain stack frames, never request bodies,
             # local variable values, proxy settings or authentication headers.
-            save(job / 'failure.json', dict(type=type(error).__name__, trace=''.join(traceback.format_exception(type(error), error, error.__traceback__))[-6000:]))
+            diagnostic = getattr(error, 'diagnostic', None) or read(job / 'verification-failure.json', None)
+            save(job / 'failure.json', dict(type=type(error).__name__, trace=''.join(traceback.format_exception(type(error), error, error.__traceback__))[-6000:],
+                                           verification=diagnostic if isinstance(diagnostic,dict) else None))
             message = str(error) if isinstance(error, ValueError) else '更新失败，请查看升级记录或通过 SSH 检查'
+            if isinstance(diagnostic,dict):
+                message = '原厂校验失败：'+diagnostic.get('reason','请查看升级记录')+'（退出码 '+str(diagnostic.get('exitCode'))+'）'
             if journal.get('state') == 'rolled_back':
                 message += '；已恢复上一版本'
-            report(job, 'failed', message[:400], 0, running=False)
+            report(job, 'failed', message[:400], 0, running=False,verification=diagnostic if isinstance(diagnostic,dict) else None)
         finally:
             # Only root-owned updater records are pruned; user caches are never
             # accessed as root. Interrupted transactions remain recoverable.
