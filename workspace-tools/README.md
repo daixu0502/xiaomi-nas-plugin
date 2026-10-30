@@ -1,41 +1,80 @@
-# 统一源码仓库构建工具
+# 构建与维护工具
 
-从 `xiaomi-nas-plugin/` 根目录执行。构建不再依赖父工作区或七个旧仓库。
+所有命令从项目根目录执行，使用本 Windows 工作区对应的 WSL/Linux 路径。
 
-```sh
-python workspace-tools/prepare-spec-release.py
-python workspace-tools/sync-plugin-runtime.py
-python workspace-tools/sync-privileged-component.py
-python workspace-tools/build_plugin_packages.py
-# 单个插件：
-python workspace-tools/build_plugin_packages.py mihomo
-```
+## 分类
 
-各插件版本唯一维护在各自根目录 `INFO` 的 `version` 字段；构建自动运行 `sync_versions.py`，同步安装器、界面和接口版本。公共组件版本取自对应维护源的 VERSION 常量，同步副本及摘要。不存在仓库级版本配置；安装包包含自身 INFO 与生成结果，可独立复制安装。单独运行 `python3 workspace-tools/sync_versions.py --check` 可只检查生成文件。目录名必须与插件 ID 一致。`prepare-spec-release.py` 用于标准布局元数据和图标准备，普通版本更新无需运行它。普通工具与共有代码只同步自本仓库维护源，私有模块保持在插件所属位置。
+| 目录 | 用途 |
+| --- | --- |
+| `build/` | 完整离线套件、单插件包和签名发布清单；GitHub 发布工具 |
+| `sync/` | 从 INFO、公共运行库、界面模板同步生成文件 |
+| `checks/` | 签名套件审计、源码检查、本地回归入口、Git 测试排除规则 |
+| `icons/` | 插件图标生成源码 |
+| `nas/` | SSH、Docker 网络、Docker 升级、清理工具源码与构建器 |
+| `tests/` | 仅本地保留的回归测试及夹具，不加入 Git 或安装包 |
+| `private/` | 本地签名、缓存、备份、历史资料、工作树，不加入 Git 或安装包 |
 
-构建输出根 `dist/`，并同步 `package-manifest.json`、本目录的同名清单和 `dist/SHA256SUMS`。构建检查元数据、恢复代码同步、公共组件摘要、缓存工具与包内容，不打包测试、依赖、缓存和运行数据。
+公共安装、权限、恢复、更新和共享 UI 的维护源在 [plugins/common/](../plugins/common/README.md)。成品独立脚本在 [scripts/](../scripts/README.md)。
 
-SSH 开机修复脚本版本独立维护在 `sshrecovery/installer/common/modules/sshrecovery/restore-ssh.sh` 的 `SSH_RECOVERY_VERSION`，不随插件 INFO 版本变化。运行 `python -X utf8 nas-root/tools/ssh/build.py --boot-installer-only` 可同步独立 worker 并生成开机安装器，其标题、帮助与内嵌脚本使用同一个版本源。
+## 同步源码
 
-Linux/WSL 本地检查：
-
-```sh
-python3 -B -m unittest discover -s workspace-tools/tests -p test_install_packages.py
-python3 -B -m unittest discover -s workspace-tools/tests -p test_cgi_descriptor.py
-sh workspace-tools/run-source-integrity-regressions.sh
-```
-
-恢复测试与权限组件测试要求隔离的 root 测试环境；仅操作测试创建的临时目录，不连接 NAS：
+插件版本只在 `plugins/<插件>/INFO` 中修改；同步和重复构建不会自动递增版本。组件有实际代码变更时，分别修改对应 VERSION 常量。不要替换内核版本、协议版本或历史版本记录。
 
 ```sh
-python3 -B -m unittest discover -s workspace-tools/tests -p test_plugin_recovery.py
-python3 -B -m unittest discover -s workspace-tools/tests -p test_privileged_component.py
+python3 -B workspace-tools/sync/sync-plugin-runtime.py
+python3 -B workspace-tools/sync/sync_data_layout.py
+python3 -B workspace-tools/sync/sync-plugin-updater.py
+python3 -B workspace-tools/sync/sync-ui-controls.py
+python3 -B workspace-tools/sync/sync-privileged-component.py
+python3 -B workspace-tools/sync/sync_versions.py --check
 ```
 
-`audit-common-component-packages.py` 检查七包权限组件边界；`audit-plugin-integrity.py` 是 NAS 上的只读源码审计。`source_policy.py` 检查未来仓库索引是否混入测试。测试和固件参考测试夹具保持本地，不上传 GitHub。
+`prepare-spec-release.py` 用于初始化标准元数据与图标，不是普通版本更新的必需步骤。`sync-plugin-updater.py --check` 和 `sync-ui-controls.py --check` 检查共享副本是否一致。
 
-历史定向部署、旧 GitHub 多仓库发布脚本、NAS/WSL 实例信息和旧仓库元数据留在父工作区，不属于新仓库的部署入口。恢复服务和真机验收边界见 [根说明](../README.md)。
+## 构建与检查
 
-## 在线更新维护
+```sh
+python3 -B workspace-tools/build/build_suite.py --release v2026.10.30.3
+python3 -B workspace-tools/checks/audit-suite.py
+sh workspace-tools/checks/run-source-integrity-regressions.sh
+```
 
-八插件的代理设置、签名发布、中断恢复和维护命令见 [在线更新组件](plugin-updater/README.md)。构建前运行 `python -B workspace-tools/sync-plugin-updater.py` 和 `python -B workspace-tools/sync-ui-controls.py`，再执行标准打包。Release 附件使用根 `dist/` 中的标准包，构建产物不加入 Git 索引。
+构建默认读取 `workspace-tools/private/signing/private.pem`。已有公钥必须能验证该私钥的签名；不会自动创建或更换密钥。固定内核缓存位于 `workspace-tools/private/cache/offline-cores/`，缺失时按源码固定地址下载并校验摘要；缓存齐全后可在隔离网络中构建。构建暂存也在该私有缓存目录。
+
+产物在根 `dist/`，插件清单只生成根 `package-manifest.json`；套件和组件信息分别在 `dist/suite-artifacts.json`、`suite-manifest.json`。发布时只保留本次清单列出的最新安装包，禁止把旧包混进附件。
+
+本地回归在隔离的 root Linux/WSL 环境执行，不连接 NAS；测试只操作临时目录。签名套件审计验证八插件、组件依赖、文件归属，以及在线更新与离线安装内容一致。源码审计工具 `checks/audit-plugin-integrity.py` 供 NAS root 只读使用。真机验收范围见 [记录](../plugins/common/manager/VALIDATION.md)。
+
+## 独立脚本构建
+
+```sh
+python3 -B workspace-tools/nas/ssh/build.py
+python3 -B workspace-tools/nas/docker-bridge/build.py
+python3 -B workspace-tools/nas/docker-upgrade/build.py
+python3 -B workspace-tools/nas/data-layout/build.py
+```
+
+输出覆盖 `scripts/` 中对应成品；固件 1.0.8.425 的旧开启脚本仍保留独立实现。SSH worker 版本源是 SSH 插件私有模块里的 `SSH_RECOVERY_VERSION`，`--boot-installer-only` 只同步 worker 并构建开机修复安装器。
+
+## 发布
+
+先同步源码、完成本地检查，在独立工作树提交并推送本次源码，然后指定确切提交和未使用的标签：
+
+```sh
+python3 -B workspace-tools/build/publish-plugin-release.py \
+  --tag v2026.10.30.3 --target 完整源码提交SHA \
+  --signing-key workspace-tools/private/signing/private.pem --publish
+```
+
+不加 `--publish` 只构建和签名。发布前逐文件核对附件和提交的 Git blob；先上传草稿，确认附件大小和摘要后公开。凭据通过既有 Git 授权或环境变量读取，不写入源码。旧更新器不支持新包格式，须先通过根安装器切换；已切换的 2.0.0 更新器可按依赖下载本次更新。
+
+## 本地资料
+
+- `private/signing/`：已有发布签名材料。
+- `private/cache/`：通过固定摘要核验的离线内核。
+- `private/backups/manager-acceptance-20261030/`：真机切换前完整备份及验收证据，包含受保护材料。
+- `private/backups/unified-installer-baseline-20261030.tar.gz`：旧更新器兼容测试基线。
+- `private/history/`：压缩归档的历史维护记录，不是部署入口。
+- `private/worktrees/`：保留未提交内容的旧工作树。
+
+不把密钥、设备配置、完整备份、测试、缓存或工作树打入安装包，不重新创建根 local/。

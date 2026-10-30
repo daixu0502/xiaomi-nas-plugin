@@ -1,0 +1,10 @@
+{
+  "format": 2,
+  "plugin": "taskcenter",
+  "privileged": true,
+  "service": false,
+  "dependencies": [
+    "/sbin/shutdown"
+  ],
+  "ports": []
+}

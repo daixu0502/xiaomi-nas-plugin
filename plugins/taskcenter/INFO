@@ -1,0 +1,20 @@
+{
+  "plugin": "taskcenter",
+  "name": "定时任务",
+  "id": 19094,
+  "version": "1.0.52",
+  "tags": [
+    "tool"
+  ],
+  "timestamp": 1793367073,
+  "desc": "可视化任务计划与执行记录",
+  "developer": "daixu0502",
+  "publisher": "Local",
+  "changelog": "统一离线安装与在线更新；重装保留数据和启停状态，普通卸载彻底删除插件数据。",
+  "system": false,
+  "size": 213265,
+  "port": "",
+  "type": "standard",
+  "forceupgrade": false,
+  "ext": {}
+}

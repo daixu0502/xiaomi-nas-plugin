@@ -7,14 +7,11 @@
 
 # Local distribution, instance data and generated package catalogs.
 /dist/
-/local/
 /package-manifest.json
-/workspace-tools/package-manifest.json
-/workspace-tools/history/
+/workspace-tools/private/
 
 # Standalone NAS maintenance sources are part of this repository.
-tools/
-!/nas-root/tools/
+# Tool sources under workspace-tools/ are maintained and publishable.
 # Tests and generated artifacts at any depth stay local.
 tests/
 __tests__/
@@ -41,6 +38,8 @@ node_modules/
 .deps/
 .build/
 build/
+!/workspace-tools/build/
+!/workspace-tools/build/**
 target/
 .venv/
 venv/
@@ -54,9 +53,9 @@ __pycache__/
 *.egg-info/
 
 # Downloaded runtime engines; installed from verified upstream packages.
-/*/src/files/mihomo
-/downloadcenter/src/files/aria2c
-/downloadcenter/src/files/qbittorrent-nox
+/plugins/*/src/files/mihomo
+/plugins/downloadcenter/src/files/aria2c
+/plugins/downloadcenter/src/files/qbittorrent-nox
 
 # Archives, temporary files and runtime state.
 *.tar

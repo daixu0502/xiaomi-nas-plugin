@@ -1,0 +1,20 @@
+{
+  "plugin": "mediaeditor",
+  "name": "影视编辑",
+  "id": 19100,
+  "version": "1.1.31",
+  "tags": [
+    "tool"
+  ],
+  "timestamp": 1793367072,
+  "desc": "官方影视代码搜索、系列归属修正与批量集数编辑",
+  "developer": "daixu0502",
+  "publisher": "Local",
+  "changelog": "统一离线安装与在线更新；重装保留数据和启停状态，普通卸载彻底删除插件数据。",
+  "system": false,
+  "size": 300890,
+  "port": "",
+  "type": "standard",
+  "forceupgrade": false,
+  "ext": {}
+}

@@ -1,16 +1,50 @@
-# 七插件统一源码仓库
+# 八插件统一仓库协作约定
 
-- 本目录是七插件后续 GitHub 上传、开发和提交的唯一源码来源，不再分别使用七个旧插件仓库，不用旧 WSL 副本覆盖本目录。七个插件子目录不建立嵌套 Git 仓库。
-- 插件源码在各插件 ID 同名目录（如 `dockermanager/`、`mihomo/`）；公共构建与检查在 `workspace-tools/`。共有权限代码维护源为 `workspace-tools/privileged-component/`，各插件私有模块只维护在所属 `installer/common/modules/<插件>/`。恢复服务维护源为 `workspace-tools/plugin-recovery/recovery.py`。
-- `nas-root/` 中的独立 SSH、网络和容器管理工具同属本仓库；构建维护其源码及根目录单文件入口，不再使用独立工具仓库提交。设备专属容器重建记录、离线材料和凭据留在本地。
-- 测试仅本地保存。`tests/`、`__tests__/` 和独立测试文件不得加入 Git 索引或安装包；Markdown 文档保留。已跟踪测试只取消跟踪，不删除本地文件；不使用 `git add -f` 绕过规则。
-- 新安装包统一输出根目录 `dist/`，构建清单为 `workspace-tools/package-manifest.json`，根 `package-manifest.json` 与其同步。不要创建 `releases/`。子项目旧 `dist/` 是本地历史产物。
-- 缓存、构建依赖、密钥、凭据、离线应急导出和本地实例数据不进入源码提交或安装包。原七仓库 Git 历史保存在本目录外的工作区 `workspace-tools/local/legacy-plugin-git/`。
-- 配置与持久数据使用插件 `etc/var` 或必要的受保护外部目录，不写进校验源码。普通缓存、日志、PID 使用官方 `tmp` → `plugintmp/<插件>/`；root 先降权再访问用户缓存。
-- 配置、任务与断点、更新内核、root 授权和锁、独立 SSH 恢复材料不能迁入可清空缓存。原子替换最终暂存与目标同目录。
-- 更新源码后同步 INFO 摘要和注册元数据，保留禁用状态、任务配置、SSH 材料及服务状态。完成原厂校验后才能报告真机部署成功；隔离测试不能替代真机验收。
-- 统一远端为 `https://github.com/daixu0502/xiaomi-nas-plugin`。提交和推送按当前用户授权执行，不绑定旧插件仓库，不因为本地重构而自动提交或推送。
-- 仓库根 `README.md` 只做导航，保留插件／工具名称、简短用途和对应 README 链接。安装、更新、卸载、配置、恢复、注意事项、常见问题和维护说明放在对应插件／工具 README 中，不再向根 README 添加或回填使用说明。
+## 源码与协作
 
-- 标准源码与安装包层级为根 INFO、src/files、src/ui、scripts/control、按需 etc；安装辅助在 installer/，不得重建 payload 包装层。
-- 各插件的发布版本只维护在该插件根目录的 `INFO` 的 `version` 字段（如 `mihomo/INFO`），不创建仓库级版本配置。构建从各自 INFO 自动同步安装入口、页面资源缓存键与版本展示及接口版本；安装包携带完整 INFO 和已同步源码，可独立复制到 WSL 安装。也可运行 `python3 workspace-tools/sync_versions.py` 单独同步，`--check` 只检查。公共权限组件和恢复服务的版本分别维护在其公共维护源的 VERSION 常量，构建同步副本及组件摘要。不手动修改生成位置中的版本号，不将内核版本、协议版本或历史说明中的版本当作插件发布版本替换。
+- 本目录是八插件及独立 NAS 工具的唯一开发、构建和 GitHub 提交来源；不用旧 WSL 副本覆盖它，不建立插件嵌套仓库。
+- 保留已有未提交改动。提交时在本 Windows 工作区创建独立工作树并核对远端；提交、推送、发布和部署各自遵守当前授权，不因本地整理自动执行。
+- 统一远端为 `https://github.com/daixu0502/xiaomi-nas-plugin`，不混入父工作区其他项目。
+
+## 目录归属
+
+| 目录 | 内容与维护规则 |
+| --- | --- |
+| `plugins/<插件ID>/` | 八插件：根 INFO、src/files、src/ui、scripts/control、按需 etc；差异描述在 installer/ |
+| `plugins/common/manager/` | 统一安装引擎，唯一 Shell 入口是根 manage.sh |
+| `plugins/common/privileged/` | 权限共有代码；六插件私有模块只维护在各自 installer/common/modules/<插件>/ |
+| `plugins/common/recovery/`、`updater/` | 恢复观察程序、更新后台，不在插件中维护副本 |
+| `plugins/common/runtime/`、`data-layout/`、`ui/` | 共享维护源，通过同步工具生成所属副本 |
+| `scripts/` | 独立成品脚本；生成文件修改维护源后重新构建 |
+| `workspace-tools/nas/` | 独立工具源码、模板和构建器 |
+| `workspace-tools/build/`、`sync/`、`checks/`、`icons/` | 打包发布、同步、检查、图标准备 |
+| `docs/` | 通用文档；独立脚本文档在 docs/scripts/ |
+| `dist/` | 最新套件、插件包、组件包与校验清单；不保留旧版本包，不创建 releases/ |
+| `workspace-tools/private/` | 本地签名、缓存、备份、历史资料和工作树；全部忽略，不入 Git 或安装包 |
+
+根 `package-manifest.json` 是构建生成的唯一插件包清单；`dist/suite-artifacts.json` 和 `suite-manifest.json` 记录套件与组件。不要恢复旧目录或重复清单。
+
+## 版本与构建
+
+- 插件版本只维护在 `plugins/<插件ID>/INFO` 的 version 字段，组件版本维护在各自 VERSION 常量。不手工修改生成的页面缓存键和接口版本，不把内核版本当插件版本替换。
+- `python3 -B workspace-tools/sync/sync_versions.py --check` 只检查；去掉 --check 执行同步。其他命令见 [workspace-tools/README.md](workspace-tools/README.md)。
+- 共享源码修改后同步副本，再构建、检查签名、摘要和文件归属。仓库位置调整不得改变 NAS 安装路径或包内路径。
+- SSH worker 版本源为 `plugins/sshrecovery/installer/common/modules/sshrecovery/restore-ssh.sh` 的 SSH_RECOVERY_VERSION，经 workspace-tools/nas/ssh/build.py 同步构建。
+- 测试代码只保留本地。tests/、__tests__/ 和独立测试文件不得加入 Git 索引或安装包；已跟踪测试只取消跟踪，不删除本地文件。Markdown 验收文档可保留，不用 git add -f 绕过规则。
+- 密钥、凭据、缓存、下载内核、设备配置及应急导出不入源码或安装包。签名私钥在 workspace-tools/private/signing/；固定摘要内核缓存在 workspace-tools/private/cache/offline-cores/。
+
+## 安装与数据
+
+- 根 manage.sh 是唯一插件安装入口；不恢复各插件 manage.sh，不重建 payload/ 包装层。
+- 更新、旧版切换和 reinstall 保留配置、任务、禁用入口、服务停止意图、SSH 材料及已更新内核。普通 uninstall 彻底删除所选插件数据，提交后不留回退备份。独立 SSH、Docker 工具和用户下载、媒体、容器、卷遵守各自归属。
+- 源码不写运行数据。用户数据在 `/data/minas/plugins/data/<用户>/<插件>/`，通过 etc/var 链接访问；源码路径使用实际存储池，不强制 pool0。
+- 权限数据归 `/data/minas/privileged/`；管理、恢复、更新分别归 `/data/minas/plugins/{manager,recovery,updater}/`。保护 SSH 模块材料和影视 protected/ 数据，不跨组件覆盖。
+- 普通缓存、日志、PID 使用官方 tmp → plugintmp/<插件>/；root 先降权访问用户缓存。配置、任务、断点、内核、授权、锁及恢复材料不得放入可清空缓存。
+- `/data/minas` 保持 root 所有的真实目录、0755；敏感目录 0700。保留固定锁 inode，最终原子暂存与目标同目录。安装器不探测、搬移或清理旧布局。
+- 真机源码更新必须同步 INFO 摘要及注册信息，原厂校验和业务检查通过后才报告部署成功；本地构建和测试不能替代真机验收。
+
+## 文档
+
+- 根 README.md 集中提供通俗的安装、更新、保留数据重装和彻底卸载教程。
+- 各插件 README.md 只说明自身功能、使用、权限、数据和注意事项；通用安装教程链接回根 README，不复制八份。
+- scripts/README.md 说明独立脚本用法，workspace-tools/README.md 说明维护流程。目录变动同步修改路径、文档链接、构建和忽略规则。

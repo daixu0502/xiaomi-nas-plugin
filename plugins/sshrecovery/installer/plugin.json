@@ -1,0 +1,8 @@
+{
+  "format": 2,
+  "plugin": "sshrecovery",
+  "privileged": true,
+  "service": false,
+  "dependencies": [],
+  "ports": []
+}

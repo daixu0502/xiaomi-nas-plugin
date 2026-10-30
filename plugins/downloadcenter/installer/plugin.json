@@ -1,0 +1,39 @@
+{
+  "format": 2,
+  "plugin": "downloadcenter",
+  "privileged": false,
+  "service": true,
+  "dependencies": [],
+  "ports": [
+    [
+      "var/rpc.port",
+      "",
+      19300,
+      19399
+    ],
+    [
+      "var/peer.port",
+      "",
+      19400,
+      19499
+    ],
+    [
+      "var/qb.port",
+      "",
+      19500,
+      19599
+    ],
+    [
+      "var/aria-peer.port",
+      "",
+      19600,
+      19699
+    ],
+    [
+      "var/openlist.port",
+      "",
+      19700,
+      19799
+    ]
+  ]
+}

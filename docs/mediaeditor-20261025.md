@@ -8,7 +8,7 @@
 
 1.0.5 将八个插件的下拉菜单统一为紧贴原控件展开的圆角浮层，取消下拉菜单的居中弹窗与背景遮罩。选项较多时支持搜索，底部空间不足时向上展开；菜单随窗口缩放、尺寸变化和内部滚动定位，点击外部、移焦、Tab 或 Escape 关闭。Mihomo Geo 策略和动态代理节点也使用该控件。影视编辑顶部英文统一为 `XIAOMI SMART STORAGE`。
 
-共享控件维护源位于 `workspace-tools/ui/form-controls.js` 和 `form-controls.css`，运行 `workspace-tools/sync-ui-controls.py` 同步至八个独立插件；构建会检查副本是否一致。
+共享控件维护源位于 `plugins/common/ui/form-controls.js` 和 `form-controls.css`，运行 `workspace-tools/sync/sync-ui-controls.py` 同步至八个独立插件；构建会检查副本是否一致。
 
 浏览器验证覆盖八个插件的桌面 80% 缩放、手机深色、边缘向上展开、外部点击、禁用状态、动态选项、键盘和滚动定位；Mihomo 实际界面的 Geo 与代理节点回调、影片选择内的嵌套下拉也通过检查。NAS 部署同步了版本、INFO 摘要、注册信息和恢复快照，八个插件再次通过原厂校验；现有服务进程、启用状态、配置、任务、SSH 材料和已更新内核保持一致。
 
@@ -26,7 +26,7 @@
 
 公共权限组件升级至 **1.2.4**（API v1、布局 v3），增加独立 `mediaeditor` 模块和 sudo 授权，原有私有模块与授权保持兼容。恢复组件 **1.6.3** 增加新插件白名单。
 
-源码唯一维护在 `mediaeditor/`。权限实现仅维护在 `mediaeditor/installer/common/modules/mediaeditor/` 四个 Python 文件中，构建包不带官方 `.so`、设备令牌、测试或运行数据。
+源码唯一维护在 `mediaeditor/`。权限实现仅维护在 `plugins/mediaeditor/installer/common/modules/mediaeditor/` 四个 Python 文件中，构建包不带官方 `.so`、设备令牌、测试或运行数据。
 
 安装后遵守标准 `src/files`、`src/ui`、`scripts/control` 层级；插件 `etc/var` 由恢复组件归入 `/data/minas/plugins/data/<用户>/mediaeditor/`。官方 `tmp` 指向对应 `plugintmp/mediaeditor/`。
 

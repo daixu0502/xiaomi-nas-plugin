@@ -1,0 +1,10 @@
+{
+  "format": 2,
+  "plugin": "dockermanager",
+  "privileged": true,
+  "service": false,
+  "dependencies": [
+    "/data/docker/docker"
+  ],
+  "ports": []
+}

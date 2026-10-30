@@ -6,6 +6,6 @@ Docker 管理、Mihomo、定时任务、控制中心、文件快传、下载中�
 
 桌面客户端保留原侧栏。手机端消除插件内部妨碍 sticky 的滚动祖先，不修改宿主页面；菜单触摸手势不会误触内容区域的左右切页。支持方向键、Home/End 和减少动态效果设置。
 
-维护源为 `workspace-tools/ui/mobile-navigation.css` 与 `mobile-navigation.js`，同步工具仅向有现成 `.tabs` 的插件生成代码。实现只有事件、尺寸及 DOM 变化监听，不增加网络请求、定时轮询或 NAS 后台任务。
+维护源为 `plugins/common/ui/mobile-navigation.css` 与 `mobile-navigation.js`，同步工具仅向有现成 `.tabs` 的插件生成代码。实现只有事件、尺寸及 DOM 变化监听，不增加网络请求、定时轮询或 NAS 后台任务。
 
 本地浏览器验证覆盖 320px、390px 手机宽度及桌面侧栏，检查不换行、真实滚动吸顶、当前项显示、键盘切换、触摸事件隔离和无横向页面溢出；影视编辑实际操作和原位置下拉菜单另外回归。本地测试及验收图片不进入源码提交或安装包。
