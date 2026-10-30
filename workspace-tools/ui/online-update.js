@@ -12,8 +12,8 @@
   dialog.setAttribute('aria-labelledby', plugin + '-update-heading');
   // Static markup only. Release notes, errors and versions always use textContent.
   dialog.innerHTML = '<form method="dialog" class="workbench-update-heading"><h2 id="' + plugin + '-update-heading">插件更新</h2><button type="submit" class="secondary" aria-label="关闭插件更新">关闭</button></form>' +
-    '<div class="workbench-update-content"><div class="workbench-update-actions"><button type="button" class="secondary" data-update="check">检查更新</button><button type="button" class="primary" data-update="install" disabled>立即更新</button></div>' +
-    '<p data-update="confirm" hidden>更新期间可能短暂重启本插件服务。<button type="button" class="primary" data-update="confirmInstall">确认更新</button><button type="button" class="secondary" data-update="cancelInstall">取消</button></p><p class="workbench-update-error" data-update="error" role="alert" hidden></p>' +
+    '<div class="workbench-update-content"><div class="workbench-update-actions" data-update="actions"><button type="button" class="secondary" data-update="check">检查更新</button><button type="button" class="primary" data-update="install" disabled>立即更新</button></div>' +
+    '<section class="workbench-update-confirm" data-update="confirm" aria-labelledby="' + plugin + '-confirm-heading" hidden><div class="workbench-confirm-heading"><span class="workbench-confirm-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5M5 16v4h14v-4"/></svg></span><div><h3 id="' + plugin + '-confirm-heading">准备更新插件</h3><p>更新至 <strong data-update="confirmVersion"></strong></p></div></div><p class="workbench-confirm-description">更新时，本插件服务可能短暂重启。<br>现有配置、任务和数据会保留。</p><div class="workbench-confirm-actions"><button type="button" class="secondary" data-update="cancelInstall">取消</button><button type="button" class="primary" data-update="confirmInstall">确认并更新</button></div></section><p class="workbench-update-error" data-update="error" role="alert" hidden></p>' +
     '<div class="workbench-update-versions"><div><span>当前版本</span><strong data-update="installed">—</strong></div><div><span>最新版本</span><strong data-update="latest">尚未检查</strong></div></div>' +
     '<p data-update="hint">检查 GitHub 正式发布，更新会保留配置与任务。</p><pre class="workbench-update-notes" data-update="notes" hidden></pre>' +
     '<div data-update="progressBlock" hidden><progress data-update="progress" max="100" value="0"></progress><p data-update="message" role="status" aria-live="polite"></p><ul class="workbench-update-log" data-update="logs" role="list"></ul></div>' +
@@ -26,6 +26,7 @@
   var nodes = {}, timer = 0, disposed = false, busy = false, state = null, proxyDirty = false, requestSerial = 0, backgroundWatch = false, liveJob = null;
   dialog.querySelectorAll('[data-update]').forEach(function (node) { nodes[node.dataset.update] = node; });
   function error(message) { nodes.error.hidden = !message; nodes.error.textContent = message || ''; }
+  function showConfirm(on) { nodes.confirm.hidden = !on; nodes.actions.hidden = on; }
   function packageSize(bytes) {
     if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes <= 0) return '大小未知';
     if (bytes < 1024) return bytes + ' B';
@@ -50,6 +51,7 @@
     opener.setAttribute('aria-label', available ? '有新版本 ' + value.latest.version + '，点击版本号更新插件' : '查看插件版本并检查更新');
     opener.title = available ? '有新版本 ' + value.latest.version + '，点击更新' : '点击版本号检查更新';
     nodes.installed.textContent = value.installedVersion || '—'; nodes.latest.textContent = value.latest ? value.latest.version : '尚未检查';
+    nodes.confirmVersion.textContent = value.latest ? value.latest.version : '';
     nodes.hint.textContent = value.latest ? (value.latest.available ? '有新版本可用 · ' + packageSize(value.latest.size) : '当前已是最新版本') : '检查 GitHub 正式发布，更新会保留配置与任务。';
     nodes.hint.title = value.latest && Number.isFinite(value.latest.size) && value.latest.size > 0 ? '安装包：' + value.latest.size.toLocaleString('zh-CN') + ' 字节' : '';
     nodes.notes.textContent = value.latest ? value.latest.notes || '本次发布未提供更新说明。' : ''; nodes.notes.hidden = !value.latest;
@@ -58,6 +60,7 @@
       nodes.proxyPassword.value = ''; nodes.proxyPassword.placeholder = value.proxy.hasPassword ? '已保存，留空保持原密码' : '未设置'; nodes.clearPassword.checked = false; proxyDirty = false;
     }
     var job = value.job || {};
+    if (!available || job.running) showConfirm(false);
     // Finished job directories are removed. Logs already seen by this window
     // remain in memory only, and are discarded when another task starts.
     if (!liveJob || liveJob.id !== job.id) liveJob = {id:job.id, logs:[]};
@@ -91,7 +94,7 @@
   }
   ['proxyEnabled','proxyUrl','proxyUsername','proxyPassword','clearPassword'].forEach(function (key) { nodes[key].addEventListener('input', function () { proxyDirty = true; nodes.proxySaved.textContent = '有未保存的更改'; nodes.proxySaved.dataset.state = 'dirty'; working(busy); }); });
   function openUpdater() {
-    error(''); nodes.confirm.hidden = true;
+    error(''); showConfirm(false);
     if (client.openDialog) client.openDialog(dialog); else dialog.showModal();
     working(true); load(true).then(function () { if (!state) working(false); });
   }
@@ -102,9 +105,9 @@
     if (proxyDirty) { saveProxy().then(function () { if (nodes.error.hidden) perform('check'); }); }
     else perform('check');
   });
-  nodes.install.addEventListener('click', function () { nodes.confirm.hidden = false; nodes.confirmInstall.focus(); });
-  nodes.cancelInstall.addEventListener('click', function () { nodes.confirm.hidden = true; nodes.install.focus(); });
-  nodes.confirmInstall.addEventListener('click', function () { if (!state || !state.latest) return; nodes.confirm.hidden = true; perform('install', {version:state.latest.version}); });
+  nodes.install.addEventListener('click', function () { showConfirm(true); nodes.confirmInstall.focus(); });
+  nodes.cancelInstall.addEventListener('click', function () { showConfirm(false); nodes.install.focus(); });
+  nodes.confirmInstall.addEventListener('click', function () { if (!state || !state.latest) return; showConfirm(false); perform('install', {version:state.latest.version}); });
   dialog.addEventListener('close', function () { nodes.proxyPassword.value = ''; schedulePoll(); });
   function dispose() { disposed = true; global.clearTimeout(timer); global.removeEventListener('unmount', dispose); global.removeEventListener('pagehide', dispose); }
   global.addEventListener('unmount', dispose); global.addEventListener('pagehide', dispose);

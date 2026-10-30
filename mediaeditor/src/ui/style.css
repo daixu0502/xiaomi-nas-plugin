@@ -480,7 +480,17 @@
 [data-minas-plugin="mediaeditor"].workbench-ui .workbench-update-log:not(:empty){margin-top:10px}
 [data-minas-plugin="mediaeditor"].workbench-ui .minas-plugin-body .workbench-update-notes{font-family:var(--font-ui)!important;font-size:var(--type-body)!important;line-height:var(--type-body-line)!important}
 [data-minas-plugin="mediaeditor"].workbench-ui .workbench-update-error{color:var(--danger,#d02d46)}
-[data-minas-plugin="mediaeditor"].workbench-ui [data-update=confirm]>button{margin:10px 10px 0 0}
+[data-minas-plugin="mediaeditor"].workbench-ui .workbench-update-confirm{padding:20px;border:1px solid var(--accent);border-radius:12px;background:var(--soft);color:var(--text)}
+[data-minas-plugin="mediaeditor"].workbench-ui .workbench-confirm-heading{display:flex;align-items:center;gap:12px}
+[data-minas-plugin="mediaeditor"].workbench-ui .workbench-confirm-heading h3{margin:0 0 4px;font-size:17px!important;font-weight:600;line-height:1.4;color:var(--text)}
+[data-minas-plugin="mediaeditor"].workbench-ui .workbench-confirm-heading p{font-size:14px!important;color:var(--text)}
+[data-minas-plugin="mediaeditor"].workbench-ui .workbench-confirm-heading strong{font-weight:600;font-variant-numeric:tabular-nums}
+[data-minas-plugin="mediaeditor"].workbench-ui .workbench-confirm-icon{display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;border-radius:12px;background:var(--surface-solid);color:var(--accent)}
+[data-minas-plugin="mediaeditor"].workbench-ui .workbench-confirm-icon svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+[data-minas-plugin="mediaeditor"].workbench-ui .workbench-confirm-description{margin-top:16px!important;font-size:15px!important;line-height:1.7!important;color:var(--text)}
+[data-minas-plugin="mediaeditor"].workbench-ui .workbench-confirm-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+[data-minas-plugin="mediaeditor"].workbench-ui .workbench-confirm-actions button{min-height:44px;min-width:100px;margin:0;font-size:14px!important}
+@media(max-width:520px){[data-minas-plugin="mediaeditor"].workbench-ui .workbench-update-confirm{padding:16px}[data-minas-plugin="mediaeditor"].workbench-ui .workbench-confirm-actions button{flex:1;min-width:0}}
 [data-minas-plugin="mediaeditor"].workbench-ui [data-update=proxySaved]{color:var(--muted);font-size:var(--type-helper)!important;overflow-wrap:anywhere}
 [data-minas-plugin="mediaeditor"].workbench-ui [data-update=proxySaved][data-state=saved]{color:var(--accent)}
 [data-minas-plugin="mediaeditor"].workbench-ui.desktop-client .desktop-frame>dialog.workbench-update-dialog{max-height:calc(100% - 28px)}
