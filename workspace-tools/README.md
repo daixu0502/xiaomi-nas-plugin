@@ -34,7 +34,7 @@ python3 -B workspace-tools/sync/sync_versions.py --check
 ## 构建与检查
 
 ```sh
-python3 -B workspace-tools/build/build_suite.py --release v2026.10.30.3
+python3 -B workspace-tools/build/build_suite.py --release v2026.10.31.1
 python3 -B workspace-tools/checks/audit-suite.py
 sh workspace-tools/checks/run-source-integrity-regressions.sh
 ```
@@ -62,7 +62,7 @@ python3 -B workspace-tools/nas/data-layout/build.py
 
 ```sh
 python3 -B workspace-tools/build/publish-plugin-release.py \
-  --tag v2026.10.30.3 --target 完整源码提交SHA \
+  --tag v2026.10.31.1 --target 完整源码提交SHA \
   --signing-key workspace-tools/private/signing/private.pem --publish
 ```
 

@@ -143,6 +143,12 @@ class Bundle:
         """A protected transaction view for existing narrow component APIs."""
         target = Path(destination) / plugin
         shutil.copytree(self.payload(plugin), target)
+        # Windows/DrvFS and ZIP extractors cannot reliably retain POSIX modes.
+        # The signed executable flag, not the source filesystem, is authoritative.
+        for path in target.rglob('*'):
+            if path.is_file():
+                item = self.manifest['files']['plugins/' + plugin + '/' + path.relative_to(target).as_posix()]
+                path.chmod(0o755 if item['executable'] else 0o644)
         for name in ('recovery', 'updater'):
             shutil.copytree(self.component(name), target / 'installer' / name)
         if plugin in PRIVILEGED:

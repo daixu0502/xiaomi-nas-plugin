@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -230,6 +231,35 @@ def build(key=None, release=None):
         release_files += [destination / v['asset'] for v in components.values()] + [destination / suite['asset']]
         put(destination / 'SHA256SUMS', ''.join(sha(p) + '  ' + p.name + '\n' for p in release_files))
         put(destination / 'suite-artifacts.json', json.dumps(dict(suite=suite, components=components), indent=2) + '\n')
+        # A local rebuild is not a publication. Never leave the preceding
+        # release's signed online manifest pointing at newly overwritten bytes.
+        update_manifest = destination / 'plugin-updates.json'
+        if update_manifest.is_file():
+            try:
+                previous = json.loads(update_manifest.read_bytes())
+                compatible = (previous.get('tag') == release and
+                    all(previous.get('plugins', {}).get(p, {}).get('sha256') == item['sha256'] for p, item in catalog.items()) and
+                    previous.get('components') == components)
+            except (ValueError, TypeError):
+                compatible = False
+            if not compatible:
+                update_manifest.unlink()
+                (destination / 'plugin-updates.sig').unlink(missing_ok=True)
+        current = {path.name for path in release_files}
+        patterns = [p + '-v*.tar.gz' for p in PLUGINS]
+        patterns += ['minas-' + name + '-v*.tar.gz' for name in COMPONENT_FILES]
+        patterns += ['xiaomi-nas-suite-*-arm64.tar.gz']
+        for pattern in patterns:
+            for old in destination.glob(pattern):
+                if old.name not in current and old.is_file() and not old.is_symlink():
+                    if old.resolve().parent != destination.resolve():
+                        raise ValueError('旧安装包路径超出 dist')
+                    try:
+                        old.unlink()
+                    except PermissionError:
+                        # Windows downloads may carry the read-only attribute.
+                        old.chmod(old.stat().st_mode | stat.S_IWUSR)
+                        old.unlink()
         print(json.dumps(dict(suite=suite, plugins=catalog, components=components), ensure_ascii=False, indent=2))
         return catalog
 

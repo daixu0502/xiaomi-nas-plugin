@@ -6,6 +6,7 @@
 - [NAS 持久数据布局](scripts/data-layout.md)
 - [公共组件](../plugins/common/README.md)
 - [统一安装器真机验收记录](../plugins/common/manager/VALIDATION.md)
+- [WSL/NAS 安装器入口与残缺卸载实测](installer-shell-validation-20261031.md)
 - [目录整理与发布验证](repository-layout.md)
 - [构建和检查命令](../workspace-tools/README.md)
 

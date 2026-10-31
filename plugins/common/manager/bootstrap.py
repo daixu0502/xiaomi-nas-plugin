@@ -27,7 +27,7 @@ def main():
         state = json.loads(journal.read_bytes())
         if state['phase'] == 'initializing':
             continue  # no device mutation is permitted before engine publication
-        pools = {row['pool'] for row in state['targets'] if row.get('pool')}
+        pools = set(state.get('pendingPools', [])) or {row['pool'] for row in state['targets'] if row.get('pool')}
         if not all(re.fullmatch('pool[0-9]+', pool) for pool in pools):
             raise ValueError('invalid pool in transaction')
         # A delayed NAS data-pool mount must not restore into its empty mountpoint.

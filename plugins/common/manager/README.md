@@ -9,8 +9,8 @@
     sh manage.sh status --ip 192.168.31.100
     sh manage.sh uninstall --ip 192.168.31.100 --users u123456 --plugins quickshare --yes
 
-NAS root 本机运行时省略 --ip。在源码仓库运行安装入口时，使用
---bundle /绝对路径/解压后的套件。--dry-run 只显示预检结果。
+NAS root 本机运行时省略 --ip。源码入口自动使用 dist 清单中的最新完整套件；
+也可用 --bundle 指定 .tar.gz 或已解压目录。--dry-run 只显示预检结果。
 多个存储池的新账号安装需要通过 --pool pool1 明确指定。
 
 reinstall 默认选择所有账号已有插件，执行整批切换；保留数据及原启停状态，
@@ -21,6 +21,14 @@ reinstall 默认选择所有账号已有插件，执行整批切换；保留数�
 
 全新安装立即启用入口并启动 Mihomo、下载中心、文件快传和空任务调度器；
 SSH 登录及开机恢复须在对应页面明确配置。更新与保留数据重装遵守已有停止意图。
+
+安装中断使用 sh manage.sh recover（WSL 加 --ip NAS地址），失败材料保留到恢复完成。
+预检或状态查询不初始化插件。最后一个引用卸载后自动删除无引用的公共代码和服务，
+保留固定锁和明确卸载标记，独立 SSH 与 Docker 工具保持不变。
+
+卸载允许 INFO、源码、控制脚本和数据缺失。异常链接只移除链接，外部目标列明保留；
+按账号和插件清理各已挂载池的规范目录。已知未挂载池保留待清理事务，挂载后继续，
+完成之前禁止重新安装。卸载不依赖已安装的恢复程序或插件自带卸载代码。
 
 公共 Python 引擎位于 /data/minas/plugins/manager/，恢复程序和更新后台分别
 保留在 /data/minas/plugins/recovery/、/data/minas/plugins/updater/。

@@ -29,7 +29,7 @@ PLUGINS = {'mihomo', 'dockermanager', 'taskcenter', 'nascenter', 'sshrecovery', 
 SERVERS = {'mihomo', 'quickshare', 'downloadcenter'}
 MANAGED = SERVERS | {'taskcenter'}
 UNIT = 'minas-plugin-recovery-v2'
-VERSION = '2.0.0'
+VERSION = '2.0.1'
 WATCH_UNIT = UNIT + '-watch.service'
 RUNTIME = Path('/run/minas-plugin-recovery-v2')
 
@@ -634,7 +634,9 @@ def port_registry(user, plugin, port, remove=False):
         return
     if not remove:
         require(str(port).isdigit() and 1024 <= int(port) <= 65535, 'invalid plugin port')
-    for path in (Path('/etc/config/plugin'), Path('/data/etc/upper/config/plugin')):
+    # Write through the live overlay only. Its upperdir is already persistent;
+    # replacing that backing inode separately leaves /etc with a stale handle.
+    for path in (Path('/etc/config/plugin'),):
         if not path.is_file():
             continue
         data = read(path)

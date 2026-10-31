@@ -2,15 +2,15 @@
   "plugin": "downloadcenter",
   "name": "下载中心",
   "id": 19096,
-  "version": "1.1.60",
+  "version": "1.1.61",
   "tags": [
     "tool"
   ],
-  "timestamp": 1793367072,
+  "timestamp": 1793423057,
   "desc": "直链、磁链、BT 与 Tracker 管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "统一离线安装与在线更新；重装保留数据和启停状态，普通卸载彻底删除插件数据。",
+  "changelog": "修复统一安装入口、目录权限及中断恢复；支持残缺文件安全卸载；在线升级保留插件数据和启停状态。",
   "system": false,
   "size": 482032,
   "port": "",

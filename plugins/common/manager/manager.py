@@ -30,8 +30,22 @@ MAINTENANCE = L.BASE / 'maintenance.json'
 LEGACY_GUARD = Path('/run/minas-plugin-maintenance')
 UNITS = Path('/etc/systemd/system')
 SUDOERS = Path('/etc/sudoers.d')
-PORT_CONFIGS = (Path('/etc/config/plugin'), Path('/data/etc/upper/config/plugin'))
+# /etc is overlayfs. Mutating its mounted upperdir separately invalidates the
+# live dentry (ESTALE) and can make both installation and rollback impossible.
+PORT_CONFIGS = (Path('/etc/config/plugin'),)
 WATCH = 'minas-plugin-recovery-v2-watch.service'
+PROGRESS = None
+
+
+def failure_summary(error):
+    if isinstance(error, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+        command = error.cmd
+        program = Path(str(command[0])).name if isinstance(command, (list, tuple)) else '子进程'
+        if program == 'systemctl':
+            program += ' ' + ' '.join(str(x) for x in command[1:])
+        return program + (' 执行超时' if isinstance(error, subprocess.TimeoutExpired)
+                          else ' 退出码 ' + str(error.returncode))
+    return str(error)
 
 
 def run(args, check=True, **kwargs):
@@ -70,15 +84,97 @@ def inventory():
         pwd.getpwnam(user)
         for plugin in L.PLUGINS:
             home = Path('/home') / user / 'plugin' / plugin
-            info = L.read(home / 'INFO', {})
+            try:
+                info = L.read(home / 'INFO', {})
+                if not isinstance(info, dict):
+                    info = {}
+            except (ValueError, OSError):
+                info = {}  # Damaged metadata must not hide an uninstall target.
             entry = data.get(plugin, {})
             record = L.RECOVERY / 'records' / (user + '-' + plugin)
             managed = (record / 'current').is_file() and not (record / 'removed').exists()
-            installed = bool(entry.get('install') or home.exists() or managed)
+            owned_source = any((pool / user / 'plugin/pluginsrc' / plugin).exists()
+                               for pool in Path('/nas').glob('pool[0-9]*') if os.path.ismount(pool))
+            installed = bool(entry.get('install') or os.path.lexists(home) or managed
+                             or os.path.lexists(L.DATA / user / plugin) or owned_source)
             rows.append(dict(user=user, plugin=plugin, installed=installed,
                              version=info.get('version'), enabled=entry.get('enable'),
                              running=running(user, plugin) if installed else False))
     return rows
+
+
+def uninstall_target(user, plugin, pool=None):
+    """Identify owned names, never follow a damaged plugin's links to data."""
+    L.identity(user, plugin)
+    account = pwd.getpwnam(user)
+    L.require(account.pw_uid != 0, '插件必须属于普通 NAS 用户')
+    home = Path('/home') / user / 'plugin' / plugin
+    L.plain(home.parent)
+    entries = L.read(L.REGISTRY / (user + '.list'))
+    L.require(isinstance(entries, dict), '账号原厂注册表损坏，不能覆盖其他插件登记')
+    entry = entries.get(plugin, {})
+    notes, pools = [], set()
+    if pool:
+        L.require(re.fullmatch(r'pool[0-9]+', pool), '存储池名称无效')
+        pools.add(pool)
+    for candidate in Path('/nas').glob('pool[0-9]*'):
+        if re.fullmatch(r'pool[0-9]+', candidate.name) and os.path.ismount(candidate) and (candidate / user).is_dir():
+            pools.add(candidate.name)
+    if not home.is_symlink():
+        for name in ('src', 'tmp', 'etc', 'var'):
+            path = home / name
+            if path.is_symlink():
+                destination = os.readlink(path)
+                match = re.fullmatch(r'/nas/(pool[0-9]+)/' + user + r'/plugin/(?:pluginsrc|plugintmp)/' + plugin, destination)
+                if match:
+                    pools.add(match[1])
+                elif name in ('src', 'tmp') or destination != str(L.DATA / user / plugin / name):
+                    notes.append('仅移除异常链接，不删除外部目标：' + str(path) + ' -> ' + destination)
+    else:
+        notes.append('仅移除异常入口链接，不删除外部目标：' + str(home) + ' -> ' + os.readlink(home))
+    directory = L.RECOVERY / 'records' / (user + '-' + plugin)
+    try:
+        generation = (directory / 'current').read_text().strip()
+        if re.fullmatch(r'generation-[0-9]+', generation):
+            saved = L.read(directory / generation / 'record.json', {})
+            match = re.fullmatch(r'/nas/(pool[0-9]+)/' + user + '/plugin/pluginsrc/' + plugin, saved.get('src', ''))
+            if match:
+                pools.add(match[1])
+    except (OSError, ValueError, AttributeError):
+        pass
+    locations = []
+    for name in sorted(pools):
+        parent = Path('/nas') / name / user / 'plugin'
+        source, cache = parent / 'pluginsrc' / plugin, parent / 'plugintmp' / plugin
+        for path in (source.parent, cache.parent):
+            try:
+                L.plain(path)
+            except ValueError:
+                notes.append('保留非规范父路径中的外部文件：' + str(path))
+                break
+        else:
+            locations.append(dict(pool=name, src=str(source), tmp=str(cache)))
+    first = locations[0] if locations else dict(src=str(home / 'src'), tmp=str(home / 'tmp'))
+    config = L.read(Path('/etc/config/plugin'))
+    webroot = L.plain(Path(config.get('settings', {}).get('nginx_plugin', '/data/plugin/www')))
+    required = [home / 'INFO', home / 'scripts/control', home / 'src/ui' / (plugin + '.cgi'),
+                L.DATA / user / plugin / 'etc', L.DATA / user / plugin / 'var']
+    required += [L.DATA / user / plugin / name for name in adapters.INITIAL_FILES.get(plugin, ())]
+    incomplete = bool(notes) or home.is_symlink() or any(not p.exists() for p in required)
+    if not incomplete:
+        try:
+            incomplete = not isinstance(L.read(home / 'INFO'), dict)
+        except (OSError, ValueError):
+            incomplete = True
+    if not incomplete and 'generation' in locals() and re.fullmatch(r'generation-[0-9]+', generation):
+        saved_src = directory / generation / 'src'
+        incomplete = any(not (Path(first['src']) / path.relative_to(saved_src)).is_file()
+                         for path in saved_src.rglob('*') if path.is_file() and not path.is_symlink())
+    return dict(user=user, plugin=plugin, home=str(home), src=first['src'], tmp=first['tmp'],
+                web=str(webroot / user / plugin), uid=account.pw_uid, gid=account.pw_gid,
+                enabled=entry.get('enable', False), entry=entry or None, desired=running(user, plugin),
+                wasRunning=running(user, plugin), fresh=False, pool=None, locations=locations,
+                uninstall=True, incomplete=incomplete, notes=notes)
 
 
 def target(user, plugin, pool=None):
@@ -164,6 +260,8 @@ def preflight(action, pairs, bundle=None, pool=None):
     for name in ('systemctl', 'plugincenter', 'runuser', 'openssl', 'sudo', 'visudo', 'jq', 'ss'):
         L.require(shutil.which(name, path=L.ENV['PATH']), 'NAS 缺少命令：' + name)
     L.require(Path('/usr/bin/plugin.sh').is_file(), '缺少原厂源码校验器')
+    L.require(Path('/etc/config/plugin').stat().st_nlink > 0,
+              '原厂配置 /etc/config/plugin 的挂载句柄已失效；请重启 NAS 后重试，不要直接修改 /data/etc/upper')
     for path, mode in ((Path('/data/minas'), 0o755), (L.BASE, 0o755), (L.RECOVERY, 0o700),
                        (L.UPDATER, 0o755), (L.COMPONENT, 0o755)):
         L.plain(path)
@@ -171,7 +269,7 @@ def preflight(action, pairs, bundle=None, pool=None):
             info = path.stat()
             L.require(path.is_dir() and info.st_uid == 0 and stat.S_IMODE(info.st_mode) == mode,
                       '当前布局权限不符合约定：' + str(path))
-    rows = [target(user, plugin, pool) for user, plugin in pairs]
+    rows = [(uninstall_target if action == 'uninstall' else target)(user, plugin, pool) for user, plugin in pairs]
     L.require(rows, '没有选择插件或账号')
     all_old = {(r['user'], r['plugin']) for r in inventory() if r['installed']}
     native = L.read(L.BASE / 'installed.json', {}).get('format') == 2
@@ -203,8 +301,9 @@ def preflight(action, pairs, bundle=None, pool=None):
                     header = stream.read(20)
                 L.require(header[:6] == b'\x7fELF\x02\x01' and int.from_bytes(header[18:20], 'little') == 183,
                           '缺少有效 ARM64 离线内核：' + binary)
-        for path in (home, Path(row['src']), L.DATA / row['user'] / plugin):
-            L.plain(path)
+        for path in ((home, L.DATA / row['user'] / plugin) if action == 'uninstall'
+                     else (home, Path(row['src']), L.DATA / row['user'] / plugin)):
+            L.plain(path.parent if action == 'uninstall' else path)
         if bundle:
             size = sum(v['size'] for k, v in bundle.manifest['files'].items()
                        if k.startswith('plugins/' + plugin + '/'))
@@ -250,6 +349,27 @@ def preflight(action, pairs, bundle=None, pool=None):
     return rows, bool(all_old and not native and action == 'reinstall')
 
 
+def copy_tree(source, destination):
+    """Copy link objects without asking the NAS filesystem for link xattrs.
+
+    Its xattr implementation may dereference even with follow_symlinks=False,
+    making shutil.copytree fail on the factory's dangling INFO link.
+    """
+    source, destination = Path(source), Path(destination)
+    destination.mkdir(mode=0o700)
+    for child in source.iterdir():
+        out = destination / child.name
+        mode = child.lstat().st_mode
+        if stat.S_ISLNK(mode):
+            out.symlink_to(os.readlink(child))
+        elif stat.S_ISDIR(mode):
+            copy_tree(child, out)
+        else:
+            L.require(stat.S_ISREG(mode), '目录含特殊文件：' + str(child))
+            shutil.copy2(child, out, follow_symlinks=False)
+    shutil.copystat(source, destination, follow_symlinks=False)
+
+
 class Journal:
     """Write-ahead metadata; no caches or mutable task/database snapshots."""
     def __init__(self, directory, state=None, phase='prepared'):
@@ -268,6 +388,8 @@ class Journal:
         if row:
             self.state['currentTarget'] = [row['user'], row['plugin']]
         self.save()
+        if PROGRESS:
+            PROGRESS(step, row)
 
     def capture(self, path):
         path = Path(path)
@@ -289,7 +411,7 @@ class Journal:
                     L.require(stat.S_ISDIR(meta.st_mode) or stat.S_ISREG(meta.st_mode) or stat.S_ISLNK(meta.st_mode),
                               '目录含特殊文件：' + str(child))
                     item['owners'][str(child.relative_to(path))] = [meta.st_uid, meta.st_gid, stat.S_IMODE(meta.st_mode)]
-                shutil.copytree(path, self.directory / 'backup' / item['backup'], symlinks=True)
+                copy_tree(path, self.directory / 'backup' / item['backup'])
                 saved = self.directory / 'backup' / item['backup']
                 for copied in saved.rglob('*'):
                     if copied.is_file() and not copied.is_symlink():
@@ -359,7 +481,7 @@ class Journal:
             else:
                 temporary = path.parent / ('.' + path.name + '.restore-' + self.directory.name)
                 remove_path(temporary)
-                shutil.copytree(self.directory / 'backup' / item['backup'], temporary, symlinks=True)
+                copy_tree(self.directory / 'backup' / item['backup'], temporary)
                 for relative, (uid, gid, mode) in item['owners'].items():
                     out = temporary / relative
                     os.chown(out, uid, gid, follow_symlinks=False)
@@ -374,9 +496,17 @@ class Journal:
                 L.fsync_dir(path.parent)
         for item in self.state['registry']:
             merge_registration(item['user'], item['plugin'], item['value'])
+        restored_ports = set()
         for item in self.state.get('ports', []):
-            path = Path(item['path'])
+            # Accept journals from <= 2.0.5, but never replay their direct
+            # upperdir writes. The mounted path is the single source of truth.
+            path = Path('/etc/config/plugin') if item['path'] == '/data/etc/upper/config/plugin' else Path(item['path'])
+            key = (str(path), item['user'], item['plugin'])
+            if key in restored_ports:
+                continue
+            restored_ports.add(key)
             data = L.read(path)
+            previous = json.dumps(data, sort_keys=True)
             values = data.setdefault('ports', {}).setdefault(item['plugin'], {})
             if item['value'] is None:
                 values.pop(item['user'], None)
@@ -384,8 +514,9 @@ class Journal:
                     data['ports'].pop(item['plugin'], None)
             else:
                 values[item['user']] = item['value']
-            metadata = path.stat()
-            L.atomic(path, data, stat.S_IMODE(metadata.st_mode), (metadata.st_uid, metadata.st_gid))
+            if json.dumps(data, sort_keys=True) != previous:
+                metadata = path.stat()
+                L.atomic(path, data, stat.S_IMODE(metadata.st_mode), (metadata.st_uid, metadata.st_gid))
 
 
 def root_state(path):
@@ -402,16 +533,16 @@ def remove_path(path):
         shutil.rmtree(path)
 
 
-def purge_root_state(path):
+def purge_root_state(path, keep=()):
     """Delete owned state/code, retaining only fixed lock inodes and ancestors."""
     L.plain(path)
     if not path.exists():
         return
     for child in path.iterdir():
-        if child.name == 'lock' or child.name.endswith('.lock'):
+        if child in keep or child.name == 'lock' or child.name.endswith('.lock'):
             L.require(child.is_file() and not child.is_symlink(), '锁文件类型异常：' + str(child))
         elif child.is_dir() and not child.is_symlink():
-            purge_root_state(child)
+            purge_root_state(child, keep)
         else:
             remove_path(child)
     if not any(path.iterdir()):
@@ -442,7 +573,7 @@ def restore_preserving_locks(saved, target):
             remove_path(out);out.symlink_to(os.readlink(source))
         elif source.is_dir():
             if not out.exists():
-                shutil.copytree(source, out, symlinks=True)
+                copy_tree(source, out)
             else:
                 restore_preserving_locks(source, out)
         else:
@@ -481,6 +612,7 @@ def prepare_layout(row, r):
         L.plain(path)
         if not path.exists():
             path.mkdir(mode=0o755)
+            path.chmod(0o755)  # CLI runs with umask 077; shared parents must remain traversable.
         L.require(path.is_dir(), '插件父路径不是目录')
         accessible = run(['runuser', '-u', user, '--', '/usr/bin/test', '-x', path], False).returncode == 0
         L.require(accessible,
@@ -496,8 +628,10 @@ def prepare_layout(row, r):
 def watched_files(row, payload=None):
     user, plugin = row['user'], row['plugin']
     home = Path(row['home'])
-    paths = [home / 'INFO', home / 'scripts', home / 'src', home / 'tmp', home / 'etc', home / 'var',
-             Path(row['src']), Path(row['web']), L.REGISTRY / 'www/icon' / (plugin + '.icon'),
+    local = [home] if home.is_symlink() else [home / 'INFO', home / 'scripts', home / 'src', home / 'tmp', home / 'etc', home / 'var']
+    sources = ([Path(loc['src']) for loc in row['locations'] if os.path.ismount('/nas/' + loc['pool'])]
+               if row.get('uninstall') else [Path(row['src'])])
+    paths = [*local, *sources, Path(row['web']), L.REGISTRY / 'www/icon' / (plugin + '.icon'),
              L.RECOVERY / 'records' / (user + '-' + plugin),
              SUDOERS / ('minas-update-' + user + '-' + plugin),
              SUDOERS / ('minas-service-' + user + '-' + plugin),
@@ -513,7 +647,7 @@ def watched_files(row, payload=None):
         if payload:
             manifest = L.read(payload / 'installer/common/manifest.json')
             paths.extend(L.COMPONENT / name for name in manifest['files'])
-    for name in adapters.INITIAL_FILES.get(plugin, ()):
+    for name in (() if row.get('uninstall') else adapters.INITIAL_FILES.get(plugin, ())):
         paths.append(L.DATA / user / plugin / name)
     return paths
 
@@ -720,7 +854,7 @@ def remove_one(row, journal, r, preserve=False):
             if not any(plugin in values for values in data.get('users', {}).values()):
                 data.get('modules', {}).pop(plugin, None)
                 data.get('packages', {}).pop(plugin, None)
-            if plugin == 'mihomo':
+            if plugin == 'mihomo' and not preserve:
                 data.get('settings', {}).get(user, {}).pop('mihomo', None)
             L.atomic(L.COMPONENT / 'registry.json', data)
             (SUDOERS / (plugin + '-' + user)).unlink(missing_ok=True)
@@ -741,11 +875,18 @@ def remove_one(row, journal, r, preserve=False):
     forget_plugin(row, r)
     merge_registration(user, plugin, None)
     remove_path(Path(row['web']))
-    for name in ('src', 'tmp', 'etc', 'var'):
-        remove_path(Path(row['home']) / name)
-    remove_path(Path(row['src']))
-    remove_path(Path(row['home']) / 'scripts')
-    remove_path(Path(row['home']) / 'INFO')
+    home = Path(row['home'])
+    if home.is_symlink():
+        remove_path(home)
+    else:
+        for name in ('src', 'tmp', 'etc', 'var', 'scripts', 'INFO'):
+            remove_path(home / name)
+    if row.get('uninstall'):
+        for location in row['locations']:
+            if os.path.ismount('/nas/' + location['pool']):
+                remove_path(Path(location['src']))
+    else:
+        remove_path(Path(row['src']))
     if not preserve:
         # Permanent deletion is deliberately after durable commit. Until then
         # the original state and rollback materials remain available.
@@ -807,7 +948,15 @@ def remove_mihomo_proxy(row, journal):
 def forget_plugin(row, r):
     """Remove only target metadata; never invoke an old installer/removal hook."""
     user, plugin = row['user'], row['plugin']
-    if plugin in ('taskcenter', 'nascenter'):
+    if row.get('uninstall'):
+        if plugin in L.SERVERS:
+            stop_for_uninstall(user, plugin)
+        for location in row['locations']:
+            if plugin in L.SERVERS | {'taskcenter', 'nascenter'} and os.path.ismount('/nas/' + location['pool']):
+                cache = Path(location['tmp'])
+                if not cache.is_symlink():
+                    operations.release_cache(user, plugin, cache)
+    elif plugin in ('taskcenter', 'nascenter'):
         cache_io = module(L.COMPONENT / 'common/user_state_io.py', 'minas_manager_cache_io')
         cache_io.release_memory_cache(user, plugin)
     if plugin == 'mihomo':
@@ -823,11 +972,11 @@ def forget_plugin(row, r):
         L.atomic(record / 'removed', 'explicit unified uninstall\n')
     if plugin in L.SERVERS:
         unit = UNITS / ('minas-plugin-' + plugin + '-' + user + '.service')
-        if unit.is_file() or run(['systemctl', 'is-active', '--quiet', unit.name], False).returncode == 0:
+        if not row.get('uninstall') and (unit.is_file() or run(['systemctl', 'is-active', '--quiet', unit.name], False).returncode == 0):
             run(['systemctl', 'stop', unit.name])
         # Firmware can remove the service file while a RAM cache mount remains.
         # Release through the UID-validated descriptor before unlinking tmp.
-        if r.memory_download(Path(row['home'])):
+        if not row.get('uninstall') and r.memory_download(Path(row['home'])):
             r.download_runtime(user, 'release', plugin)
         if unit.is_file():
             unit.unlink()
@@ -846,18 +995,37 @@ def forget_plugin(row, r):
             L.atomic(path, data, stat.S_IMODE(info.st_mode), (info.st_uid, info.st_gid))
 
 
+def stop_for_uninstall(user, plugin):
+    unit = 'minas-plugin-' + plugin + '-' + user + '.service'
+    # ExecStop may be missing/broken. systemd still stops its cgroup; judge the
+    # actual state after stop, not the removed control script's exit status.
+    run(['systemctl', 'stop', unit], False)
+    L.require(run(['systemctl', 'is-active', '--quiet', unit], False).returncode != 0,
+              '插件服务尚未停止：' + unit)
+
+
 def purge(row, r):
     user, plugin = row['user'], row['plugin']
     if plugin in L.SERVERS:
         remove_path(UNITS / ('minas-plugin-' + plugin + '-' + user + '.service.d'))
         run(['systemctl', 'daemon-reload'])
-    tmp = Path(row['tmp'])
-    if tmp.exists():
-        L.require_unmounted(tmp)
-        code = ('import os,shutil;from pathlib import Path;p=Path(' + repr(str(tmp)) + ');'
-                'assert not any(n.is_symlink() for n in (p,*p.parents));'
-                'shutil.rmtree(p)')
-        adapters.run_user(user, code)
+    locations = row.get('locations', [dict(tmp=row['tmp'], src=row['src'], pool=row.get('pool'))])
+    for location in locations:
+        if location.get('pool') and not os.path.ismount('/nas/' + location['pool']):
+            continue
+        tmp = Path(location['tmp'])
+        if tmp.is_symlink():
+            remove_path(tmp)
+        elif tmp.exists():
+            if row.get('uninstall') and plugin in L.SERVERS | {'taskcenter','nascenter'}:
+                operations.release_cache(user, plugin, tmp)
+            L.require_unmounted(tmp)
+            code = ('import os,shutil;from pathlib import Path;p=Path(' + repr(str(tmp)) + ');'
+                    'assert not any(n.is_symlink() for n in (p,*p.parents));'
+                    'shutil.rmtree(p)')
+            adapters.run_user(user, code)
+        if row.get('uninstall'):
+            remove_path(Path(location['src']))
     for path in (Path(row['home']), L.DATA / user / plugin,
                  Path('/home') / user / 'plugin/.reserve' / plugin,
                  Path('/data/minas/backups/plugins') / plugin / user):
@@ -901,7 +1069,7 @@ def rollback(journal, r):
     for row in journal.state['targets']:
         if row['plugin'] == 'taskcenter':
             set_scheduler(row['user'], row['desired'])
-        elif row['plugin'] in L.SERVERS and row['wasRunning']:
+        elif row['plugin'] in L.SERVERS and row['wasRunning'] and not (row.get('uninstall') and row.get('incomplete')):
             run(['systemctl', 'start', r.daemon_unit(row['user'], row['plugin'])])
     if journal.state.get('dockerWasRunning'):
         with L.lock(L.COMPONENT / 'docker.lock'):
@@ -917,6 +1085,10 @@ def finish(journal, r):
     if journal.state['phase'] == 'committed':
         for row in journal.state.get('purge', []):
             purge(row, r)
+        pending = sorted({loc['pool'] for row in journal.state.get('purge', [])
+                          for loc in row.get('locations', []) if not os.path.ismount('/nas/' + loc['pool'])})
+        journal.state['pendingPools'] = pending
+        journal.save()
         for row in journal.state['targets']:
             if row['plugin'] == 'taskcenter' and row not in journal.state.get('purge', []):
                 set_scheduler(row['user'], row['desired'])
@@ -930,6 +1102,57 @@ def finish(journal, r):
                     remove_path(record / name)
     for stage in journal.state.get('stages', []):
         operations.clean_source_stage(stage['user'], stage['plugin'], Path(stage['src']), (stage['token'],))
+    if journal.state['phase'] == 'committed' and journal.state.get('action') == 'uninstall':
+        cleanup_unused_components()
+
+
+def remove_shared_units(names):
+    for name in names:
+        if (UNITS / name).exists():
+            run(['systemctl', 'stop', name])
+            run(['systemctl', 'disable', name], False)
+        for parent in UNITS.glob('*.wants'):
+            remove_path(parent / name)
+        remove_path(UNITS / name)
+    run(['systemctl', 'daemon-reload'])
+
+
+def cleanup_unused_components():
+    """Post-commit teardown; retryable while the frozen journal engine remains."""
+    installed = [row for row in inventory() if row['installed']]
+    registry = L.read(L.COMPONENT / 'registry.json', {})
+    grants = any(registry.get('users', {}).values())
+    if not grants and not any(row['plugin'] in L.PRIVILEGED for row in installed):
+        remove_shared_units(('minas-maintenance-events.service',))
+        remove_path(Path('/etc/cron.d/minas-privileged-v2'))
+        purge_root_state(L.COMPONENT)
+    if installed:
+        return
+    remove_shared_units((WATCH, 'minas-plugin-recovery-v2.timer', 'minas-plugin-recovery-v2.service',
+                         'minas-plugin-update-recover.service'))
+    remove_path(Path('/etc/cron.d/minas-plugin-recovery-v2'))
+    tombstones = set((L.RECOVERY / 'records').glob('u*-*/removed'))
+    purge_root_state(L.RECOVERY, tombstones)
+    purge_root_state(L.UPDATER)
+    for name in COMPONENT_FILES['manager']:
+        if name != 'bootstrap.py':
+            remove_path(L.BASE / name)
+    remove_path(L.BASE / 'installed.json')
+
+
+def retire_unused_manager():
+    # Keep bootstrap until the last durable transaction is gone. A power loss
+    # during post-commit purge must still resume cleanup, never restore data.
+    if list((L.BASE / 'transactions').glob('*/journal.json')) or any(r['installed'] for r in inventory()):
+        return
+    unit = 'minas-plugin-manager-recover.service'
+    # This may be running from that oneshot; do not stop our own parent service.
+    run(['systemctl', 'disable', unit], False)
+    for parent in UNITS.glob('*.wants'):
+        remove_path(parent / unit)
+    remove_path(UNITS / unit)
+    remove_path(L.BASE / 'bootstrap.py')
+    run(['systemctl', 'daemon-reload'])
 
 
 def recover_pending(already_locked=False):
@@ -943,7 +1166,7 @@ def recover_pending(already_locked=False):
             if journal.state['phase'] == 'initializing':
                 remove_path(path)
                 continue
-            for row in journal.state['targets']:
+            for row in journal.state['targets'] if journal.state['phase'] not in ('committed', 'rolled-back') else []:
                 if row.get('pool'):
                     L.require(os.path.ismount('/nas/' + row['pool']), '等待事务存储池挂载：' + row['pool'])
             r = types.SimpleNamespace(daemon_unit=lambda user, plugin: 'minas-plugin-' + plugin + '-' + user + '.service')
@@ -957,15 +1180,18 @@ def recover_pending(already_locked=False):
         for state in recovered:
             resume_observers(state)
         for path in sorted(directory.iterdir()) if directory.exists() else []:
-            if (path / 'journal.json').is_file() and L.read(path / 'journal.json')['phase'] in ('committed', 'rolled-back'):
+            state = L.read(path / 'journal.json', {})
+            if state.get('phase') in ('committed', 'rolled-back') and not state.get('pendingPools'):
                 remove_path(path)
+        if recovered and all(s.get('action') == 'uninstall' and s['phase'] == 'committed' for s in recovered):
+            retire_unused_manager()
 
 
 def resume_observers(state):
     committed = state['phase'] == 'committed'
     if (UNITS / 'minas-maintenance-events.service').exists() and (committed or state.get('eventsRunning')):
         run(['systemctl', 'start', 'minas-maintenance-events.service'])
-    if state.get('watchRunning') or committed and state.get('action') != 'uninstall':
+    if (UNITS / WATCH).is_file() and (state.get('watchRunning') or committed and state.get('action') != 'uninstall'):
         run(['systemctl', 'start', WATCH])
 
 
@@ -989,6 +1215,8 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
                         targets=[dict(user=u, plugin=p) for u, p in pairs],
                         dataPolicy='delete' if action == 'uninstall' else 'preserve')
         recover_pending()
+        L.require(action == 'uninstall' or not list((L.BASE / 'transactions').glob('*/journal.json')),
+                  '卸载已完成可访问部分，尚有未挂载存储池待清理；挂载后运行 manage.sh recover')
     rows, cutover = preflight(action, pairs, bundle, pool)
     plan = dict(action=action, cutover=cutover, targets=rows,
                 dataPolicy='delete' if action == 'uninstall' else 'preserve')
@@ -1008,7 +1236,7 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
                         L.require(not active and time.time() - status.get('updatedAt', 0) >= 60,
                                   '在线更新任务仍在运行：' + row['user'] + '/' + row['plugin'])
             if not row['fresh']:
-                operations.idle(row['user'], row['plugin'], Path(row['home']))
+                operations.idle(row['user'], row['plugin'], Path(row['home']), action == 'uninstall', row.get('incomplete', False))
         L.protected(L.BASE, 0o755)
         L.protected(L.BASE / 'transactions')
         L.require(not LEGACY_GUARD.exists(), '另一个维护操作正在使用原厂恢复暂停标记')
@@ -1017,7 +1245,8 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
         journal.save()
         install_boot_recovery(journal)
         use_installed = (L.RECOVERY / 'recovery.py').is_file() and bundle and L.version(code_version(L.RECOVERY / 'recovery.py')) > L.version(bundle.manifest['components']['recovery']['version'])
-        r = module(bundle.component('recovery') / 'recovery.py', 'minas_incoming_recovery') if bundle and not use_installed else recovery()
+        r = (types.SimpleNamespace(daemon_unit=lambda u,p:'minas-plugin-'+p+'-'+u+'.service') if action == 'uninstall'
+             else module(bundle.component('recovery') / 'recovery.py', 'minas_incoming_recovery') if bundle and not use_installed else recovery())
         was_watch = run(['systemctl', 'is-active', '--quiet', WATCH], False).returncode == 0
         journal.state['watchRunning'] = was_watch
         journal.state['eventsRunning'] = run(['systemctl', 'is-active', '--quiet', 'minas-maintenance-events.service'], False).returncode == 0
@@ -1040,7 +1269,7 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
             # dispatchers. A task reserved in that interval must block maintenance.
             for row in rows:
                 if not row['fresh']:
-                    operations.idle(row['user'], row['plugin'], Path(row['home']))
+                    operations.idle(row['user'], row['plugin'], Path(row['home']), action == 'uninstall', row.get('incomplete', False))
             component_guard = contextlib.ExitStack()
             if L.COMPONENT.exists():
                 component_guard.enter_context(L.lock(L.COMPONENT / 'component.lock'))
@@ -1055,6 +1284,8 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
                 journal.registration(user, plugin)
                 journal.ports(user, plugin)
                 for path in (Path(row['home']), Path(row['tmp']).parent, L.DATA, L.DATA / user, L.DATA / user / plugin):
+                    if action == 'uninstall' and path.is_symlink():
+                        continue
                     journal.metadata(path)
                 for path in watched_files(row, payload):
                     capture_missing_parents(journal, path.parent)
@@ -1064,7 +1295,10 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
                         journal.capture(path)
                 if plugin in L.SERVERS and row['wasRunning']:
                     journal.checkpoint('stop', row)
-                    run(['systemctl', 'stop', r.daemon_unit(user, plugin)])
+                    if action == 'uninstall':
+                        stop_for_uninstall(user, plugin)
+                    else:
+                        run(['systemctl', 'stop', r.daemon_unit(user, plugin)])
                 if plugin == 'taskcenter':
                     set_scheduler(user, False, component_locked=L.COMPONENT.exists())
             if bundle:
@@ -1085,11 +1319,22 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
                 L.atomic(L.BASE / 'installed.json', dict(format=2, version=VERSION))
             journal.state['phase'] = 'committed'
             journal.save()
-        except BaseException:
+        except BaseException as original:
             if 'component_guard' in locals():
                 component_guard.close()
-            rollback(journal, r)
-            raise
+            failure = dict(step=journal.state.get('step'), target=journal.state.get('currentTarget'),
+                           message=failure_summary(original))
+            journal.state['failure'] = failure
+            journal.save()
+            try:
+                rollback(journal, r)
+            except BaseException as rollback_error:
+                journal.state['rollbackFailure'] = failure_summary(rollback_error)
+                journal.save()
+                raise RuntimeError('阶段 ' + str(failure['step']) + ' 失败：' + failure['message'] +
+                    '；回退失败：' + failure_summary(rollback_error) + '。材料保留于 ' + str(journal.directory) +
+                    '，请运行 manage.sh recover') from rollback_error
+            raise RuntimeError('阶段 ' + str(failure['step']) + ' 失败，已恢复原安装：' + failure['message']) from original
         finally:
             if journal.state['phase'] in ('committed', 'rolled-back'):
                 try:
@@ -1098,11 +1343,17 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
                     MAINTENANCE.unlink(missing_ok=True)
                     LEGACY_GUARD.unlink(missing_ok=True)
                     resume_observers(journal.state)
-                    remove_path(journal.directory)
+                    if not journal.state.get('pendingPools'):
+                        remove_path(journal.directory)
+                    else:
+                        run(['systemctl', 'start', '--no-block', 'minas-plugin-manager-recover.service'])
+                    if action == 'uninstall':
+                        retire_unused_manager()
                 except Exception as error:
                     # A committed operation must never roll back for cleanup.
                     raise RuntimeError('事务已提交或回退，但清理/恢复监听未完成，请运行 recover：' + str(error)) from error
-        return dict(ok=True, action=action, targets=[dict(user=r['user'], plugin=r['plugin']) for r in rows])
+        return dict(ok=True, action=action, targets=[dict(user=r['user'], plugin=r['plugin'], notes=r.get('notes', [])) for r in rows],
+                    pendingPools=journal.state.get('pendingPools', []))
 
 
 def repair_record(directory, intents=None, check_source=True):

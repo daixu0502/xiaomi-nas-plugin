@@ -1,5 +1,5 @@
 """User-UID source staging and read-only activity probes shared by all installers."""
-import json, os, pwd, re, stat, subprocess
+import array, contextlib, ctypes, json, os, pwd, re, socket, stat, subprocess, sys
 from pathlib import Path
 from layout import ENV, REGISTRY, require, lock as maintenance_lock
 HOMES = Path('/home')
@@ -151,8 +151,12 @@ for name in sys.argv[2:]:
         raise ValueError('插件有核心更新、测速或服务切换操作，或活动锁不可读取：' + plugin) from error
 
 
-def idle(user, plugin, home):
+def idle(user, plugin, home, uninstall=False, incomplete=False):
     # Read-only probes run with the plugin UID, including access to its caches.
+    if uninstall and incomplete:
+        # Broken code cannot be used to inspect or remove itself. The outer
+        # transaction still checks shared workers/locks and stops its units.
+        return
     idle_cache_locks(user, plugin, home)
     if plugin == 'downloadcenter':
         # A deliberately stopped engine reports RPC errors and can retain an
@@ -179,12 +183,73 @@ def idle(user, plugin, home):
                 require(not (int(fields[1].split(':')[1], 16) == port and fields[3] == '01'), '文件快传有活动连接，请传输完成后再更新')
     admin = PRIVILEGED / 'component_admin.py'
     if plugin not in ('quickshare', 'downloadcenter') and admin.is_file():
-        run(['/usr/bin/python3', '-I', '-B', admin, 'check', '--plugin', plugin, '--user', user], timeout=30)
+        if not uninstall:
+            run(['/usr/bin/python3', '-I', '-B', admin, 'check', '--plugin', plugin, '--user', user], timeout=30)
         for relative in ('docker.lock', 'modules/mediaeditor/var/write.lock',
                          'modules/sshrecovery/var/operations.lock', 'modules/mihomo/proxy.lock'):
             path = PRIVILEGED / relative
             if path.exists():
                 with maintenance_lock(path, timeout=0):
                     pass
+
+
+_CACHE_DESCRIPTOR = r'''
+import array,os,socket,stat,sys
+from pathlib import Path
+base=Path(sys.argv[1]);child=sys.argv[2];sock=socket.socket(fileno=int(sys.argv[3]))
+for p in (base,*base.parents):
+ if p.is_symlink():raise ValueError('redirected cache path')
+if not base.exists():sock.send(b'missing');sys.exit(0)
+if base.stat().st_uid!=os.getuid():raise ValueError('cache owner mismatch')
+path=base/child
+if path.is_symlink():raise ValueError('redirected runtime')
+try:fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+except FileNotFoundError:sock.send(b'missing');sys.exit(0)
+s=os.fstat(fd)
+if s.st_uid!=os.getuid() or s.st_mode&0o077:raise ValueError('unsafe runtime owner/mode')
+sock.sendmsg([b'cache'],[(socket.SOL_SOCKET,socket.SCM_RIGHTS,array.array('i',[fd]))])
+'''
+
+
+def release_cache(user, plugin, cache):
+    """Unmount owned RAM caches without INFO, source, home or tmp links."""
+    require(re.fullmatch(r'u[0-9]+', user) and plugin in ('mihomo','quickshare','downloadcenter','taskcenter','nascenter'), '缓存身份无效')
+    match = re.fullmatch(r'/nas/(pool[0-9]+)/' + user + '/plugin/plugintmp/' + plugin, str(cache))
+    require(match and os.path.ismount('/nas/' + match[1]), '缓存存储池未挂载')
+    if os.readlink('/proc/self/ns/mnt') != os.readlink('/proc/1/ns/mnt'):
+        def host_namespace():
+            fd = os.open('/proc/1/ns/mnt', os.O_RDONLY)
+            try:require(ctypes.CDLL(None, use_errno=True).setns(fd, 0) == 0, '无法进入主机挂载空间')
+            finally:os.close(fd)
+        code = 'import sys;sys.path.insert(0,sys.argv[1]);import operations;operations.release_cache(sys.argv[2],sys.argv[3],sys.argv[4])'
+        run([sys.executable,'-I','-B','-c',code,Path(__file__).parent,user,plugin,cache], preexec_fn=host_namespace, timeout=30)
+        return
+    account = pwd.getpwnam(user)
+    require(account.pw_uid != 0, '缓存必须属于普通账号')
+    parent, child = socket.socketpair();parent.settimeout(10);process=None;descriptor=None
+    try:
+        def demote():os.initgroups(user,account.pw_gid);os.setgid(account.pw_gid);os.setuid(account.pw_uid)
+        process = subprocess.Popen([sys.executable,'-I','-B','-c',_CACHE_DESCRIPTOR,str(cache),
+                                    'cache' if plugin in ('taskcenter','nascenter') else 'runtime',str(child.fileno())],
+                                   pass_fds=(child.fileno(),),preexec_fn=demote,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+        child.close()
+        message, ancillary, _, _ = parent.recvmsg(32,socket.CMSG_SPACE(array.array('i').itemsize))
+        for level, kind, raw in ancillary:
+            if level == socket.SOL_SOCKET and kind == socket.SCM_RIGHTS:
+                values=array.array('i');values.frombytes(raw[:len(raw)//values.itemsize*values.itemsize]);descriptor=values[0]
+        _, error = process.communicate(timeout=10)
+        require(process.returncode == 0, '缓存检查失败：' + error.decode(errors='replace')[-300:])
+        if message == b'missing':return
+        require(descriptor is not None, '缓存描述符缺失')
+        meta=os.fstat(descriptor)
+        require(stat.S_ISDIR(meta.st_mode) and meta.st_uid==account.pw_uid and not meta.st_mode&0o077,'缓存描述符权限异常')
+        libc=ctypes.CDLL(None,use_errno=True);buffer=ctypes.create_string_buffer(256)
+        require(libc.fstatfs(descriptor,buffer)==0,'无法检查缓存文件系统')
+        if ctypes.c_long.from_buffer(buffer).value==0x01021994:
+            require(libc.umount2(('/proc/self/fd/'+str(descriptor)).encode(),2)==0,'无法释放插件内存缓存')
+    finally:
+        parent.close();child.close()
+        if descriptor is not None:os.close(descriptor)
+        if process is not None and process.poll() is None:process.kill();process.wait()
 
 
