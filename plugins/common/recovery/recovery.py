@@ -29,7 +29,7 @@ PLUGINS = {'mihomo', 'dockermanager', 'taskcenter', 'nascenter', 'sshrecovery', 
 SERVERS = {'mihomo', 'quickshare', 'downloadcenter'}
 MANAGED = SERVERS | {'taskcenter'}
 UNIT = 'minas-plugin-recovery-v2'
-VERSION = '2.0.1'
+VERSION = '2.0.2'
 WATCH_UNIT = UNIT + '-watch.service'
 RUNTIME = Path('/run/minas-plugin-recovery-v2')
 
@@ -314,7 +314,7 @@ def record_lock(directory):
         yield
 
 
-def install_daemon(user, plugin):
+def daemon_files(user, plugin):
     home, owner = identity(user, plugin)
     unit = daemon_unit(user, plugin)
     pidfile = {'mihomo': 'mihomo.pid', 'quickshare': 'server.pid', 'downloadcenter': 'service.pid'}[plugin]
@@ -329,17 +329,28 @@ def install_daemon(user, plugin):
         # Explicit systemctl stop (including user/lifecycle stops) suppresses
         # Restart=. Unexpected failures recover without scanning plugin files.
         'GuessMainPID=no\nRestart=on-failure\nRestartSec=5\nKillMode=control-group\nTimeoutStartSec=90\nTimeoutStopSec=90\nUMask=0077\n')
-    target = Path('/etc/systemd/system') / unit
-    if not target.exists() or target.read_text() != content:
-        atomic(target, content.encode(), 0o644)
-        call(['systemctl', 'daemon-reload'])
     # Only fixed actions for this user's registered plugin. No command/path input.
     operations = ('start', 'stop', 'restart', 'status', 'lifecycle-start', 'lifecycle-stop')
     if plugin == 'downloadcenter': operations += ('update-start', 'update-stop', 'update-finish')
     prefix = '/usr/bin/python3 -B ' + str(BASE / 'recovery.py') + ' service --user ' + user + ' --plugin ' + plugin + ' --operation '
     policy = user + ' ALL=(root) NOPASSWD: ' + ', '.join(prefix + action for action in operations) + '\n'
     rules = Path('/etc/sudoers.d') / ('minas-service-' + user + '-' + plugin)
-    if not rules.exists() or rules.read_text() != policy:
+    return {Path('/etc/systemd/system') / unit: (content.encode(), 0o644),
+            rules: (policy.encode(), 0o440),
+            Path('/etc/minas-plugin-services') / (user + '-' + plugin): (unit.encode(), 0o644)}
+
+
+def install_daemon(user, plugin):
+    files = daemon_files(user, plugin)
+    unit = daemon_unit(user, plugin)
+    target = Path('/etc/systemd/system') / unit
+    content = files[target][0]
+    if not target.exists() or target.read_bytes() != content or stat.S_IMODE(target.stat().st_mode) != 0o644:
+        atomic(target, content, 0o644)
+        call(['systemctl', 'daemon-reload'])
+    rules = Path('/etc/sudoers.d') / ('minas-service-' + user + '-' + plugin)
+    policy = files[rules][0].decode()
+    if not rules.exists() or rules.read_text() != policy or stat.S_IMODE(rules.stat().st_mode) != 0o440:
         fd, name = tempfile.mkstemp(prefix='.minas-service-', dir=rules.parent)
         try:
             with os.fdopen(fd, 'w') as output:
@@ -351,7 +362,7 @@ def install_daemon(user, plugin):
     marker = Path('/etc/minas-plugin-services')
     protected(marker, 0o755)
     marker_file = marker / (user + '-' + plugin)
-    if not marker_file.is_file() or marker_file.read_bytes() != unit.encode():
+    if not marker_file.is_file() or marker_file.read_bytes() != unit.encode() or stat.S_IMODE(marker_file.stat().st_mode) != 0o644:
         atomic(marker_file, unit.encode(), 0o644)
 
 

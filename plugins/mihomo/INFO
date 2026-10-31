@@ -2,15 +2,15 @@
   "plugin": "mihomo",
   "name": "Mihomo",
   "id": 19090,
-  "version": "1.7.79",
+  "version": "1.7.80",
   "tags": [
     "tool"
   ],
-  "timestamp": 1793423057,
+  "timestamp": 1793432019,
   "desc": "Mihomo 代理管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "修复统一安装入口、目录权限及中断恢复；支持残缺文件安全卸载；在线升级保留插件数据和启停状态。",
+  "changelog": "修复健康插件重复维护与更新锁误报；公共组件按需在线升级，精简包不携带内核；保留配置、启停状态及 Docker 代理操作前的容器状态。",
   "system": false,
   "size": 412250,
   "port": "",

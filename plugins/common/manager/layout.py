@@ -10,7 +10,7 @@ import stat
 import tempfile
 import time
 
-VERSION = '2.0.11'
+VERSION = '2.0.12'
 PLUGINS = ('dockermanager', 'mihomo', 'taskcenter', 'nascenter',
            'sshrecovery', 'quickshare', 'downloadcenter', 'mediaeditor')
 PRIVILEGED = frozenset(PLUGINS) - {'quickshare', 'downloadcenter'}

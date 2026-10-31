@@ -134,7 +134,7 @@ def sign(root, manifest, key):
                     '-signature', str(root / 'suite.sig'), str(root / 'suite.json')], check=True, capture_output=True)
 
 
-def manifest_for(stage, plugins, components, core_versions):
+def manifest_for(stage, plugins, components, core_versions, online=False):
     names = set(components) - ({'privileged'} if not set(plugins) & PRIVILEGED else set())
     selected = {}
     for path in sorted(stage.rglob('*')):
@@ -146,12 +146,17 @@ def manifest_for(stage, plugins, components, core_versions):
             continue
         if parts[0] == 'components' and parts[1] not in names:
             continue
+        if online and relative in ('plugins/mihomo/src/files/mihomo',
+                'plugins/downloadcenter/src/files/aria2c', 'plugins/downloadcenter/src/files/qbittorrent-nox'):
+            continue
         selected[relative] = dict(size=path.stat().st_size, sha256=sha(path),
                                  executable=executable(path), install=file_contract(relative, executable(path)),
                                  owner=('plugin:' + parts[1]) if parts[0] == 'plugins' else ('component:' + parts[1]) if parts[0] == 'components' else 'suite')
     return dict(format=2, architecture='aarch64', ownership=OWNERSHIP,
                 plugins={p: {'version': json.loads((ROOT / 'plugins' / p / 'INFO').read_text())['version']} for p in plugins},
-                components={name: components[name] for name in sorted(names)}, cores=core_versions, files=selected)
+                components={name: components[name] for name in sorted(names)},
+                corePolicy='preserve-installed' if online else 'bundled',
+                cores={} if online else core_versions, files=selected)
 
 
 def build(key=None, release=None):
@@ -208,7 +213,7 @@ def build(key=None, release=None):
         core_versions = cores(stage)
         catalog = {}
         for plugin in PLUGINS:
-            manifest = manifest_for(stage, (plugin,), components, core_versions)
+            manifest = manifest_for(stage, (plugin,), components, core_versions, online=True)
             sign(stage, manifest, key)
             paths = [stage / name for name in manifest['files'] if not name.startswith('components/')]
             paths += [stage / 'suite.json', stage / 'suite.sig']

@@ -24,6 +24,7 @@ def audit(root):
         require(checksum(archive) == item['sha256'] and archive.stat().st_size == item['size'], '完整套件摘要错误')
         suite = Bundle(unpack(archive, folder / 'suite'))
         require(set(suite.plugins) == set(PLUGINS), '完整套件未包含八插件')
+        require(suite.manifest.get('corePolicy') == 'bundled' and len(suite.manifest['cores']) == 3, '完整套件内核缺失')
         for name, component in artifacts['components'].items():
             file = dist / component['asset']
             require(checksum(file) == component['sha256'], '组件包摘要错误：' + name)
@@ -37,6 +38,7 @@ def audit(root):
             for name in manifest['components']:
                 shutil.copytree(suite.component(name), payload / 'components' / name)
             update = Bundle(payload)
+            require(update.manifest.get('corePolicy') == 'preserve-installed' and not update.manifest['cores'], '在线包不应分发内核')
             for relative, info in update.manifest['files'].items():
                 require(info == suite.manifest['files'][relative], '在线更新与离线套件内容不一致：' + relative)
             require(('privileged' in manifest['components']) == (plugin in PRIVILEGED), '非提权插件依赖边界错误')

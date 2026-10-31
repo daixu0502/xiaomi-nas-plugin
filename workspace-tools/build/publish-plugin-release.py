@@ -57,7 +57,9 @@ def prepare(tag, key, target):
     for plugin, item in catalog.items():
         archive = ROOT / item['file']
         info = json.loads((ROOT / 'plugins' / plugin / 'INFO').read_text())
-        value['plugins'][plugin] = dict(version=info['version'], asset=archive.name, size=archive.stat().st_size, sha256=item['sha256'], architecture='aarch64', notes=info['changelog'])
+        minimum = '2.0.1' if plugin in ('mihomo', 'downloadcenter') else '2.0.0'
+        notes = ('更新器 2.0.0 请先在线更新 Docker 管理或文件快传，以升级公共组件；随后可安装本精简包。\n' if minimum == '2.0.1' else '') + info['changelog']
+        value['plugins'][plugin] = dict(version=info['version'], asset=archive.name, size=archive.stat().st_size, sha256=item['sha256'], architecture='aarch64', minUpdater=minimum, notes=notes)
         if hashlib.sha256(archive.read_bytes()).hexdigest() != item['sha256']:
             raise ValueError('安装包内容与构建清单不一致')
         assets.append(archive)
@@ -128,7 +130,10 @@ def publish(tag, target, assets):
     existing = next((r for r in releases if r['tag_name'] == tag), None)
     if existing and not existing['draft']:
         raise ValueError('该标签已经正式发布，拒绝替换公开安装包；请使用新标签')
-    release = existing or request(base + '/releases', 'POST', dict(tag_name=tag, target_commitish=target, name='小米 NAS 插件 ' + tag, draft=True, prerelease=False, body='统一 ARM64 离线套件、按插件更新包及共有组件，附签名清单。旧安装需统一重装切换；更新和重装保留数据，普通卸载彻底删除插件数据。'))
+    body = ('统一 ARM64 离线套件、插件精简更新包及公共组件，附签名清单。更新和重装保留数据，普通卸载删除插件数据。\n\n'
+            '公共组件可随插件按需在线升级。从更新器 2.0.0 过渡时，先在线更新 Docker 管理、文件快传等任一非内核插件，再更新 Mihomo 和下载中心。仅有内核插件或更早的更新器可用完整套件执行 update。\n\n'
+            '在线包不含 Mihomo、aria2、qBittorrent 内核，保留设备现有内核；仅完整套件携带默认内核。修复健康插件重复维护、检查更新争用安装锁，以及 Mihomo Docker 代理操作后的容器状态丢失。')
+    release = existing or request(base + '/releases', 'POST', dict(tag_name=tag, target_commitish=target, name='小米 NAS 插件 ' + tag, draft=True, prerelease=False, body=body))
     remote_assets = request(release['assets_url'])
     if remote_assets:
         raise ValueError('草稿已有附件，请检查后换用新标签，发布工具不自动删除附件')

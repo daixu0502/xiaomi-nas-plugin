@@ -2,15 +2,15 @@
   "plugin": "sshrecovery",
   "name": "SSH 恢复",
   "id": 19098,
-  "version": "1.1.57",
+  "version": "1.1.58",
   "tags": [
     "tool"
   ],
-  "timestamp": 1793423058,
+  "timestamp": 1793432028,
   "desc": "手动开启 SSH、恢复主机密钥与登录公钥",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "修复统一安装入口、目录权限及中断恢复；支持残缺文件安全卸载；在线升级保留插件数据和启停状态。",
+  "changelog": "修复健康插件重复维护与更新锁误报；公共组件按需在线升级，精简包不携带内核；保留配置、启停状态及 Docker 代理操作前的容器状态。",
   "system": false,
   "size": 193681,
   "port": "",

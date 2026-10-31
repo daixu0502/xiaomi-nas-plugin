@@ -290,23 +290,30 @@ def preflight(action, pairs, bundle=None, pool=None):
             L.require(not row['fresh'], '目标尚未安装：' + plugin)
         if bundle:
             adapters.preflight_dependencies(plugin)
+            preserve_cores = bundle.manifest.get('corePolicy') == 'preserve-installed'
+            L.require(not preserve_cores or action in ('update', 'reinstall') and not row['fresh'],
+                      '在线包仅用于保留内核升级；全新安装请使用完整离线套件')
             incoming = bundle.manifest['plugins'][plugin]['version']
             old = L.read(home / 'INFO', {}).get('version')
             L.require(not old or L.version(incoming) >= L.version(old), '不允许降级插件：' + plugin)
             for name in adapters.DEPENDENCIES.get(plugin, ()):
                 L.require(shutil.which(name, path=L.ENV['PATH']), '缺少插件依赖：' + name)
             for binary in {'mihomo': ('mihomo',), 'downloadcenter': ('aria2c', 'qbittorrent-nox')}.get(plugin, ()):
-                path = bundle.payload(plugin) / 'src/files' / binary
+                path = Path(row['src']) / 'files' / binary if preserve_cores else bundle.payload(plugin) / 'src/files' / binary
+                L.plain(path)
+                L.require(path.is_file(), '现有内核缺失，请使用完整离线套件修复：' + binary)
                 with path.open('rb') as stream:
                     header = stream.read(20)
                 L.require(header[:6] == b'\x7fELF\x02\x01' and int.from_bytes(header[18:20], 'little') == 183,
                           '缺少有效 ARM64 离线内核：' + binary)
+            row['preservedCoreBytes'] = sum((Path(row['src']) / 'files' / name).stat().st_size for name in
+                {'mihomo': ('mihomo',), 'downloadcenter': ('aria2c', 'qbittorrent-nox')}.get(plugin, ())) if preserve_cores else 0
         for path in ((home, L.DATA / row['user'] / plugin) if action == 'uninstall'
                      else (home, Path(row['src']), L.DATA / row['user'] / plugin)):
             L.plain(path.parent if action == 'uninstall' else path)
         if bundle:
             size = sum(v['size'] for k, v in bundle.manifest['files'].items()
-                       if k.startswith('plugins/' + plugin + '/'))
+                       if k.startswith('plugins/' + plugin + '/')) + row.get('preservedCoreBytes', 0)
             for path in (Path('/data'), Path('/nas') / row['pool']):
                 L.require(shutil.disk_usage(path).free >= size * 3 + 64 * 1024 * 1024,
                           '安装及回退空间不足：' + str(path))
@@ -315,7 +322,7 @@ def preflight(action, pairs, bundle=None, pool=None):
         pool_space = {}
         for row in rows:
             size = sum(v['size'] for key, v in bundle.manifest['files'].items()
-                       if key.startswith('plugins/' + row['plugin'] + '/'))
+                       if key.startswith('plugins/' + row['plugin'] + '/')) + row.get('preservedCoreBytes', 0)
             required_data += size * 6
             pool_space[row['pool']] = pool_space.get(row['pool'], 64 * 1024 * 1024) + size * 2
         L.require(shutil.disk_usage('/data').free >= required_data, '整批事务的 /data 暂存及回退空间不足')
@@ -738,14 +745,24 @@ def install_privileged_gate(bundle):
 
 
 def archive_payload(payload, output, previous=None):
+    cores = {'mihomo': ('mihomo',), 'downloadcenter': ('aria2c', 'qbittorrent-nox')}.get(payload.name, ())
+    written = set()
     with tarfile.open(output, 'w:gz') as stream:
         for directory in ('src', 'scripts'):
             for path in sorted((payload / directory).rglob('*')):
                 if path.is_file():
                     relative = path.relative_to(payload)
                     prior = previous / relative.relative_to('src') if previous and relative.parts[0] == 'src' else None
-                    preserve = path.name in ('mihomo', 'aria2c', 'qbittorrent-nox') and prior and prior.is_file()
+                    preserve = relative.as_posix() in {'src/files/' + name for name in cores} and prior and prior.is_file() and not prior.is_symlink()
                     stream.add(prior if preserve else path, arcname=payload.name + '/' + relative.as_posix(), recursive=False)
+                    written.add(relative.as_posix())
+        for binary in cores:
+            relative = 'src/files/' + binary
+            if relative not in written:
+                prior = previous / 'files' / binary if previous else None
+                L.require(prior is not None and prior.is_file() and not prior.is_symlink(),
+                          '在线升级必须保留已校验内核：' + binary)
+                stream.add(prior, arcname=payload.name + '/' + relative, recursive=False)
 
 
 def verify_layout(row):
@@ -1360,6 +1377,8 @@ def repair_record(directory, intents=None, check_source=True):
     """The watcher holds the installer lock; recovery uses the same journal."""
     r = recovery()
     if MAINTENANCE.exists():
+        return
+    if restoration.record_healthy(r, directory, intents, check_source):
         return
     saved = r.load_generation(directory)
     record = r.read(saved / 'record.json')

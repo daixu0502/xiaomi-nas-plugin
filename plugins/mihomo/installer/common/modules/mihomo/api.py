@@ -1,10 +1,36 @@
 """Narrow registered-user Docker proxy API; never accepts arbitrary ports/commands."""
 import json
 from pathlib import Path
+import re
 import subprocess
 import privileged_runtime as runtime
 
 ACTIONS = {'docker_proxy_status':'status', 'docker_proxy_enable':'enable', 'docker_proxy_disable':'disable'}
+
+
+def container_intents():
+    result = runtime.docker_command(['ps', '-a', '--no-trunc', '--format', '{{.ID}} {{.State}}'], timeout=20)
+    if result.returncode:
+        raise ValueError('无法保存 Docker 容器启停状态，未更改代理')
+    intents = {}
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) != 2 or not re.fullmatch('[0-9a-f]{64}', parts[0]) or parts[1] not in ('running', 'exited', 'created'):
+            raise ValueError('容器处于特殊状态，暂不能重启 Docker')
+        intents[parts[0]] = parts[1] == 'running'
+    return intents
+
+
+def restore_containers(intents):
+    for ident, desired in intents.items():
+        result = runtime.docker_command(['inspect', '--format', '{{.State.Running}}', ident], timeout=20)
+        if result.returncode or result.stdout.strip() not in ('true', 'false'):
+            raise ValueError('Docker 代理操作后无法确认容器状态：' + ident)
+        if (result.stdout.strip() == 'true') != desired:
+            result = runtime.docker_command(['start' if desired else 'stop', ident], timeout=60)
+            if result.returncode:
+                raise ValueError('Docker 代理操作后容器未恢复：' + ident)
+
 
 def api(user, request):
     runtime.authorize(user, 'mihomo')
@@ -34,4 +60,12 @@ def api(user, request):
     if action == 'status':
         return invoke()
     with runtime.docker_transaction():
-        return invoke()
+        active = subprocess.run(['systemctl', 'is-active', '--quiet', 'docker.service'],
+                                capture_output=True, timeout=15).returncode == 0
+        intents = container_intents() if active else {}
+        try:
+            return invoke()
+        finally:
+            # Changing the daemon proxy restarts Docker, including containers
+            # with restart=no. Preserve both previously running and stopped ones.
+            restore_containers(intents)

@@ -27,7 +27,7 @@ import urllib.request
 import uuid
 
 sys.dont_write_bytecode = True
-VERSION = '2.0.0'
+VERSION = '2.0.1'
 REPOSITORY = 'daixu0502/xiaomi-nas-plugin'
 BASE = Path('/data/minas/plugins/updater')
 RECOVERY = Path('/data/minas/plugins/recovery')
@@ -296,6 +296,7 @@ def verify_manifest(raw, signature, directory):
     tag_url(value['tag'], MANIFEST)
     for plugin, item in value['plugins'].items():
         version(item['version'])
+        version(item.get('minUpdater', '2.0.0'))
         require(item.get('asset') == plugin + '-v' + item['version'] + '.tar.gz', '安装包名称与版本不匹配')
         require(isinstance(item.get('size'), int) and 0 < item['size'] <= MAX_PACKAGE and re.fullmatch('[0-9a-f]{64}', item.get('sha256', '')), '安装包摘要或大小无效')
         require(item.get('architecture') == 'aarch64', '安装包架构不受支持')
@@ -439,6 +440,13 @@ def cleanup_plugin(user, plugin, worker_locked=False):
     # External maintenance must wait until the worker has finished reporting.
     # A worker already owns this lock; flock is not reentrant across handles.
     with contextlib.nullcontext() if worker_locked else lock(directory / 'worker.lock'):
+        jobs = directory / 'jobs'
+        entries = list(jobs.iterdir()) if jobs.is_dir() else []
+        has_material = any((job / 'journal.json').exists() or any((job / name).exists() for name in
+                           ('package.tar.gz', 'package', 'rollback.tar.gz', 'backup')) for job in entries if job.is_dir())
+        if not has_material:
+            remove_finished_jobs(directory)
+            return
         with lock(INSTALL_LOCK), r.record_lock(record):
             if cleanup_locked(user, plugin, r):
                 remove_finished_jobs(directory)
@@ -542,8 +550,12 @@ def api(user, plugin, request):
     directory = plugin_dir(user, plugin)
     if action == 'status':
         return status(user, plugin)
-    with lock(INSTALL_LOCK, False), lock(directory / 'queue.lock', False):
-        require(not Path('/data/minas/plugins/manager/maintenance.json').exists(), '插件正在维护，请稍后操作')
+    # Checking releases and saving account proxy settings do not mutate plugin
+    # installs. Only the install queue must serialize with uninstall/preflight.
+    with lock(INSTALL_LOCK, 15) if action == 'install' else contextlib.nullcontext(), lock(directory / 'queue.lock', False):
+        identity(user, plugin, True)
+        if action == 'install':
+            require(not Path('/data/minas/plugins/manager/maintenance.json').exists(), '插件正在维护，请稍后操作')
         current_status = status(user, plugin)
         if action == 'check' and request.get('background') is True and (current_status['job'].get('running') or not current_status['checkDue']):
             return current_status
@@ -579,7 +591,6 @@ def worker(user, plugin, job_id):
     # cleanup. Serialize the accepted next job instead of failing its queue.
     with lock(directory / 'worker.lock'):
         try:
-            recover_plugin(user, plugin, excluding=job_id)
             request = read(job / 'request.json')
             require(request['user'] == user and request['plugin'] == plugin, '更新任务身份不匹配')
             proxy = settings(user)
@@ -587,10 +598,13 @@ def worker(user, plugin, job_id):
                 manifest = latest(user, plugin, job, proxy, request.get('background', False))
                 report(job, 'complete', '已找到新版本' if version(manifest['plugins'][plugin]['version']) > version(identity(user, plugin)[2]['version']) else '当前已是最新版本', 100, running=False)
             else:
+                recover_plugin(user, plugin, excluding=job_id)
                 c = candidate(user, plugin)
                 require(c and time.time() - c['checkedAt'] <= 86400, '更新清单已过期，请重新检查')
                 manifest = verify_manifest(base64.b64decode(c['manifest'], validate=True), base64.b64decode(c['signature'], validate=True), job)
                 item = manifest['plugins'][plugin]
+                require(version(item.get('minUpdater', '2.0.0')) <= version(VERSION),
+                        '请先在线更新 Docker 管理或文件快传，以升级公共更新组件')
                 require(version(item['version']) > version(identity(user, plugin)[2]['version']), '当前已是最新版本，拒绝覆盖或降级')
                 report(job, 'downloading', '正在通过代理下载安装包' if proxy['enabled'] else '正在下载安装包', 10)
                 archive = job / 'package.tar.gz'

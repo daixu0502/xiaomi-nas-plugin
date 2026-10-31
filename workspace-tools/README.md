@@ -66,7 +66,7 @@ python3 -B workspace-tools/build/publish-plugin-release.py \
   --signing-key workspace-tools/private/signing/private.pem --publish
 ```
 
-不加 `--publish` 只构建和签名。发布前逐文件核对附件和提交的 Git blob；先上传草稿，确认附件大小和摘要后公开。凭据通过既有 Git 授权或环境变量读取，不写入源码。旧更新器不支持新包格式，须先通过根安装器切换；已切换的 2.0.0 更新器可按依赖下载本次更新。
+不加 `--publish` 只构建和签名。发布前逐文件核对附件和提交的 Git blob；先上传草稿，确认附件大小和摘要后公开。凭据通过既有 Git 授权或环境变量读取，不写入源码。发布清单保留更新器 2.0.0 的兼容入口：先更新任一非内核插件，同时升级公共组件，再更新需要 2.0.1 的 Mihomo/下载中心精简包；不要提高全局最低版本而阻断这条过渡路径。仅安装内核插件或更早更新器时用完整套件执行保留数据的 `update`。签名清单的 `corePolicy` 区分完整套件 `bundled` 和在线包 `preserve-installed`；在线升级先核验现有内核、计入回退空间，再从事务备份装回相同字节。
 
 ## 本地资料
 

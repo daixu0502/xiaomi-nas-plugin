@@ -9,6 +9,84 @@ import tempfile
 import time
 
 
+def component_ready(r, saved, user, plugin):
+    payload = saved if (saved / 'scripts').is_dir() else saved / 'payload'
+    if (payload / 'installer/updater').is_dir():
+        if not all(r.plain(p).is_file() for p in (
+                Path('/etc/sudoers.d') / ('minas-update-' + user + '-' + plugin),
+                Path('/data/minas/plugins/updater/updater.py'))):
+            return False
+    common = payload / 'installer/common'
+    if not common.exists(): common = payload / 'common'
+    if not (common / 'component_admin.py').is_file():
+        return True
+    root = Path('/data/minas/privileged')
+    required = [root / name for name in r.read(common / 'manifest.json')['files']]
+    required += [root / 'minas-helper', root / 'registry.json',
+                 Path('/etc/sudoers.d') / (plugin + '-' + user), Path('/etc/cron.d/minas-privileged-v2')]
+    return (all(r.plain(p).is_file() for p in required) and
+            plugin in r.read(root / 'registry.json').get('users', {}).get(user, {}))
+
+
+def record_healthy(r, directory, intents=None, check_source=True):
+    """Read-only observation: healthy events must not open a repair transaction.
+
+    The caller holds installer and record locks. Any missing file, changed intent
+    or stopped desired service falls through to the existing journaled repair.
+    Cache existence is tested as its owner, never traversed by root.
+    """
+    saved = r.load_generation(directory)
+    original = r.read(saved / 'record.json')
+    record = r.read(saved / 'record.json')
+    user, plugin = record['user'], record['plugin']
+    home, owner = r.identity(user, plugin)
+    r.require(directory.name == user + '-' + plugin, 'record identity mismatch')
+    src, tmp = Path(record['src']), Path(record['tmp'])
+    match = re.fullmatch(r'/nas/(pool[0-9]+)/' + user + r'/plugin/pluginsrc/' + plugin, str(src))
+    r.require(match and os.path.ismount('/nas/' + match[1]), 'data pool not ready')
+    r.plain(home); r.plain(src)
+    for name in ('etc', 'var'):
+        r.require(r.plain(r.DATA / user / plugin / name).is_dir(), 'persistent data missing; refusing empty state')
+    expected = r.read(saved / 'INFO')
+    if not (home / 'INFO').is_file() or r.read(home / 'INFO') != expected:
+        return False
+    scripts = saved / 'scripts' if (saved / 'scripts').is_dir() else saved / 'payload/scripts'
+    for path in scripts.iterdir():
+        target = r.plain(home / 'scripts' / path.name)
+        if not target.is_file(): return False
+        r.require(target.read_bytes() == path.read_bytes(), 'control script changed; refusing silent rollback: ' + str(target))
+    settings = r.read(Path('/etc/config/plugin'))
+    webroot = Path(settings.get('settings', {}).get('nginx_plugin', '/data/plugin/www'))
+    links = {home / 'src': src, home / 'tmp': tmp, src / 'INFO': home / 'INFO',
+             home / 'etc': r.DATA / user / plugin / 'etc', home / 'var': r.DATA / user / plugin / 'var',
+             webroot / user / plugin: home / 'src/ui'}
+    if any(not p.is_symlink() or os.readlink(p) != str(target) for p, target in links.items()): return False
+    if not (src / 'ui/config').is_file() or check_source and r.digest(src) != expected['abstract']: return False
+    icon = r.plain(Path('/data/plugin/www/icon') / (plugin + '.icon'))
+    if not icon.is_file() or icon.read_bytes() != (saved / 'src/ui/icon.png').read_bytes(): return False
+    if expected.get('port') and str(settings.get('ports', {}).get(plugin, {}).get(user)) != str(expected['port']): return False
+    if r.call(['runuser', '-u', user, '--', 'test', '-d', tmp], check=False).returncode: return False
+    if not component_ready(r, saved, user, plugin): return False
+    if plugin in r.SERVERS:
+        for path, (content, mode) in r.daemon_files(user, plugin).items():
+            r.plain(path)
+            if not path.is_file() or path.read_bytes() != content or stat.S_IMODE(path.stat().st_mode) != mode: return False
+    with r.user_lock(user):
+        live = r.read(Path('/data/plugin') / (user + '.list')).get(plugin)
+        if not isinstance(live, dict) or live.get('install') is not True: return False
+        r.apply_native_intent(record, (r.native_intents() if intents is None else intents).get((user, plugin)))
+        r.apply_service_intent(record, directory)
+        r.observe_state(record, live, user, plugin, home, src)
+        r.apply_service_intent(record, directory)
+        if record != original or live != dict(record['entry'], enable=record['enabled']): return False
+    update = directory / 'service-update.json'
+    if update.is_file() and r.read(update).get('until', 0) > time.time(): return True
+    if plugin in r.SERVERS:
+        running = r.control(user, plugin, home, src, 'status', False).returncode == 0
+        if record['running'] != running and (record['running'] or record.get('runtime_intent_time')): return False
+    return True
+
+
 def restore_component(r, saved, user, plugin, transaction=None):
     payload = saved if (saved / 'scripts').is_dir() else saved / 'payload'
     updater = payload / 'installer/updater'

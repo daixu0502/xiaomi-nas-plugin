@@ -11,6 +11,7 @@ import tarfile
 from layout import OWNERSHIP, PLUGINS, PRIVILEGED, checksum, file_contract, plain, require, version
 
 FORMAT = 2
+CORES = {'mihomo': ('mihomo',), 'downloadcenter': ('aria2c', 'qbittorrent-nox')}
 MAX_TREE = 2 * 1024 * 1024 * 1024
 COMPONENT_FILES = {
     'privileged': ('minas-helper', 'component_admin.py', 'common/privileged_runtime.py',
@@ -109,6 +110,12 @@ class Bundle:
         require(actual == set(files) and total <= MAX_TREE, '套件文件缺失或大小超限')
         self.plugins = self.manifest['plugins']
         require(set(self.plugins) <= set(PLUGINS) and self.plugins, '套件插件列表异常')
+        policy = self.manifest.get('corePolicy', 'bundled')
+        require(policy in ('bundled', 'preserve-installed'), '内核分发策略无效')
+        for plugin in self.plugins:
+            for binary in CORES.get(plugin, ()):
+                present = (self.payload(plugin) / 'src/files' / binary).is_file()
+                require(present == (policy == 'bundled'), '内核与套件分发策略不一致：' + binary)
         required_components = {'manager', 'recovery', 'updater'} | ({'privileged'} if set(self.plugins) & PRIVILEGED else set())
         require(set(self.manifest['components']) == required_components, '共有组件依赖边界错误')
         for plugin, info in self.plugins.items():
