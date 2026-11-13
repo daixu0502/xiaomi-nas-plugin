@@ -389,12 +389,13 @@ def execute_fields(user,plan_id):
 def history(user):
     result=[]
     paths=sorted((storage(user)/'plans').glob('*.json'),key=lambda p:p.stat().st_mtime,reverse=True)
-    for path in paths[:100]:
+    for path in paths:
         plan=read_record(path)
         if plan.get('scope')=='all' and not ADMIN.get(): continue
         if plan.get('user')==user and plan.get('state')!='draft':
             value=public_plan(plan);value['canUndo']=plan['state']=='applied';value['applied']=plan.get('applied');value['backup']=plan.get('backup')
             result.append(value)
+            if len(result) == 100: break
     backups=[p for p in (storage(user)/'backups').glob('*.sqlite3') if p.is_file() and not p.is_symlink()]
     return {'records':result,'backupCount':len(backups),'backupBytes':sum(p.stat().st_size for p in backups)}
 

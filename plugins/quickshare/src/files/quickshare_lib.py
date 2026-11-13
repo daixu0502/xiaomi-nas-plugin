@@ -10,6 +10,7 @@ import tempfile
 import time
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
+from plugin_paths import plugin_storage_root
 
 ALLOWED_ROOTS = ("data", "video", "myshare", "share2me", "bak")
 MAX_EXPIRES = 30 * 24 * 3600
@@ -22,10 +23,18 @@ class Store:
     def __init__(self, state_dir, plugin_user):
         self.state_dir = Path(state_dir)
         self.plugin_user = plugin_user
-        self.pool_root = Path("/nas/pool0") / plugin_user
         self.state_file = self.state_dir / "shares.json"
         self.lock_file = self.state_dir / "shares.lock"
         self.state_dir.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def pool_root(self):
+        # Resolve on every operation: a detached pool must not become an empty
+        # directory on the system filesystem or silently switch to pool0.
+        try:
+            return plugin_storage_root(self.plugin_user, 'quickshare')
+        except (OSError, ValueError) as exc:
+            raise ShareError(str(exc)) from exc
 
     def _default(self):
         return {"version": 1, "settings": {"external_base": ""}, "shares": []}

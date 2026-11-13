@@ -13,7 +13,9 @@ import time
 PATTERNS = {'logs': ['*.log', '*.log.[0-9]*', '*.log.gz'], 'temp': ['*.tmp', '*.temp'], 'recycle': ['*']}
 RECYCLE_NAMES = {'.recycle', '#recycle', '@recycle', '$RECYCLE.BIN', 'recycle', 'Recycle', '回收站'}
 MAX_SCAN = 50000
-POOL_ROOT=Path('/nas/pool0')
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'common'))
+from privileged_runtime import mounted_storage_pools
+NAS_ROOT=Path('/nas')
 HOME_ROOT=Path('/home')
 PERSISTENT_ROOT=Path('/data/minas/plugins/data')
 
@@ -40,9 +42,18 @@ def scope(user, value, mode):
     if not requested.is_absolute() or '..' in requested.parts:
         raise ValueError('请选择明确的绝对目录，不允许 ..')
     target = requested.resolve(strict=True)
-    data = POOL_ROOT / user / 'data'
+    data = None
+    try:
+        parts = target.relative_to(NAS_ROOT).parts
+        if len(parts) >= 4 and re.fullmatch(r'pool[0-9]+', parts[0]) and parts[1:3] == (user, 'data'):
+            pool = NAS_ROOT / parts[0]
+            if pool not in mounted_storage_pools():
+                raise ValueError('存储池未挂载，拒绝清理：' + str(pool))
+            data = pool / user / 'data'
+    except ValueError:
+        if target.is_relative_to(NAS_ROOT): raise
     plugin = HOME_ROOT / user / 'plugin'
-    allowed = data in target.parents
+    allowed = data is not None and data in target.parents
     if not allowed:
         # Only a plugin's var directory; not scripts, INFO, etc or its entire root.
         try:
@@ -61,8 +72,6 @@ def scope(user, value, mode):
         raise ValueError('只允许当前用户文件区的子目录，或当前用户插件的 var 目录；不允许文件区根目录、系统目录和 Docker 数据目录')
     if mode == 'recycle' and target.name not in RECYCLE_NAMES:
         raise ValueError('回收站模板只接受名称为 .recycle、#recycle、@recycle、$RECYCLE.BIN、recycle、Recycle 或 回收站 的明确目录')
-    if data in target.parents and not os.path.ismount(POOL_ROOT):
-        raise ValueError('存储池未挂载，拒绝清理')
     return str(target)
 
 

@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 sys.dont_write_bytecode = True
 from download_lib import DownloadError, atomic_json
-from core_update import fetch, BUSY
+from core_update import fetch, mihomo_proxy, BUSY
 from fetch_qb import RELEASE, ASSETS
 
 REPOSITORY = 'userdocs/qbittorrent-nox-static'
@@ -210,7 +210,8 @@ def run(m, command, proxy):
         common = {'command': command, 'proxy': proxy}
         try:
             write_state(m, **common, state='checking', message='正在检查当前渠道的最新版本…')
-            installed, info = current(m), release(proxy)
+            proxy_url = mihomo_proxy(m.home) if proxy else False
+            installed, info = current(m), release(proxy_url)
             available = newer(info, installed)
             common.update(installed, latest=info['latest'], libtorrent=info['libtorrent'], updateAvailable=available)
             if command == 'check' or not available:
@@ -218,7 +219,7 @@ def run(m, command, proxy):
             with tempfile.TemporaryDirectory(prefix='qb-download-', dir=update_staging(m.home)) as folder:
                 write_state(m, **common, state='downloading', message='正在下载并校验 SHA-256…')
                 candidate = Path(folder) / 'qbittorrent-nox'
-                unpack(fetch(info['url'], proxy, 100 * 1024 * 1024), info, candidate)
+                unpack(fetch(info['url'], proxy_url, 100 * 1024 * 1024), info, candidate)
                 write_state(m, **common, state='installing', message='正在保存任务并切换内核，下载将短暂中断…')
                 install_candidate(m, candidate, info['latest'])
             atomic_json(m.var / 'core/qb-release.json', {k: info[k] for k in ('latest', 'libtorrent', 'digest')})

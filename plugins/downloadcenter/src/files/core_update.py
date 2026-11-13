@@ -11,6 +11,7 @@ import platform
 import re
 import shutil
 import subprocess
+import stat
 import sys
 import tempfile
 import time
@@ -64,8 +65,33 @@ def binary_version(path):
         raise DownloadError('核心自检失败，无法获取 aria2 版本') from exc
 
 
+def mihomo_proxy(home):
+    """Read only this account's canonical Mihomo configuration."""
+    from plugin_paths import open_state_directory
+    try:
+        directory = open_state_directory(Path(home).parent / 'mihomo', 'etc')
+        try:
+            fd = os.open('ports.env', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+            with os.fdopen(fd, 'rb') as stream:
+                info = os.fstat(stream.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o022:
+                    raise ValueError('端口配置权限异常')
+                data = stream.read(4097)
+        finally:
+            os.close(directory)
+        if len(data) > 4096: raise ValueError('端口配置过大')
+        ports = re.findall(r'^MIXED_PORT=([0-9]+)$', data.decode('ascii'), re.M)
+        if len(ports) != 1 or not 1024 <= int(ports[0]) <= 65535:
+            raise ValueError('代理端口无效')
+        return 'http://127.0.0.1:' + str(int(ports[0]))
+    except (OSError, ValueError) as exc:
+        raise DownloadError('无法读取当前账号的 Mihomo 代理端口，请先启动 Mihomo 或取消代理选项') from exc
+
+
 def fetch(url, proxy, maximum):
-    proxies = {'http': 'http://127.0.0.1:7890', 'https': 'http://127.0.0.1:7890'} if proxy else {}
+    if proxy and (not isinstance(proxy, str) or not re.fullmatch(r'http://127\.0\.0\.1:[0-9]+', proxy)):
+        raise DownloadError('代理地址无效，请重新读取当前账号的 Mihomo 配置')
+    proxies = {'http': proxy, 'https': proxy} if proxy else {}
     request = Request(url, headers={'User-Agent': 'MinasDownloadCenter', 'Accept': 'application/vnd.github+json' if 'api.github.com/' in url else 'application/octet-stream'})
     with build_opener(ProxyHandler(proxies)).open(request, timeout=20) as response:
         data = response.read(maximum + 1)
@@ -192,8 +218,9 @@ def run(m, command, proxy):
         common = {'command': command, 'proxy': proxy}
         try:
             write_state(m, **common, state='checking', message='正在检查当前渠道的最新版本…')
+            proxy_url = mihomo_proxy(m.home) if proxy else False
             current = binary_version(core_path(m))
-            info = release(proxy)
+            info = release(proxy_url)
             available = version_tuple(info['latest']) > version_tuple(current)
             common.update(current=current, latest=info['latest'], updateAvailable=available)
             if command == 'check' or not available:
@@ -202,7 +229,7 @@ def run(m, command, proxy):
             with tempfile.TemporaryDirectory(prefix='core-download-', dir=update_staging(m.home)) as folder:
                 write_state(m, **common, state='downloading', message='正在下载并校验 SHA-256…')
                 candidate = Path(folder)/'aria2c'
-                unpack(fetch(info['url'], proxy, 40 * 1024 * 1024), info, candidate)
+                unpack(fetch(info['url'], proxy_url, 40 * 1024 * 1024), info, candidate)
                 write_state(m, **common, state='installing', message='正在保存任务并切换内核，下载将短暂中断…')
                 install_candidate(m, candidate, info['latest'])
             common.update(current=info['latest'], updateAvailable=False)

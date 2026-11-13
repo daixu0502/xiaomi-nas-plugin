@@ -33,14 +33,24 @@ config_tmp=""
 test_log=""
 meta_tmp=""
 download_log=""
+stage_dir=""
+geoip_backup=""
+geosite_backup=""
+restore_pending=false
 
 cleanup() {
+    if [ "$restore_pending" = true ]; then
+        restore_file "$geoip_backup" "$GEOIP_FILE" "$geoip_had" || true
+        restore_file "$geosite_backup" "$GEOSITE_FILE" "$geosite_had" || true
+    fi
     for cleanup_file in "$geoip_tmp" "$geosite_tmp" "$release_tmp" "$config_tmp" "$test_log" "$meta_tmp" "$download_log"; do
         [ -n "$cleanup_file" ] && rm -f "$cleanup_file"
     done
+    [ -z "$stage_dir" ] || rmdir "$stage_dir" 2>/dev/null || true
     return 0
 }
-trap cleanup EXIT HUP INT TERM
+trap cleanup EXIT
+trap 'exit 130' HUP INT TERM
 
 json_error() {
     jq -n --arg message "$1" '{ok:false,error:$message}'
@@ -145,8 +155,12 @@ restore_file() {
     restore_target=$2
     restore_had=$3
     if [ "$restore_had" = "true" ]; then
-        cp "$restore_backup" "$restore_target"
-        chmod 0600 "$restore_target"
+        # Keep backup bytes until both files have been recovered.
+        restore_copy=$(mktemp "$ETC_DIR/.geo-restore.XXXXXXXX") || return 1
+        if ! cp "$restore_backup" "$restore_copy" || ! python3 -B "$PLUGIN_HOME/src/files/plugin_paths.py" --publish "$restore_copy" "$restore_target"; then
+            rm -f "$restore_copy"
+            return 1
+        fi
     else
         rm -f "$restore_target"
     fi
@@ -159,8 +173,11 @@ do_update() {
     exec 9>"$RUNTIME_DIR/geodata-update.lock"
     flock -n 9 || json_error "另一个 Geo 数据更新任务正在运行"
     umask 077
-    geoip_tmp="$RUNTIME_DIR/GeoIP.dat.$$"
-    geosite_tmp="$RUNTIME_DIR/GeoSite.dat.$$"
+    staging=$(python3 -B "$PLUGIN_HOME/src/files/plugin_paths.py" --update-staging "$PLUGIN_HOME") \
+        || json_error "无法创建 Geo 数据下载暂存目录"
+    stage_dir=$(mktemp -d "$staging/mihomo-geodata.XXXXXXXX") || json_error "无法创建 Geo 数据下载暂存目录"
+    geoip_tmp="$stage_dir/GeoIP.dat"
+    geosite_tmp="$stage_dir/GeoSite.dat"
     test_log="$RUNTIME_DIR/geodata-test.$$"
     task_progress release 8 "正在查询官方 Geo 数据版本"
     fetch_release_metadata
@@ -178,12 +195,19 @@ do_update() {
         task_progress unchanged 95 "Geo 数据内容未改变，无需重载或重启"
     else
     task_progress validating 68 "正在校验新 Geo 数据与当前配置"
-    geoip_backup="$RUNTIME_DIR/GeoIP.dat.backup.$$"
-    geosite_backup="$RUNTIME_DIR/GeoSite.dat.backup.$$"
+    geoip_backup=$(mktemp "$ETC_DIR/.GeoIP.backup.XXXXXXXX") || json_error "无法创建 GeoIP 备份"
+    geosite_backup=$(mktemp "$ETC_DIR/.GeoSite.backup.XXXXXXXX") || json_error "无法创建 GeoSite 备份"
     geoip_had=false
     geosite_had=false
-    [ -f "$GEOIP_FILE" ] && cp "$GEOIP_FILE" "$geoip_backup" && geoip_had=true
-    [ -f "$GEOSITE_FILE" ] && cp "$GEOSITE_FILE" "$geosite_backup" && geosite_had=true
+    if [ -f "$GEOIP_FILE" ]; then
+        cp "$GEOIP_FILE" "$geoip_backup" || json_error "备份 GeoIP 失败，未执行替换"
+        geoip_had=true
+    fi
+    if [ -f "$GEOSITE_FILE" ]; then
+        cp "$GEOSITE_FILE" "$geosite_backup" || json_error "备份 GeoSite 失败，未执行替换"
+        geosite_had=true
+    fi
+    restore_pending=true
     python3 -B "$PLUGIN_HOME/src/files/plugin_paths.py" --publish "$geoip_tmp" "$GEOIP_FILE"
     geoip_tmp=""
     python3 -B "$PLUGIN_HOME/src/files/plugin_paths.py" --publish "$geosite_tmp" "$GEOSITE_FILE"
@@ -191,20 +215,23 @@ do_update() {
     chmod 0600 "$GEOIP_FILE" "$GEOSITE_FILE"
 
     if ! "$BIN" -t -d "$ETC_DIR" -f "$CONFIG_FILE" > "$test_log" 2>&1; then
-        restore_file "$geoip_backup" "$GEOIP_FILE" "$geoip_had"
-        restore_file "$geosite_backup" "$GEOSITE_FILE" "$geosite_had"
+        restore_file "$geoip_backup" "$GEOIP_FILE" "$geoip_had" || json_error "恢复 GeoIP 失败，旧文件备份已保留在 etc"
+        restore_file "$geosite_backup" "$GEOSITE_FILE" "$geosite_had" || json_error "恢复 GeoSite 失败，旧文件备份已保留在 etc"
+        restore_pending=false
         rm -f "$geoip_backup" "$geosite_backup"
         json_error "新 Geo 数据无法通过当前配置校验，已保留旧文件"
     fi
     control_status && was_running=true
     task_progress activating 88 "刷新 Geo 缓存：当前内核需要重启以确保新数据生效"
     if [ "$was_running" = "true" ] && ! control_restart; then
-        restore_file "$geoip_backup" "$GEOIP_FILE" "$geoip_had"
-        restore_file "$geosite_backup" "$GEOSITE_FILE" "$geosite_had"
+        restore_file "$geoip_backup" "$GEOIP_FILE" "$geoip_had" || json_error "恢复 GeoIP 失败，旧文件备份已保留在 etc"
+        restore_file "$geosite_backup" "$GEOSITE_FILE" "$geosite_had" || json_error "恢复 GeoSite 失败，旧文件备份已保留在 etc"
+        restore_pending=false
         control_restart || true
         rm -f "$geoip_backup" "$geosite_backup"
         json_error "Geo 数据更新后核心启动失败，已恢复旧文件"
     fi
+    restore_pending=false
     rm -f "$geoip_backup" "$geosite_backup"
     fi
 

@@ -5,6 +5,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'common'))
 from process_metrics import process_details, network_details, physical_space, docker_directory_usage, configure_cache
 from telemetry_cache import cached, invalidate, configure
+from privileged_runtime import mounted_storage_pools
 
 MAX_REQUEST=65536
 SERVICES={
@@ -53,7 +54,9 @@ def network():
  chosen['timestamp']=time.time();return chosen
 def disk_usage():
  result=[];seen=set()
- for mount,label in [('/nas/pool0','用户存储池'),('/data','系统数据文件系统'),('/data/docker_data','Docker 数据目录'),('/log','系统日志'),('/firmware','固件分区')]:
+ pools=[(str(p),'用户存储池 '+p.name) for p in mounted_storage_pools()]
+ pool_paths={p for p,label in pools}
+ for mount,label in pools+[('/data','系统数据文件系统'),('/data/docker_data','Docker 数据目录'),('/log','系统日志'),('/firmware','固件分区')]:
   if not Path(mount).exists():continue
   proc=run(['df','-P','-B1',mount])
   lines=proc.stdout.splitlines()
@@ -61,7 +64,7 @@ def disk_usage():
   parts=lines[-1].split()
   if len(parts)<6:continue
   device=parts[0]
-  key=(device,mount if device.startswith('overlay') or mount=='/data/docker_data' else '')
+  key=(device,mount if device.startswith('overlay') or mount in pool_paths or mount=='/data/docker_data' else '')
   if key in seen:continue
   seen.add(key)
   item={'label':label,'mount':mount,'device':device,'total':int(parts[1]),'used':int(parts[2]),'available':int(parts[3]),'percent':int(parts[4].rstrip('%'))}
@@ -127,7 +130,7 @@ def cache_info(force=False):
  mem=meminfo();return {'pageCache':mem.get('Cached',0)+mem.get('Buffers',0),'logSize':cached('nascenter-logs',60,lambda:dir_size('/log'),force)}
 def overview_details(user,force=False,part='all'):
  if part not in ('all','storage','services','logs'):raise ValueError('无效采样类别')
- mounts='-'.join(str(os.stat(p).st_dev) if Path(p).exists() else 'missing' for p in ('/nas/pool0','/data','/data/docker_data'))
+ mounts='-'.join(str(p)+':'+(str(os.stat(p).st_dev) if Path(p).exists() else 'missing') for p in [*mounted_storage_pools(),'/data','/data/docker_data'])
  data={'ok':True,'sampledAt':time.time()}
  if part in ('all','storage'):data['filesystems']=cached('nascenter-'+user+'-disks-'+mounts,10,disk_usage,force)
  if part in ('all','services'):data['services']=cached('nascenter-'+user+'-services',20,lambda:service_list(user),force)

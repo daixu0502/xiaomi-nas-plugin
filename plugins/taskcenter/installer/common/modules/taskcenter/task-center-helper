@@ -78,7 +78,7 @@ def templates():
         ('每天停止指定容器', 'docker_stop', '夜间停止不需要常驻运行的容器。', {'type': 'daily', 'time': '23:30'}),
         ('每周重启指定容器', 'docker_restart', '只重启选中的容器，不重启 Docker 引擎。', {'type': 'weekly', 'time': '04:00', 'weekday': 6}),
         ('从本地镜像创建容器', 'docker_image', '指定本地镜像和新容器名称。桥接网络，无端口映射、目录挂载或特权；复杂服务请先在 Docker 插件创建，再使用启动容器模板。', {'type': 'daily', 'time': '08:00'}),
-        ('开机等待存储池后启动容器', 'docker_start', '开机延迟 120 秒，确认 /nas/pool0 已挂载再启动容器。挂载未就绪时每分钟重试，最长等待 30 分钟。', {'type': 'boot', 'delay': 120}),
+        ('开机等待存储池后启动容器', 'docker_start', '开机延迟 120 秒，确认当前账号的插件存储池已挂载再启动容器。挂载未就绪时每分钟重试，最长等待 30 分钟。', {'type': 'boot', 'delay': 120}),
         ('每天执行自己的脚本', 'script', '填写脚本绝对路径，默认以当前 NAS 用户执行；可在执行身份中选择 root。', {'type': 'daily', 'time': '02:00'}),
     ]
     result = [{'template': str(i), 'name': n, 'kind': k, 'description': d, 'schedule': s, 'params': {}, 'timeout': 300, 'waitPool': True, 'enabled': False} for i, (n, k, d, s) in enumerate(specs)]
@@ -198,7 +198,7 @@ def maintenance(user, request, timeout=15):
     return result
 
 def condition_error(user, task, cache=None):
-    if task['waitPool'] and not pool_ready():
+    if task['waitPool'] and not pool_ready(user):
         return '存储池未挂载'
     condition = task.get('conditions') or {}
     try:
@@ -245,8 +245,12 @@ def approve_cleanup(task, req):
     task['cleanupApproval'] = {'revision': task['revision'], 'root': preview['root']}
     task.pop('cleanupPreview', None)
 
-def pool_ready():
-    return os.path.ismount('/nas/pool0')
+def pool_ready(user):
+    try:
+        runtime.plugin_storage_root(user, 'taskcenter')
+        return True
+    except (OSError, ValueError):
+        return False
 
 def uptime_seconds():
     return float(Path('/proc/uptime').read_text().split()[0])
@@ -487,7 +491,7 @@ def api(user, req):
                 tasks.append(dict(public, nextRun=next_time(t, time.time()), running=running(state, t['id']), retryAt=pending['retryAt'] if pending else None, cleanupApproved=t.get('cleanupApproval', {}).get('revision') == t['revision']))
             probe=subprocess.run(['systemctl','is-active','--quiet','minas-maintenance-events.service'],timeout=5,check=False)
             last_tick=time.time() if probe.returncode==0 else None
-            return {'tasks': tasks, 'runs': list(reversed(state['runs'])), 'scheduler': state['scheduler'], 'lastTick': last_tick, 'serverTime': time.time(), 'timezone': time.strftime('%Z %z'), 'poolReady': pool_ready()}
+            return {'tasks': tasks, 'runs': list(reversed(state['runs'])), 'scheduler': state['scheduler'], 'lastTick': last_tick, 'serverTime': time.time(), 'timezone': time.strftime('%Z %z'), 'poolReady': pool_ready(user)}
         if action == 'log':
             ident = valid_id(req.get('id'))
             if not any(r['id'] == ident for r in state['runs']):

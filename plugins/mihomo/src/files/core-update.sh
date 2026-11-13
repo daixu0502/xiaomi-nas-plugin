@@ -27,14 +27,20 @@ archive_tmp=""
 binary_tmp=""
 test_log=""
 meta_tmp=""
+stage_dir=""
+rollback=""
+keep_rollback=false
 
 cleanup() {
     for cleanup_file in "$api_tmp" "$archive_tmp" "$binary_tmp" "$test_log" "$meta_tmp"; do
         [ -n "$cleanup_file" ] && rm -f "$cleanup_file"
     done
+    [ -z "$stage_dir" ] || rmdir "$stage_dir" 2>/dev/null || true
+    [ "$keep_rollback" = true ] || [ -z "$rollback" ] || rm -f "$rollback"
     return 0
 }
-trap cleanup EXIT HUP INT TERM
+trap cleanup EXIT
+trap 'exit 130' HUP INT TERM
 
 json_error() {
     jq -n --arg message "$1" '{ok:false,error:$message}'
@@ -50,6 +56,8 @@ current_version() {
     version_value=$(printf '%s\n' "$version_text" | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?' | head -n 1 || true)
     printf '%s\n' "${version_value:-unknown}"
 }
+
+. "$SCRIPT_DIR/update-common.sh"
 
 download_https() {
     download_url=$1
@@ -120,6 +128,7 @@ write_check_metadata() {
 
 control_command() (
     control_action=$1
+    [ ! -e "/proc/$$/fd/8" ] || exec 8>&-
     [ ! -e "/proc/$$/fd/9" ] || exec 9>&-
     PLUG_USER="$plugin_user" PLUG_NAME=mihomo PLUG_HOME_DIR="$PLUGIN_HOME" PLUG_SRC_DIR="$SRC_DIR" \
         "$CONTROL" "$control_action"
@@ -154,6 +163,7 @@ do_check() {
 
 do_update() {
     command -v flock >/dev/null 2>&1 || json_error "设备缺少 flock，无法安全更新核心"
+    operation_lock
     mkdir -p "$VAR_DIR"
     exec 9>"$RUNTIME_DIR/core-update.lock"
     flock -n 9 || json_error "另一个核心更新任务正在运行"
@@ -173,8 +183,18 @@ do_update() {
     fi
 
     umask 077
-    archive_tmp="$RUNTIME_DIR/mihomo-$latest_version.gz.$$"
-    binary_tmp="$RUNTIME_DIR/mihomo-$latest_version.$$"
+    # Large downloads stay outside the bounded noexec RAM runtime. Executable
+    # candidates and rollback files stay beside the persistent target.
+    staging=$(python3 -B "$PLUGIN_HOME/src/files/plugin_paths.py" --update-staging "$PLUGIN_HOME") \
+        || json_error "无法创建核心下载暂存目录"
+    stage_dir=$(mktemp -d "$staging/mihomo-core.XXXXXXXX") || json_error "无法创建核心下载暂存目录"
+    archive_tmp="$stage_dir/core.gz"
+    CORE_DIR="$VAR_DIR/core"
+    [ ! -L "$CORE_DIR" ] && [ ! -L "$CORE_DIR/mihomo" ] || json_error "核心目录异常，拒绝更新"
+    mkdir -p "$CORE_DIR"
+    chmod 0700 "$CORE_DIR"
+    CORE_TARGET="$CORE_DIR/mihomo"
+    binary_tmp=$(mktemp "$CORE_DIR/.mihomo-candidate.XXXXXXXX") || json_error "无法创建核心候选文件"
     test_log="$RUNTIME_DIR/core-update-test.$$"
     download_https "$asset_url" "$archive_tmp" 'xiaomi-storage-mihomo/1.5.0' \
         || json_error "Mihomo 核心下载失败，请检查网络或代理节点"
@@ -201,17 +221,13 @@ do_update() {
         was_running=true
     fi
 
-    CORE_DIR="$VAR_DIR/core"
-    [ ! -L "$CORE_DIR" ] && [ ! -L "$CORE_DIR/mihomo" ] || json_error "核心目录异常，拒绝更新"
-    mkdir -p "$CORE_DIR"
-    chmod 0700 "$CORE_DIR"
-    CORE_TARGET="$CORE_DIR/mihomo"
-    rollback="$RUNTIME_DIR/mihomo.core.rollback"
+    rollback=$(mktemp "$CORE_DIR/.mihomo-rollback.XXXXXXXX") || json_error "无法创建核心备份"
     cp "$BIN" "$rollback" || json_error "无法备份当前 Mihomo 核心"
     chmod 0700 "$rollback"
     if [ "$was_running" = "true" ]; then
         control_command stop >/dev/null 2>&1 || json_error "无法停止当前 Mihomo 核心"
     fi
+    keep_rollback=true
     if ! python3 -B "$PLUGIN_HOME/src/files/plugin_paths.py" --publish "$binary_tmp" "$CORE_TARGET"; then
         [ "$was_running" = "true" ] && control_command start >/dev/null 2>&1 || true
         json_error "无法替换 Mihomo 核心"
@@ -220,14 +236,17 @@ do_update() {
     chmod 0755 "$CORE_TARGET"
 
     if [ "$was_running" = "true" ] && ! control_command start >/dev/null 2>&1; then
-        cp "$rollback" "$CORE_TARGET"
-        chmod 0755 "$CORE_TARGET"
-        control_command start >/dev/null 2>&1 || true
+        control_command stop >/dev/null 2>&1 || json_error "新核心未能停止，旧核心已保留在 var/core 的回退文件中"
+        python3 -B "$PLUGIN_HOME/src/files/plugin_paths.py" --publish "$rollback" "$CORE_TARGET" \
+            || json_error "恢复旧核心失败，备份已保留在 var/core 的回退文件中"
+        rollback=""
+        control_command start >/dev/null 2>&1 || json_error "旧核心已恢复，但服务未启动，请检查日志"
         json_error "新核心启动失败，已恢复旧核心"
     fi
 
     write_check_metadata "$latest_version" "$latest_version"
     rm -f "$rollback"
+    rollback=""
     jq -n --arg previousVersion "$current" --arg currentVersion "$latest_version" \
         '{ok:true,updated:true,previousVersion:$previousVersion,currentVersion:$currentVersion,latestVersion:$currentVersion}'
 }

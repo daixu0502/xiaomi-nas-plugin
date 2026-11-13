@@ -40,6 +40,51 @@ BASH_CANDIDATES = tuple(map(Path, ('/usr/bin/bash.bash','/bin/bash.bash','/usr/l
 BASH_PROBE = '[[ -n ${BASH_VERSION-} && $- != *r* ]] && builtin printf "%s\\n" __MINAS_BASH_OK__'
 
 
+# BEGIN SHARED STORAGE PATHS
+"""Canonical NAS storage pools; embedded in user and privileged runtimes."""
+import os
+from pathlib import Path
+import re
+
+STORAGE_NAS = Path('/nas')
+STORAGE_HOMES = Path('/home')
+STORAGE_MOUNTINFO = Path('/proc/self/mountinfo')
+
+
+def mounted_storage_pools():
+    pools = set()
+    for line in STORAGE_MOUNTINFO.read_text().splitlines():
+        fields = line.split()
+        if len(fields) < 10 or ' - ' not in line:
+            raise ValueError('无法确认存储池挂载状态')
+        mount = Path(re.sub(r'\\([0-7]{3})', lambda m: chr(int(m[1], 8)), fields[4]))
+        if (mount.parent == STORAGE_NAS and re.fullmatch(r'pool[0-9]+', mount.name)
+                and not mount.is_symlink() and mount.is_dir()):
+            pools.add(mount)
+    return sorted(pools, key=lambda p: int(p.name[4:]))
+
+
+def plugin_storage_root(user, plugin, require_mounted=True):
+    if not re.fullmatch(r'u[0-9]+', user or '') or not re.fullmatch(r'[a-z]+', plugin or ''):
+        raise ValueError('插件或账号无效')
+    link = STORAGE_HOMES / user / 'plugin' / plugin / 'src'
+    if not link.is_symlink():
+        raise ValueError('插件源码链接不可用，无法确认存储池')
+    source = link.resolve(strict=False)
+    try:
+        parts = source.relative_to(STORAGE_NAS).parts
+    except ValueError:
+        parts = ()
+    if (len(parts) != 5 or not re.fullmatch(r'pool[0-9]+', parts[0])
+            or parts[1:] != (user, 'plugin', 'pluginsrc', plugin)):
+        raise ValueError('插件源码路径与账号不匹配')
+    pool = STORAGE_NAS / parts[0]
+    if require_mounted and pool not in mounted_storage_pools():
+        raise ValueError('存储池未挂载：' + str(pool))
+    return pool / user
+# END SHARED STORAGE PATHS
+
+
 class RecoveryError(Exception):
     pass
 
@@ -359,7 +404,16 @@ class Recovery:
         except (RecoveryError,OSError,ValueError):result['reason']='permissions_or_content'
         return result
 
+    def emergency_command(self):
+        try:
+            root=plugin_storage_root(self.user,'sshrecovery',require_mounted=False)
+        except (OSError,ValueError):
+            return ''  # Standalone diagnostics must work without an installed plugin.
+        return 'chroot /nas /usr/bin/python3 '+str(root/'data/ssh-emergency/recover-ssh.py')+' --local-recover --offline'
+
     def emergency_bundle(self,version):
+        emergency_command=self.emergency_command()
+        require(emergency_command,'无法确认当前账号的存储池，请修复插件源码链接后再导出应急包')
         memory=io.BytesIO();files={'recover-ssh.py':Path(__file__).read_bytes(),
                                  'restore-ssh.sh':boot_asset().read_bytes(),
                                  'manifest.json':json.dumps({'version':version,'user':self.user}).encode()}
@@ -368,7 +422,7 @@ class Recovery:
             '请提前下载到电脑并保留 Portainer 管理入口。\n'
             'SSH 与插件都无法使用时，将本包解压到 NAS 用户共享文件夹 data/ssh-emergency。\n'
             '在容器里将 NAS 的 / 绑定到 /nas，使用 root Console 执行：\n'
-            'chroot /nas /usr/bin/python3 /nas/pool0/'+self.user+'/data/ssh-emergency/recover-ssh.py --local-recover --offline\n'
+            +emergency_command+'\n'
             '脚本先修复文件，再通过一次性宿主机 Cron 加载配置和开启 SSH。需宿主机 crond 正常运行。\n'
             '查看结果：cat /nas/data/minas/ssh/emergency-result.json\n'
             '也可在已有宿主机 root 终端执行同一程序并去掉 --offline。\n'
@@ -530,7 +584,7 @@ class Recovery:
             except (RecoveryError,OSError,subprocess.TimeoutExpired):pass
         try:exported=json.loads((self.state/'keys'/(self.user+'.emergency.json')).read_bytes()).get('exportedAt',0)
         except (OSError,ValueError):exported=max((e.get('time',0) for e in events if e.get('user')==self.user and '已导出离线应急包' in e.get('message','')),default=0)
-        return dict(emergencyExportedAt=exported,emergencyCommand='chroot /nas /usr/bin/python3 /nas/pool0/'+self.user+'/data/ssh-emergency/recover-ssh.py --local-recover --offline',loginAuthorization=self.login_status(),hostKeyValid=host_valid,sshActive=socket.get('ActiveState')=='active',socketSupported=socket.get('LoadState')!='not-found',port=22,
+        return dict(emergencyExportedAt=exported,emergencyCommand=self.emergency_command(),loginAuthorization=self.login_status(),hostKeyValid=host_valid,sshActive=socket.get('ActiveState')=='active',socketSupported=socket.get('LoadState')!='not-found',port=22,
                     bootFinished=boot,keySaved=bool(fingerprint),fingerprint=fingerprint,hostKey=self.host_key.is_file(),hostBackup=self.host_backup.is_file(),
                     bootService=boot_status(),
                     events=[e for e in reversed(events) if e.get('user')==self.user][:20],settings=self.settings(),generated=self.generated_info())

@@ -2,6 +2,8 @@
 
 安装、更新和卸载请看[统一使用教程](../../README.md)。
 
+勾选“通过本机 Mihomo 代理检查与下载”后，aria2 与 qBittorrent 更新均读取当前账号的 Mihomo 端口。无法读取时会提示启动 Mihomo 或取消代理选项，不会改用其他账号的默认端口。
+
 ## 功能说明
 
 - 使用 aria2 下载 HTTP / HTTPS / FTP / SFTP 直链，使用 qBittorrent 下载 BT 种子和磁链，无需 Docker。
