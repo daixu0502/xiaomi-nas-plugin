@@ -23,7 +23,7 @@
     '<label class="workbench-update-check"><input type="checkbox" data-update="clearPassword">清除已保存的密码</label></details><div class="workbench-proxy-footer"><span data-update="proxySaved" role="status"></span><button type="button" class="secondary" data-update="saveProxy">保存代理设置</button></div></section>' +
     '</div>';
   (root.querySelector('.desktop-frame') || doc.body).appendChild(dialog);
-  var nodes = {}, timer = 0, disposed = false, busy = false, state = null, proxyDirty = false, requestSerial = 0, backgroundWatch = false, liveJob = null;
+  var nodes = {}, timer = 0, disposed = false, busy = false, state = null, proxyDirty = false, requestSerial = 0, backgroundWatch = false, liveJob = null, statusError = false;
   dialog.querySelectorAll('[data-update]').forEach(function (node) { nodes[node.dataset.update] = node; });
   function error(message) { nodes.error.hidden = !message; nodes.error.textContent = message || ''; }
   function showConfirm(on) { nodes.confirm.hidden = !on; nodes.actions.hidden = on; }
@@ -47,6 +47,7 @@
   }
   function render(value, loadProxy) {
     state = value;
+    if (statusError) { error(''); statusError = false; }
     var available = Boolean(value.latest && value.latest.available);
     opener.dataset.updateAvailable = String(available);
     opener.setAttribute('aria-label', available ? '有新版本 ' + value.latest.version + '，点击版本号更新插件' : '查看插件版本并检查更新');
@@ -62,6 +63,7 @@
       nodes.proxyPassword.value = ''; nodes.proxyPassword.placeholder = value.proxy.hasPassword ? '已保存，留空保持原密码' : '未设置'; nodes.clearPassword.checked = false; proxyDirty = false;
     }
     var job = value.job || {};
+    if (job.running || (job.action === 'install' && job.phase === 'complete')) error('');
     if (!available || job.running) showConfirm(false);
     // Finished job directories are removed. Logs already seen by this window
     // remain in memory only, and are discarded when another task starts.
@@ -85,14 +87,23 @@
     if (!disposed && (dialog.open || backgroundWatch) && state && state.job && state.job.running) timer = global.setTimeout(function () { load(false); }, 1500);
   }
   function load(loadProxy, automatic) {
+    global.clearTimeout(timer);
     var serial = ++requestSerial;
-    return api('status').then(function (value) { if (!disposed && serial === requestSerial) { render(value, loadProxy); if (automatic && value.checkDue && !(value.job && value.job.running)) perform('check', {background:true}); } }).catch(function (failure) { if (!disposed && serial === requestSerial) { error(failure.message); working(Boolean(state && state.job && state.job.running)); if (dialog.open || backgroundWatch) timer = global.setTimeout(function () { load(false); }, 4000); } });
+    return api('status').then(function (value) { if (!disposed && serial === requestSerial) { render(value, loadProxy); if (automatic && value.checkDue && !(value.job && value.job.running)) perform('check', {background:true}); } }).catch(function (failure) { if (!disposed && serial === requestSerial) { error(failure.message); statusError = true; working(Boolean(state && state.job && state.job.running)); if (dialog.open || backgroundWatch) timer = global.setTimeout(function () { load(false); }, 4000); } });
   }
   function perform(action, data, loadProxy) {
+    global.clearTimeout(timer);
     var serial = ++requestSerial;
     if (action === 'check' || action === 'install') backgroundWatch = true;
     error(''); working(true);
-    return api(action, data).then(function (value) { if (!disposed && serial === requestSerial) render(value, loadProxy); }).catch(function (failure) { if (!disposed && serial === requestSerial) { error(failure.message); working(false); } });
+    return api(action, data).then(function (value) { if (!disposed && serial === requestSerial) render(value, loadProxy); }).catch(function (failure) { if (!disposed && serial === requestSerial) {
+      error(failure.message);
+      if (action === 'install' || action === 'check') {
+        // A lost acknowledgement does not mean the worker was never queued.
+        // Read its actual result; never submit the mutation a second time.
+        working(true); timer = global.setTimeout(function () { load(false); }, 500);
+      } else working(false);
+    } });
   }
   function proxyValue() { return {enabled:nodes.proxyEnabled.checked, url:nodes.proxyUrl.value.trim(), username:nodes.proxyUsername.value, password:nodes.proxyPassword.value, clearPassword:nodes.clearPassword.checked}; }
   function saveProxy() {

@@ -251,6 +251,9 @@
 (function (global) {
   'use strict';
   var client=global.XiaomiPluginClient, doc=client.document, send=client.request;
+  // The scoped document forwards event listeners to the plugin root. Browser
+  // visibility events belong to its owning document and do not reach that root.
+  var visibilityDoc=doc.documentElement&&doc.documentElement.ownerDocument||doc;
   var disposed=false, epoch=0, active=new Set(), timers=new Set(), waiting=new Set();
   var reads=new Set(('status list templates details history files search check_code browse torrent_browse torrent_preview torrent_nas_preview detail logs overview overview_details smart processes process_network health_details container_list container_stats container_logs container_inspect container_upgrade_status container_bulk_status image_list network_list volume_list system_summary system_disk update_task_status node_test_status node_tests proxies providers rule_providers config subscription network_access core_status geodata_status docker_proxy_status transfers settings_get seed_cache_list').split(' '));
   'network_access_status core_update_status manual_nodes subscription_status config_get node_test_list plugin_update_status credentials_get openlist_info bt_cache_list bt_cache_preview log resources schedule_preview cleanup_preview preview preview_relations preview_repair preview_undo'.split(' ').forEach(function(action){reads.add(action);});
@@ -260,40 +263,51 @@
   client.request=function(settings){
     if(disposed)return Promise.reject(cancelled());
     var action=settings.action||'status', read=reads.has(action), start;
-    var visible=read&&doc.hidden?new Promise(function(resolve,reject){start={resolve:resolve,reject:reject};waiting.add(start);}):Promise.resolve();
+    var visible=read&&visibilityDoc.hidden?new Promise(function(resolve,reject){start={resolve:resolve,reject:reject};waiting.add(start);}):Promise.resolve();
     return visible.then(function(){
       if(disposed)throw cancelled();
       var controller=new AbortController(), original=settings.options||{}, timer, external=original.signal;
-      var entry={controller:controller,read:read}, finished=false, generation=epoch, timedOut=false;
+      var entry={controller:controller,read:read}, finished=false, generation=epoch, timedOut=false, rejectAbort;
+      var aborted=new Promise(function(resolve,reject){rejectAbort=reject;});
+      function abortError(){
+        if(!timedOut)return cancelled();
+        var error=new Error(read?'读取超时，请重试':'请求超时，请查询实际结果后再操作，勿重复提交');error.code='REQUEST_TIMEOUT';return error;
+      }
       function abort(){controller.abort();}
-      function clean(){if(finished)return;finished=true;global.clearTimeout(timer);active.delete(entry);if(external)external.removeEventListener('abort',abort);}
-      if(external){if(external.aborted)abort();else external.addEventListener('abort',abort,{once:true});}
+      function clean(){if(finished)return;finished=true;global.clearTimeout(timer);active.delete(entry);controller.signal.removeEventListener('abort',onAbort);if(external)external.removeEventListener('abort',abort);}
+      function onAbort(){rejectAbort(abortError());clean();}
+      controller.signal.addEventListener('abort',onAbort,{once:true});
       active.add(entry);
       timer=global.setTimeout(function(){timedOut=true;abort();},settings.timeoutMs||(read?15000:120000));
+      if(external){if(external.aborted)abort();else external.addEventListener('abort',abort,{once:true});}
       var request=Object.assign({},settings,{options:Object.assign({},original,{signal:controller.signal})});
-      return send(request).then(function(response){
+      var pending;
+      try{pending=controller.signal.aborted?aborted:send(request);}catch(error){pending=Promise.reject(error);}
+      // Some embedded transports ignore AbortSignal. The deadline must settle
+      // the caller anyway, including while consuming a response body.
+      return Promise.race([pending,aborted]).then(function(response){
         if(read&&(disposed||generation!==epoch)){clean();throw cancelled();}
         ['text','json','blob','arrayBuffer'].forEach(function(method){
           if(!response[method])return;
           var consume=response[method].bind(response);
-          response[method]=function(){return consume().then(function(value){if(read&&(disposed||generation!==epoch))throw cancelled();return value;}).finally(clean);};
+          response[method]=function(){return Promise.race([Promise.resolve().then(consume),aborted]).then(function(value){if(read&&(disposed||generation!==epoch))throw cancelled();return value;}).finally(clean);};
         });
         return response;
-      }).catch(function(error){clean();if(error.name==='AbortError'&&timedOut){error=new Error(read?'读取超时，请重试':'请求超时，请查询实际结果后再操作，勿重复提交');error.code='REQUEST_TIMEOUT';}throw error;});
+      }).catch(function(error){clean();if(error.name==='AbortError'&&timedOut)throw abortError();throw error;});
     });
   };
   function visibility(){
-    if(doc.hidden){epoch++;active.forEach(function(entry){if(entry.read)entry.controller.abort();});}
+    if(visibilityDoc.hidden){epoch++;active.forEach(function(entry){if(entry.read)entry.controller.abort();});}
     else {waiting.forEach(function(entry){entry.resolve();});waiting.clear();}
   }
   function dispose(){
     disposed=true;timers.forEach(global.clearTimeout);timers.clear();
     waiting.forEach(function(entry){entry.reject(cancelled());});waiting.clear();
     active.forEach(function(entry){if(entry.read)entry.controller.abort();});
-    doc.removeEventListener('visibilitychange',visibility);
+    visibilityDoc.removeEventListener('visibilitychange',visibility);
     global.removeEventListener('unmount',dispose);global.removeEventListener('pagehide',dispose);
   }
-  doc.addEventListener('visibilitychange',visibility);
+  visibilityDoc.addEventListener('visibilitychange',visibility);
   global.addEventListener('unmount',dispose);global.addEventListener('pagehide',dispose);
 })(window);
 /* END SHARED REQUEST LIFECYCLE */
@@ -876,7 +890,7 @@
     '<label class="workbench-update-check"><input type="checkbox" data-update="clearPassword">清除已保存的密码</label></details><div class="workbench-proxy-footer"><span data-update="proxySaved" role="status"></span><button type="button" class="secondary" data-update="saveProxy">保存代理设置</button></div></section>' +
     '</div>';
   (root.querySelector('.desktop-frame') || doc.body).appendChild(dialog);
-  var nodes = {}, timer = 0, disposed = false, busy = false, state = null, proxyDirty = false, requestSerial = 0, backgroundWatch = false, liveJob = null;
+  var nodes = {}, timer = 0, disposed = false, busy = false, state = null, proxyDirty = false, requestSerial = 0, backgroundWatch = false, liveJob = null, statusError = false;
   dialog.querySelectorAll('[data-update]').forEach(function (node) { nodes[node.dataset.update] = node; });
   function error(message) { nodes.error.hidden = !message; nodes.error.textContent = message || ''; }
   function showConfirm(on) { nodes.confirm.hidden = !on; nodes.actions.hidden = on; }
@@ -900,6 +914,7 @@
   }
   function render(value, loadProxy) {
     state = value;
+    if (statusError) { error(''); statusError = false; }
     var available = Boolean(value.latest && value.latest.available);
     opener.dataset.updateAvailable = String(available);
     opener.setAttribute('aria-label', available ? '有新版本 ' + value.latest.version + '，点击版本号更新插件' : '查看插件版本并检查更新');
@@ -915,6 +930,7 @@
       nodes.proxyPassword.value = ''; nodes.proxyPassword.placeholder = value.proxy.hasPassword ? '已保存，留空保持原密码' : '未设置'; nodes.clearPassword.checked = false; proxyDirty = false;
     }
     var job = value.job || {};
+    if (job.running || (job.action === 'install' && job.phase === 'complete')) error('');
     if (!available || job.running) showConfirm(false);
     // Finished job directories are removed. Logs already seen by this window
     // remain in memory only, and are discarded when another task starts.
@@ -938,14 +954,23 @@
     if (!disposed && (dialog.open || backgroundWatch) && state && state.job && state.job.running) timer = global.setTimeout(function () { load(false); }, 1500);
   }
   function load(loadProxy, automatic) {
+    global.clearTimeout(timer);
     var serial = ++requestSerial;
-    return api('status').then(function (value) { if (!disposed && serial === requestSerial) { render(value, loadProxy); if (automatic && value.checkDue && !(value.job && value.job.running)) perform('check', {background:true}); } }).catch(function (failure) { if (!disposed && serial === requestSerial) { error(failure.message); working(Boolean(state && state.job && state.job.running)); if (dialog.open || backgroundWatch) timer = global.setTimeout(function () { load(false); }, 4000); } });
+    return api('status').then(function (value) { if (!disposed && serial === requestSerial) { render(value, loadProxy); if (automatic && value.checkDue && !(value.job && value.job.running)) perform('check', {background:true}); } }).catch(function (failure) { if (!disposed && serial === requestSerial) { error(failure.message); statusError = true; working(Boolean(state && state.job && state.job.running)); if (dialog.open || backgroundWatch) timer = global.setTimeout(function () { load(false); }, 4000); } });
   }
   function perform(action, data, loadProxy) {
+    global.clearTimeout(timer);
     var serial = ++requestSerial;
     if (action === 'check' || action === 'install') backgroundWatch = true;
     error(''); working(true);
-    return api(action, data).then(function (value) { if (!disposed && serial === requestSerial) render(value, loadProxy); }).catch(function (failure) { if (!disposed && serial === requestSerial) { error(failure.message); working(false); } });
+    return api(action, data).then(function (value) { if (!disposed && serial === requestSerial) render(value, loadProxy); }).catch(function (failure) { if (!disposed && serial === requestSerial) {
+      error(failure.message);
+      if (action === 'install' || action === 'check') {
+        // A lost acknowledgement does not mean the worker was never queued.
+        // Read its actual result; never submit the mutation a second time.
+        working(true); timer = global.setTimeout(function () { load(false); }, 500);
+      } else working(false);
+    } });
   }
   function proxyValue() { return {enabled:nodes.proxyEnabled.checked, url:nodes.proxyUrl.value.trim(), username:nodes.proxyUsername.value, password:nodes.proxyPassword.value, clearPassword:nodes.clearPassword.checked}; }
   function saveProxy() {

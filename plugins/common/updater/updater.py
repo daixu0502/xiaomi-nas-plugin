@@ -27,7 +27,7 @@ import urllib.request
 import uuid
 
 sys.dont_write_bytecode = True
-VERSION = '2.0.2'
+VERSION = '2.0.3'
 REPOSITORY = 'daixu0502/xiaomi-nas-plugin'
 BASE = Path('/data/minas/plugins/updater')
 RECOVERY = Path('/data/minas/plugins/recovery')
@@ -103,10 +103,18 @@ def save(path, value):
     atomic(path, encoded(value))
 
 
-def read(path, default=None):
-    if not Path(path).exists() and default is not None:
-        return default
-    return json.loads(plain(path).read_text(encoding='utf-8'))
+_MISSING = object()
+
+
+def read(path, default=_MISSING):
+    try:
+        return json.loads(plain(path).read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        # None is a valid explicit fallback. Cleanup may also remove an optional
+        # status file between a poll's pointer read and this read.
+        if default is not _MISSING:
+            return default
+        raise
 
 
 @contextlib.contextmanager
@@ -644,7 +652,12 @@ def worker(user, plugin, job_id):
             journal = read(job / 'journal.json', {})
             # Root-only diagnostics contain stack frames, never request bodies,
             # local variable values, proxy settings or authentication headers.
-            diagnostic = getattr(error, 'diagnostic', None) or read(job / 'verification-failure.json', None)
+            diagnostic = getattr(error, 'diagnostic', None)
+            if not diagnostic:
+                try:
+                    diagnostic = read(job / 'verification-failure.json', None)
+                except (OSError, ValueError):
+                    diagnostic = None  # Optional diagnostics must not mask the original failure.
             save(job / 'failure.json', dict(type=type(error).__name__, trace=''.join(traceback.format_exception(type(error), error, error.__traceback__))[-6000:],
                                            verification=diagnostic if isinstance(diagnostic,dict) else None))
             message = str(error) if isinstance(error, ValueError) else '更新失败，请查看升级记录或通过 SSH 检查'
