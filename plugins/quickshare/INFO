@@ -1,0 +1,20 @@
+{
+  "plugin": "quickshare",
+  "name": "文件快传",
+  "id": 19092,
+  "version": "1.1.79",
+  "tags": [
+    "tool"
+  ],
+  "timestamp": 1793716147,
+  "desc": "临时下载链接与文件上传入口",
+  "developer": "daixu0502",
+  "publisher": "Local",
+  "changelog": "修复下拉菜单首次滚动时的横向跳动。",
+  "system": false,
+  "size": 282956,
+  "port": "",
+  "type": "standard",
+  "forceupgrade": false,
+  "ext": {}
+}

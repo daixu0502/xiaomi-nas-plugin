@@ -1,0 +1,20 @@
+{
+  "plugin": "taskcenter",
+  "name": "定时任务",
+  "id": 19094,
+  "version": "1.0.55",
+  "tags": [
+    "tool"
+  ],
+  "timestamp": 1793716147,
+  "desc": "可视化任务计划与执行记录",
+  "developer": "daixu0502",
+  "publisher": "Local",
+  "changelog": "修复下拉菜单首次滚动时的横向跳动。用户脚本新增 root 执行身份，默认保留当前用户权限，执行前确认并记录身份。",
+  "system": false,
+  "size": 214433,
+  "port": "",
+  "type": "standard",
+  "forceupgrade": false,
+  "ext": {}
+}

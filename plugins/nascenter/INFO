@@ -1,0 +1,20 @@
+{
+  "plugin": "nascenter",
+  "name": "控制中心",
+  "id": 19093,
+  "version": "1.1.81",
+  "tags": [
+    "tool"
+  ],
+  "timestamp": 1794278338,
+  "desc": "性能、硬盘健康、网络和服务管理",
+  "developer": "daixu0502",
+  "publisher": "Local",
+  "changelog": "修复自动与手动刷新被旧请求阻塞、切后台恢复失效；存储与服务独立加载，Docker 目录低优先级后台统计并明确显示失败与旧值。",
+  "system": false,
+  "size": 238745,
+  "port": "",
+  "type": "standard",
+  "forceupgrade": false,
+  "ext": {}
+}

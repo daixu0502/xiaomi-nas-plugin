@@ -1,0 +1,91 @@
+# Repository policy lives only in these two root files.
+**/.gitignore
+**/.gitattributes
+!/.gitignore
+!/.gitattributes
+.git/
+
+# Local distribution, instance data and generated package catalogs.
+/dist/
+/package-manifest.json
+/workspace-tools/private/
+
+# Standalone NAS maintenance sources are part of this repository.
+# Tool sources under workspace-tools/ are maintained and publishable.
+# Tests and generated artifacts at any depth stay local.
+tests/
+__tests__/
+test_*
+test-*
+*_test.*
+*.test.*
+*.spec.*
+dist/
+releases/
+local/
+offline/
+artifacts/
+screenshots/
+output/
+coverage/
+htmlcov/
+.coverage
+.coverage.*
+
+# Dependencies, build output and caches.
+node_modules/
+.tools/
+.deps/
+.build/
+build/
+!/workspace-tools/build/
+!/workspace-tools/build/**
+target/
+.venv/
+venv/
+.cache/
+.test-cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Downloaded runtime engines; installed from verified upstream packages.
+/plugins/*/src/files/mihomo
+/plugins/downloadcenter/src/files/aria2c
+/plugins/downloadcenter/src/files/qbittorrent-nox
+
+# Archives, temporary files and runtime state.
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.7z
+*.log
+*.tmp
+*.temp
+*.pid
+*.sock
+*.swp
+*.swo
+*~
+**/etc/var/
+
+# Real credentials and local environment files.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.pub
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+
+# Operating-system metadata.
+.DS_Store
+Thumbs.db
+desktop.ini

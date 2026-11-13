@@ -1,0 +1,11 @@
+{
+  "format": 2,
+  "plugin": "nascenter",
+  "privileged": true,
+  "service": false,
+  "dependencies": [
+    "smartctl",
+    "lsblk"
+  ],
+  "ports": []
+}

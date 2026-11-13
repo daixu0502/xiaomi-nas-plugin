@@ -1,0 +1,410 @@
+#!/usr/bin/env python3
+"""Unprivileged supervisor: graceful shutdown, session persistence and tracker refresh."""
+import fcntl
+from runtime_lock import open_lock
+import json
+import os
+import signal
+import socket
+import ssl
+import subprocess
+import sys
+import time
+import threading
+import re
+import tempfile
+from pathlib import Path
+from urllib.request import build_opener, ProxyHandler, Request
+from urllib.error import HTTPError, URLError
+sys.dont_write_bytecode = True
+from download_lib import DownloadError, atomic_json, parse_tracker_subscription, tracker_cache, merged_trackers, core_path
+from dual_engine import DualManager
+
+
+def manager(home):
+    home = Path(home)
+    # Derive data root from installer-validated src; never from a web request.
+    src = (home / "src").resolve(strict=True)
+    return DualManager(home, src.parent.parent.parent / "data")
+
+
+def live(m):
+    try:
+        pid = int((m.runtime / "service.pid").read_text())
+        cmd = Path("/proc/%d/cmdline" % pid).read_bytes().split(b"\0")
+        return pid if b"serve" in cmd and str(m.home).encode() in cmd and any(x.endswith(b"/service.py") for x in cmd) else 0
+    except (OSError, ValueError):
+        return 0
+
+
+def apply_saved_trackers(m):
+    try:
+        with m.locked():
+            m.apply_trackers()
+    except DownloadError:
+        print('Saved Tracker list will be retried when settings are applied', flush=True)
+
+
+def tracker_error(exc):
+    if isinstance(exc, HTTPError):
+        reason = {403: "服务器拒绝访问", 404: "订阅地址不存在", 429: "请求过于频繁",
+                  500: "订阅服务器内部错误", 502: "上游服务异常", 503: "订阅服务不可用",
+                  522: "订阅站点回源连接超时", 524: "订阅站点回源响应超时"}.get(exc.code, "订阅服务器返回错误")
+        return "HTTP %d：%s" % (exc.code, reason)
+    reason = exc.reason if isinstance(exc, URLError) else exc
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return "连接或读取超时（8 秒），请检查订阅站点与网络"
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return "HTTPS 证书验证失败，请检查设备时间或订阅站点证书"
+    if isinstance(reason, ssl.SSLError):
+        return "HTTPS 握手失败"
+    if isinstance(reason, socket.gaierror):
+        return "DNS 解析失败"
+    if isinstance(exc, DownloadError):
+        return str(exc)
+    if isinstance(reason, OSError):
+        return "网络连接失败（错误码 %s）" % reason.errno
+    return "订阅处理失败（%s）" % type(exc).__name__
+
+
+def update_trackers(m):
+    # Prevent duplicate workers without blocking normal API calls.
+    with open_lock(m.runtime / "tracker-update.lock") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        _update_trackers(m)
+
+
+def _update_trackers(m):
+    with m.locked():
+        original = m.settings()
+        atomic_json(m.runtime / "tracker-status.json", {"state": "updating", "time": time.time(), "message": "正在分别更新订阅"})
+    cache, legacy = tracker_cache(original)
+    results, successes = [], 0
+    for i, url in enumerate(original["sources"], 1):
+        row = {"index": i, "url": url}
+        try:
+            request = Request(url, headers={"User-Agent": "MinasDownloadCenter/1.0", "Accept": "text/plain"})
+            with build_opener(ProxyHandler({})).open(request, timeout=8) as response:
+                if response.geturl().split(":", 1)[0] not in ("http", "https"):
+                    raise DownloadError("不允许的跳转协议")
+                parsed = parse_tracker_subscription(response.read(256 * 1024 + 1))
+            cache[url] = {"trackers": parsed["trackers"], "updatedAt": time.time()}
+            successes += 1
+            notes = ["已更新 %d 个 Tracker" % len(parsed["trackers"])]
+            for scheme, count in sorted(parsed["unsupported"].items()):
+                notes.append("跳过 %d 条不支持的 %s 地址" % (count, scheme.upper()))
+            if parsed["invalid"]: notes.append("跳过 %d 条格式错误的地址" % parsed["invalid"])
+            if parsed["omitted"]: notes.append("此源超过 500 个，省略 %d 个" % parsed["omitted"])
+            row.update(state="done", count=len(parsed["trackers"]), message="；".join(notes),
+                       unsupported=parsed["unsupported"], invalid=parsed["invalid"])
+        except Exception as exc:
+            old_count = len(cache.get(url, {}).get("trackers", []))
+            row.update(state="error", count=old_count, message=tracker_error(exc) + (
+                "；保留该源上次成功的 %d 个 Tracker" % old_count if old_count else "；该源暂无可用的历史列表"))
+        results.append(row)
+    with m.locked():
+        current = m.settings()
+        keys = ("sources", "manualTrackers", "trackers", "trackerSourceCache", "legacySubscribedTrackers")
+        if any(current.get(key) != original.get(key) for key in keys):
+            result = {"state": "error", "message": "更新期间 Tracker 设置已改变，请重新更新；未覆盖新设置"}
+        else:
+            if successes == len(original["sources"]): legacy = []
+            manual = original.get("manualTrackers", original["trackers"])
+            current["trackerSourceCache"] = cache
+            current["legacySubscribedTrackers"] = legacy
+            current["subscribedTrackers"], _ = merged_trackers([], cache, original["sources"], legacy)
+            current["trackers"], omitted = merged_trackers(manual, cache, original["sources"], legacy)
+            atomic_json(m.settings_path, current)
+            failed = len(results) - successes
+            state = "partial" if successes and failed else "error" if failed else "done"
+            message = "订阅成功 %d 个，失败 %d 个；当前共 %d 个 Tracker" % (successes, failed, len(current["trackers"]))
+            if legacy: message += "；暂保留旧版未区分来源的列表，全部源成功后自动替换"
+            if omitted: message += "；合并超过 500 个，已优先保留手动列表并省略 %d 个" % omitted
+            try:
+                applied = m.apply_trackers()
+                if applied["deferred"]: message += "；核心未运行，已保存并在下次启动时应用"
+                elif applied["failed"]: message += "；%d 个任务应用失败，可稍后重新保存应用" % len(applied["failed"])
+            except DownloadError as exc:
+                message += "；列表已保存，但应用到核心失败：" + str(exc)
+                state = "partial" if successes else "error"
+            result = {"state": state, "message": message, "sources": results}
+        result["time"] = time.time()
+        atomic_json(m.runtime / "tracker-status.json", result)
+
+
+def session_without_force_save(data, completed_gids=()):
+    """Preserve session tasks/options; drop only explicitly confirmed completed GIDs."""
+    completed = {gid.encode('ascii') for gid in completed_gids if re.fullmatch(r'[0-9a-f]{16}', gid)}
+    blocks, current = [], []
+    for line in data.splitlines(keepends=True):
+        if line.strip() and not line.startswith((b' ', b'\t', b'#')):
+            if current: blocks.append(current)
+            current = []
+        current.append(line)
+    if current: blocks.append(current)
+    output = []
+    for block in blocks:
+        gids = {line.strip()[4:] for line in block if line.startswith((b' ', b'\t')) and line.strip().startswith(b'gid=')}
+        if gids & completed:
+            continue
+        for line in block:
+            output.append(re.sub(rb'^([ \t]+force-save=)[^\r\n]*', rb'\g<1>false', line))
+    return b''.join(output)
+
+
+def normalize_aria_session(session, completed_gids=()):
+    original = session.read_bytes()
+    updated = session_without_force_save(original, completed_gids)
+    if updated == original: return
+    fd, name = tempfile.mkstemp(prefix='.aria-session-', dir=session.parent)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(updated)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(name, session)
+    finally:
+        if os.path.exists(name): os.unlink(name)
+
+
+def serve(m):
+    m.ready()
+    with open_lock(m.runtime / "supervisor.lock") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        _serve_locked(m)
+
+
+def poll_delay(remote):
+    aria_busy = any(t.get('status') in ('active', 'waiting') for t in remote.get('aria', []))
+    qb_busy = any(not t.get('state', '').startswith(('stopped', 'paused')) for t in remote.get('qb', []))
+    return 3 if aria_busy or qb_busy else 15
+
+
+def semantic_sample(remote):
+    return (tuple(sorted((v['gid'],v.get('status'),tuple(v.get('followedBy',[])),v.get('errorCode'),v.get('totalLength')) for v in remote['aria'])),
+            tuple(sorted((v['hash'],v.get('state'),v.get('size'),v.get('name'),v.get('infohash_v1')) for v in remote['qb'])))
+
+
+def publish_live(m,rows,remote):
+    aria={v['gid']:v for v in remote['aria']};qb={v['hash']:v for v in remote['qb']}
+    tasks={}
+    for row in rows:
+        v=aria.get(row['gid']);values={}
+        if v:values={k:v.get(k,'0') for k in ('downloadSpeed','uploadSpeed','completedLength','totalLength','connections','numSeeders')}
+        v=qb.get(row['gid'])
+        if v:values=dict(downloadSpeed=str(v.get('dlspeed',0)),uploadSpeed=str(v.get('upspeed',0)),completedLength=str(max(0,v.get('size',0)-v.get('amount_left',0))),totalLength=str(v.get('size',0)),connections=str(v.get('num_seeds',0)+v.get('num_leechs',0)))
+        tasks[row['id']]={'gid':row['gid'],'values':values}
+    atomic_json(m.runtime/'live-tasks.json',{'at':time.time(),'tasks':tasks})
+
+
+def _serve_locked(m):
+    # Refuse root even if launched outside the lifecycle script.
+    if os.geteuid() == 0:
+        raise DownloadError("下载核心禁止以 root 运行")
+    from memory_log import redirect, drain
+    redirect(m.runtime / 'service.log')
+    (m.runtime / "service.pid").write_text(str(os.getpid()))
+    stopping = [False]
+    signal.signal(signal.SIGTERM, lambda *_: stopping.__setitem__(0, True))
+    signal.signal(signal.SIGINT, lambda *_: stopping.__setitem__(0, True))
+    session = m.var / "aria2.session"
+    session.touch(mode=0o600, exist_ok=True)
+    normalize_aria_session(session)
+    settings = m.settings()
+    directory = m.directory(settings["directory"])
+    conf = {"enable-rpc": "true", "rpc-listen-all": "false", "rpc-allow-origin-all": "false",
+            "rpc-listen-port": (m.var / "rpc.port").read_text().strip(), "rpc-secret": (m.var / "rpc.secret").read_text().strip(),
+            "listen-port": (m.var / "aria-peer.port").read_text().strip(), "dht-listen-port": (m.var / "aria-peer.port").read_text().strip(),
+            "dir": str(directory), "input-file": str(session), "save-session": str(session), "save-session-interval": "0",
+            "save-not-found": "true", "force-save": "false", "continue": "true", "auto-file-renaming": "true",
+            "allow-overwrite": "false", "file-allocation": "none", "check-certificate": "true", "max-tries": "5", "retry-wait": "5",
+            "connect-timeout": "15", "timeout": "60", "max-download-result": "1000", "follow-torrent": "false", "follow-metalink": "false",
+            "bt-save-metadata": "false", "dht-file-path6": str(m.runtime / "dht6.dat"),
+            "dht-file-path": str(m.runtime / "dht.dat"), "disk-cache": "16M", "console-log-level": "warn", "summary-interval": "0",
+            "log-level": "warn", "log": "-", **m.options(settings), **m.bt_network_options(settings)}
+    path = m.runtime / "aria2.conf"
+    path.write_text("\n".join(k + "=" + v for k, v in conf.items()) + "\n")
+    os.chmod(path, 0o600)
+    child, qb_child, gateway, aria_lan = None, None, None, None
+    try:
+        child = subprocess.Popen([str(core_path(m)), "--conf-path=" + str(path)], stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=m.runtime,
+                                 env=dict(os.environ,TMPDIR=str(m.runtime)))
+        aria_output = drain(child.stdout, m.runtime / 'aria2.log')
+        profile = m.qb.prepare()
+        qb_log = m.runtime / 'qbittorrent.log'
+        if qb_log.exists() and qb_log.stat().st_size > 2 * 1024 * 1024:
+            os.replace(qb_log, m.runtime / 'qbittorrent.log.1')
+        from qb_update import core_path as qb_core_path
+        qb_child = subprocess.Popen([str(qb_core_path(m)), '--profile=' + str(profile),
+                                     '--confirm-legal-notice'], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=m.runtime,
+                                     env=dict(os.environ,TMPDIR=str(m.runtime),XDG_CACHE_HOME=str(m.runtime/'qt-cache'),XDG_RUNTIME_DIR=str(m.runtime)))
+        qb_output = drain(qb_child.stdout, qb_log)
+        for _ in range(20):
+            if child.poll() is not None or qb_child.poll() is not None:
+                raise DownloadError("下载核心启动失败，请查看 aria2.log / qbittorrent.log")
+            try:
+                m.rpc("getVersion"); m.qb.request('app/version'); break
+            except DownloadError:
+                time.sleep(.3)
+        else:
+            raise DownloadError('下载核心启动超时')
+        m.qb.apply_preferences()
+        m.qb.mark_applied()
+        from openlist_gateway import start_gateway
+        gateway = start_gateway(m)
+        from lan_rpc import Listener
+        aria_lan = Listener(m)
+        from event_wait import Events
+        with Events() as events:
+            events.watch(m.var,{'tasks.sqlite','settings.json','job.json','rpc.port','rpc.secret','qb.port','qb.secret'});events.watch(m.runtime,{'tracker-status.json'})
+            rows=[];fingerprint=None;last_auto=time.time();sync_failures=0
+            changes={('startup','')};reload=True;job_pending=False
+            tracker_worker=threading.Thread(target=apply_saved_trackers,args=(manager(m.home),),daemon=True)
+            tracker_worker.start()
+            while not stopping[0] and child.poll() is None and qb_child.poll() is None:
+                m.ready(storage=False)  # /proc only; never probe the pool while absent.
+                try:
+                    reload=reload or any(kind in ('mount','overflow') or name in ('tasks.sqlite','settings.json','job.json','rpc.port','rpc.secret','qb.port','qb.secret') for kind,name in changes)
+                    tracker_changed=reload or any(name=='tracker-status.json' for kind,name in changes)
+                    if reload:
+                        with m.locked(storage=False):
+                            if hasattr(m,'_supervisor_settings'):del m._supervisor_settings
+                            settings=m.settings();m._supervisor_settings=dict(settings)
+                            rows=m.rows()
+                            if hasattr(m,'_rpc_credentials'):del m._rpc_credentials
+                            if hasattr(m.qb,'_port'):del m.qb._port
+                            try:job_pending=json.loads((m.var/'job.json').read_text()).get('state')=='pending'
+                            except (OSError,ValueError):job_pending=False
+                    if tracker_changed:
+                        try:tracker_state=json.loads((m.runtime/'tracker-status.json').read_text())
+                        except (OSError,ValueError):tracker_state={}
+                    remote=m.fetch_sync(rows)  # Loopback only; credentials stay in RAM.
+                    current=semantic_sample(remote)
+                    if reload or current!=fingerprint:
+                        with m.locked(storage=False):
+                            pending=events.wait(timeout=0)
+                            if pending:
+                                changes=pending;reload=True
+                                continue
+                            m.sync(remote=remote)
+                            rows=m.rows()
+                            # Save on actual queue/state transitions, not progress ticks.
+                            if current!=fingerprint:m.save_session()
+                            events.wait(timeout=0)  # Drain our writes while mutation lock is held.
+                        fingerprint=current
+                    if job_pending:
+                        m.process_job()
+                        with m.locked(storage=False):
+                            job_pending=json.loads((m.var/'job.json').read_text()).get('state')=='pending'
+                            rows=m.rows()
+                        fingerprint=None
+                    if (tracker_state.get('state')=='pending' or (settings['autoTrackers'] and settings['sources'] and time.time()-max(tracker_state.get('time',0),last_auto)>86400)) and not tracker_worker.is_alive():
+                        tracker_worker=threading.Thread(target=update_trackers,args=(manager(m.home),),daemon=True)
+                        tracker_worker.start();last_auto=time.time()
+                    publish_live(m,rows,remote)
+                    if sync_failures:(m.runtime/'sync-health.json').unlink(missing_ok=True)
+                    sync_failures=0;reload=False
+                    delay=1 if job_pending else poll_delay(remote)
+                except DownloadError:
+                    sync_failures+=1
+                    atomic_json(m.runtime/'sync-health.json',{'failures':sync_failures,'at':time.time(),'message':'下载核心状态暂不可用，正在重试'})
+                    if sync_failures>=3:raise
+                    delay=min(15,3*sync_failures)
+                changes=events.wait(timeout=delay)
+
+    finally:
+        if aria_lan:
+            aria_lan.shutdown(); aria_lan.server_close()
+        if gateway:
+            gateway.shutdown(); gateway.server_close()
+        if qb_child and qb_child.poll() is None:
+            qb_child.terminate()
+            try:
+                qb_child.wait(timeout=25)
+            except subprocess.TimeoutExpired:
+                qb_child.kill(); qb_child.wait()
+        if child and child.poll() is None:
+            try:
+                m.save_session()
+            except DownloadError:
+                pass
+            child.terminate()
+            try:
+                child.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                child.kill(); child.wait()
+        (m.runtime / "service.pid").unlink(missing_ok=True)
+    if not stopping[0]:
+        raise DownloadError("下载核心意外退出，交由系统服务重新启动")
+
+
+def control(m, command):
+    m.ready()
+    with open_lock(m.runtime / "lifecycle.lock") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        control_locked(m, command)
+
+
+def control_locked(m, command):
+    # Caller owns lifecycle.lock (also used by the core updater).
+    if command == "restart":
+        enabled = (m.var / "enabled").exists()
+        try:
+            control_locked(m, "stop")
+            control_locked(m, "start")
+        except Exception:
+            if enabled:
+                (m.var / "enabled").touch(mode=0o600)
+            raise
+        return
+    if command in ("stop", "disable", "preuninstall", "preupgrade"):
+        (m.var / "enabled").unlink(missing_ok=True)
+        pid = live(m)
+        if pid:
+            os.kill(pid, signal.SIGTERM)
+            for _ in range(240):
+                if not live(m):
+                    break
+                time.sleep(.25)
+            if live(m):
+                raise DownloadError("下载进程仍在退出，请稍后重试；未强制终止")
+        return
+    if command == "status":
+        if not live(m):
+            raise DownloadError("服务未运行")
+        return
+    if command == "ensure" and not (m.var / "enabled").exists():
+        return
+    if command not in ("start", "ensure", "enable", "postinstall", "postupgrade"):
+        raise DownloadError("未知服务操作")
+    if not (m.var / "enabled").exists():
+        (m.var / "enabled").touch(mode=0o600)
+    if live(m):
+        return
+    logfile = m.runtime / "service.log"
+    if logfile.exists() and logfile.stat().st_size > 1024 * 1024:
+        os.replace(logfile, m.runtime / "service.log.1")
+    with logfile.open("a") as out:
+        subprocess.Popen([sys.executable, "-B", str(Path(__file__).resolve()), "serve", str(m.home)],
+                         stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True, close_fds=True, cwd=m.runtime,
+                         env=dict(os.environ,TMPDIR=str(m.runtime)))
+
+
+if __name__ == "__main__":
+    try:
+        os.umask(0o077)
+        m = manager(sys.argv[2])
+        if sys.argv[1] == "serve":
+            serve(m)
+        else:
+            control(m, sys.argv[1])
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)

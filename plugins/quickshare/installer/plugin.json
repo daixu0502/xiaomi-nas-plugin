@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "plugin": "quickshare",
+  "privileged": false,
+  "service": true,
+  "dependencies": [],
+  "ports": [
+    [
+      "var/server.port",
+      "",
+      19092,
+      19191
+    ]
+  ]
+}

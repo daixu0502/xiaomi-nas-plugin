@@ -1,0 +1,28 @@
+{
+  "title": "文件快传",
+  "desc": "临时下载链接与文件上传入口",
+  "icon": "/quickshare.icon",
+  "type": "url",
+  "permission": [
+    "admin"
+  ],
+  "dev_type": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "url": [
+    {
+      "dev_type": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "url": "/index.html#/"
+    }
+  ],
+  "sortid": 20,
+  "widget": []
+}

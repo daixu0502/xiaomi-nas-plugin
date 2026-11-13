@@ -1,0 +1,20 @@
+{
+  "plugin": "downloadcenter",
+  "name": "下载中心",
+  "id": 19096,
+  "version": "1.1.64",
+  "tags": [
+    "tool"
+  ],
+  "timestamp": 1794278338,
+  "desc": "直链、磁链、BT 与 Tracker 管理",
+  "developer": "daixu0502",
+  "publisher": "Local",
+  "changelog": "优化设置页服务、局域网接口、密钥与 Openlist 排版，减少卡片空白并改善窄窗口阅读。",
+  "system": false,
+  "size": 484174,
+  "port": "",
+  "type": "standard",
+  "forceupgrade": false,
+  "ext": {}
+}

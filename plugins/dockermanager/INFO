@@ -1,0 +1,20 @@
+{
+  "plugin": "dockermanager",
+  "name": "docker",
+  "id": 19091,
+  "version": "1.1.55",
+  "tags": [
+    "tool"
+  ],
+  "timestamp": 1793716147,
+  "desc": "容器、镜像与存储卷管理",
+  "developer": "daixu0502",
+  "publisher": "Local",
+  "changelog": "修复下拉菜单首次滚动时的横向跳动。",
+  "system": false,
+  "size": 235496,
+  "port": "",
+  "type": "standard",
+  "forceupgrade": false,
+  "ext": {}
+}

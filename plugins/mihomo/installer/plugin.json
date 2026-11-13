@@ -1,0 +1,28 @@
+{
+  "format": 2,
+  "plugin": "mihomo",
+  "privileged": true,
+  "service": true,
+  "dependencies": [
+    "curl",
+    "logger",
+    "sed",
+    "head",
+    "tr",
+    "wc"
+  ],
+  "ports": [
+    [
+      "etc/ports.env",
+      "MIXED_PORT",
+      7890,
+      7989
+    ],
+    [
+      "etc/ports.env",
+      "CONTROLLER_PORT",
+      9090,
+      9189
+    ]
+  ]
+}
