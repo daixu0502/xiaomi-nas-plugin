@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, os, re, subprocess, sys, time, socket
+import hashlib, json, os, re, subprocess, sys, time, socket
 from pathlib import Path
 sys.dont_write_bytecode = True
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'common'))
@@ -131,6 +131,8 @@ def cache_info(force=False):
 def overview_details(user,force=False,part='all'):
  if part not in ('all','storage','services','logs'):raise ValueError('无效采样类别')
  mounts='-'.join(str(p)+':'+(str(os.stat(p).st_dev) if Path(p).exists() else 'missing') for p in [*mounted_storage_pools(),'/data','/data/docker_data'])
+ # Keep mount identity for invalidation without path characters or unbounded keys.
+ mounts=hashlib.sha256(mounts.encode()).hexdigest()
  data={'ok':True,'sampledAt':time.time()}
  if part in ('all','storage'):data['filesystems']=cached('nascenter-'+user+'-disks-'+mounts,10,disk_usage,force)
  if part in ('all','services'):data['services']=cached('nascenter-'+user+'-services',20,lambda:service_list(user),force)

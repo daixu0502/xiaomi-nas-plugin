@@ -2,7 +2,7 @@
   "plugin": "nascenter",
   "name": "控制中心",
   "id": 19093,
-  "version": "1.1.83",
+  "version": "1.1.84",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "性能、硬盘健康、网络和服务管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "修复更新进度在后台切换或请求超时后卡住；回包丢失时查询实际结果，下载失败明确报错。",
+  "changelog": "修复存储池统计缓存名称无效导致在线更新自检失败并回退；支持多存储池与重新挂载后的缓存刷新。",
   "system": false,
   "size": 240338,
   "port": "",
