@@ -45,6 +45,8 @@ sh workspace-tools/checks/run-source-integrity-regressions.sh
 
 本地回归在隔离的 root Linux/WSL 环境执行，不连接 NAS；测试只操作临时目录。签名套件审计验证八插件、组件依赖、文件归属，以及在线更新与离线安装内容一致。源码审计工具 `checks/audit-plugin-integrity.py` 供 NAS root 只读使用。真机验收范围见 [记录](../plugins/common/manager/VALIDATION.md)。
 
+统一回归同时运行共享检查、SMART、媒体编辑、任务身份、事件与中断恢复用例；下载中心和 Mihomo 用户权限测试通过 `runuser -u nobody` 降权运行。前端后台任务与超时检查使用 `node workspace-tools/tests/test_review_ui.cjs`，测试文件同样仅保留本地。
+
 ## 独立脚本构建
 
 ```sh

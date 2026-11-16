@@ -275,6 +275,7 @@
   var reads=new Set(('status list templates details history files search check_code browse torrent_browse torrent_preview torrent_nas_preview detail logs overview overview_details smart processes process_network health_details container_list container_stats container_logs container_inspect container_upgrade_status container_bulk_status image_list network_list volume_list system_summary system_disk update_task_status node_test_status node_tests proxies providers rule_providers config subscription network_access core_status geodata_status docker_proxy_status transfers settings_get seed_cache_list').split(' '));
   'network_access_status core_update_status manual_nodes subscription_status config_get node_test_list plugin_update_status credentials_get openlist_info bt_cache_list bt_cache_preview log resources schedule_preview cleanup_preview preview preview_relations preview_repair preview_undo'.split(' ').forEach(function(action){reads.add(action);});
   function cancelled(){var e=new Error('页面已关闭或读取已取消');e.name='AbortError';e.code='REQUEST_CANCELLED';return e;}
+  reads.add('docker_operation_status');
   client.setTimer=function(fn,delay){if(disposed)return 0;var id=global.setTimeout(function(){timers.delete(id);if(!disposed)fn();},delay);timers.add(id);return id;};
   client.clearTimer=function(id){timers.delete(id);global.clearTimeout(id);};
   client.request=function(settings){

@@ -283,7 +283,7 @@ var document = window.XiaomiPluginClient.document;
     var progressLabels = { start: '启动中', stop: '停止中', restart: '重启中' };
     if (inline) setButtonLoading(button, true, progressLabels[operation]);
     else setBusy(true, '正在执行容器操作…');
-    api('container_action', { target: target, operation: operation }).then(function (data) {
+    submitOperation('container_action', { target: target, operation: operation }).then(function (data) {
       showToast(data.message || '操作完成'); return loadContainers();
     }).catch(function (error) { showToast(error.message, true); }).finally(function () {
       if (inline) setButtonLoading(button, false);
@@ -335,7 +335,7 @@ var document = window.XiaomiPluginClient.document;
     var group = ['startDockerButton', 'restartDockerButton', 'stopDockerButton'];
     showConfirm(copy.title, copy.message, copy.button, copy.danger, function () {
       setControlGroupLoading(group, button, true, copy.button + '中');
-      api('engine_action', { operation: operation }).then(function (data) {
+      submitOperation('engine_action', { operation: operation }).then(function (data) {
         showToast(data.message || '操作完成'); return loadOverview();
       }).catch(function (error) { showToast(error.message, true); }).finally(function () {
         setControlGroupLoading(group, button, false);
@@ -378,7 +378,7 @@ var document = window.XiaomiPluginClient.document;
     var running = button.getAttribute('data-running') === 'true';
     showConfirm('删除容器', '确定删除容器“' + name + '”吗？\n不会自动删除镜像和命名存储卷。', '删除', true, function () {
       setBusy(true, '正在删除容器…');
-      api('container_action', { target: button.getAttribute('data-container-remove'), operation: 'remove', force: running, volumes: false }).then(function () {
+      submitOperation('container_action', { target: button.getAttribute('data-container-remove'), operation: 'remove', force: running, volumes: false }).then(function () {
         showToast('容器已删除'); return loadContainers();
       }).catch(function (error) { showToast(error.message, true); }).finally(function () { setBusy(false); });
     });
@@ -432,7 +432,7 @@ var document = window.XiaomiPluginClient.document;
     var image = byId('pullImage').value.trim();
     if (!image) return showToast('请输入镜像名称', true);
     setBusy(true, '正在拉取镜像，这可能需要几分钟…');
-    api('image_pull', { image: image }).then(function (data) {
+    submitOperation('image_pull', { image: image }).then(function (data) {
       byId('pullImage').value = ''; showToast(data.message || '镜像拉取完成'); return loadImages();
     }).catch(function (error) { showToast(error.message, true); }).finally(function () { setBusy(false); });
   }
@@ -534,7 +534,7 @@ var document = window.XiaomiPluginClient.document;
       readOnly: byId('containerReadOnly').checked
     };
     setBusy(true, payload.pull ? '正在准备镜像并创建容器…' : '正在创建容器…');
-    api('container_create', payload).then(function (data) {
+    submitOperation('container_create', payload).then(function (data) {
       closeModals(); showToast(data.message || '容器已创建');
       ['containerName', 'containerImage', 'containerPorts', 'containerVolumes', 'containerEnv', 'containerCommand'].forEach(function (id) { byId(id).value = ''; });
       return loadContainers();
@@ -597,6 +597,39 @@ var document = window.XiaomiPluginClient.document;
   }, { passive: true });
 
   var statsTimer=null,statsBusy=false,statsDisposed=false;
+  function renderOperation(task) {
+    var status=byId('operationStatus');status.hidden=task.state==='idle';
+    status.textContent='最近操作：'+(task.message||'')+(task.updatedAt?' · '+formatDate(task.updatedAt*1000):'');
+  }
+  function waitForOperation(taskId) {
+    return api('docker_operation_status', {taskId:taskId}).then(function(task) {
+      renderOperation(task);
+      if(task.state==='success')return task.result||{message:task.message};
+      if(task.state==='error')throw new Error(task.message||'后台操作失败');
+      if(task.state!=='running')throw new Error('后台记录不可用，请核对实际结果后再操作');
+      if(!byId('busy').hidden)byId('busyText').textContent=task.message+'，关闭页面后仍会继续';
+      return new Promise(function(resolve,reject) {
+        window.XiaomiPluginClient.setTimer(function(){waitForOperation(taskId).then(resolve,reject);},1800);
+      });
+    });
+  }
+  function submitOperation(action,payload) {
+    return api(action,payload).then(function(result) {
+      return result.accepted&&result.taskId?waitForOperation(result.taskId):result;
+    });
+  }
+  function resumeOperation() {
+    return api('docker_operation_status',{}).then(function(task) {
+      renderOperation(task);
+      if(task.state==='running') {
+        setBusy(true,task.message);
+        return waitForOperation(task.taskId).then(function(result) {
+          showToast(result.message||'后台操作已完成');return Promise.all([loadOverview(),loadContainers()]);
+        }).finally(function(){setBusy(false);});
+      }
+      if(task.state==='error')showToast(task.message,true);
+    }).catch(function(error){if(!statsDisposed)showToast(error.message,true);});
+  }
   function memoryBytes(text) {var m=String(text||'').trim().match(/^([\d.]+)\s*([kmgt]?i?b)/i);if(!m)return 0;var unit=m[2].toLowerCase(),index='kmgt'.indexOf(unit[0])+1;return Number(m[1])*Math.pow(unit.includes('i')?1024:1000,index);}
   function loadContainerStats() {
     window.XiaomiPluginClient.clearTimer(statsTimer);if(statsBusy||statsDisposed||state.page!=='containers'||document.hidden)return;
@@ -611,5 +644,6 @@ var document = window.XiaomiPluginClient.document;
   document.addEventListener('visibilitychange',function(){if(document.hidden)window.XiaomiPluginClient.clearTimer(statsTimer);else loadContainerStats();});
   loadOverview();
   loadContainers();
+  resumeOperation();
   api('container_upgrade_status',{}).then(function(task){if(task.state==='running')return waitForContainerUpgrade(task.taskId,Date.now()).then(function(result){showToast(result.message||'升级完成');return loadContainers();});if(task.state==='error')showToast(task.message,true);}).catch(function(error){showToast(error.message,true);});
 }());

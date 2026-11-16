@@ -94,7 +94,7 @@ def plugin_status(user,name):
  env=plugin_environment(user,control.parent.parent)
  proc=subprocess.run([str(control),'status'],env=env,preexec_fn=demote_user(user),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=8,check=False)
  return 'active' if proc.returncode==0 else 'inactive'
-def service_list(user):
+def service_list(user,only=None):
  units=['docker.service','smb.service','nmb.service','crond.service']+['minas-plugin-'+p+'-'+user+'.service' for p in ('mihomo','quickshare','downloadcenter')]
  proc=run(['systemctl','show',*units,'-p','Id','-p','ActiveState','-p','SubState','-p','LoadState'],8)
  states={}
@@ -103,6 +103,7 @@ def service_list(user):
   if 'Id' in row:states[row['Id']]=row
  result=[]
  for key,item in SERVICES.items():
+  if only is not None and key!=only:continue
   if 'plugin' in item:
    unit='minas-plugin-'+item['plugin']+'-'+user+'.service';unit_state=states.get(unit,{})
    state=unit_state.get('ActiveState','inactive') if unit_state.get('LoadState')!='not-found' else plugin_status(user,item['plugin'])
@@ -171,19 +172,30 @@ def smart_disks(user):
  try:devices=json.loads(block.stdout).get('blockdevices',[])
  except Exception:devices=[]
  result=[]
+ deadline=time.monotonic()+75
  for device in devices:
   path=str(device.get('path') or '')
   if device.get('type')!='disk' or not re.fullmatch(r'/dev/(sd[a-z]+|nvme[0-9]+n[0-9]+)',path):continue
-  proc=run(['smartctl','-n','standby,3,5','-a','-j',path],25)
-  try:data=json.loads(proc.stdout)
-  except Exception:data={}
+  error='';code=1;data={}
+  try:
+   remaining=deadline-time.monotonic()
+   if remaining<=0:raise TimeoutError()
+   proc=run(['smartctl','-n','standby,3,5','-a','-j',path],min(25,remaining))
+   code=proc.returncode
+   data=json.loads(proc.stdout)
+   if not isinstance(data,dict):raise ValueError('invalid SMART response')
+  except subprocess.TimeoutExpired:error='此硬盘 SMART 查询超时，请稍后重试'
+  except TimeoutError:error='本次检测已达到时间上限，请稍后刷新'
+  except (OSError,ValueError):error='此硬盘 SMART 数据暂不可读取'
+  if error:data={}
   messages=' '.join(str(m.get('string','')) for m in (data.get('smartctl') or {}).get('messages',[]))
   sleeping=bool(re.search(r'STANDBY|SLEEP',str(data.get('power_mode',''))+' '+messages,re.I))
-  if sleeping or (proc.returncode and not data.get('smart_status')):
+  if error or sleeping or (code and not data.get('smart_status')):
    old=previous.get(path,{})
    if old.get('serial')!=str(device.get('serial') or ''):old={}
    row=dict(old)
    row.update(path=path,name=device.get('name'),model=device.get('model') or '未知硬盘',serial=device.get('serial') or '',size=int(device.get('size') or 0),status='standby' if sleeping else 'unavailable',sleeping=sleeping,checkedAt=old.get('checkedAt'),attributes=old.get('attributes',[]),selfTests=old.get('selfTests',[]))
+   if error:row['error']=error
    for key in ('reallocated','pending','offlineUncorrectable','reportedUncorrectable','mediaErrors'):row.setdefault(key,0)
    result.append(row)
    if old:fresh[path]=old
@@ -223,7 +235,7 @@ def restart_service(user,key):
   proc=subprocess.run([str(control),'restart'],env=env,preexec_fn=demote_user(user),stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=45,check=False)
  else:proc=run(['systemctl','restart',*item['units']],45)
  if proc.returncode:fail(item['label']+' 重启失败')
- row=next((v for v in service_list(user) if v['id']==key),{'state':'unknown'})
+ row=next(iter(service_list(user,only=key)),{'state':'unknown'})
  return {'ok':True,'service':key,'state':row['state'],'sampledAt':time.time(),
          'message':item['label']+(' 已重启并复核状态' if row['state']=='active' else ' 重启命令已完成，当前状态：'+row['state'])}
 def drop_caches():

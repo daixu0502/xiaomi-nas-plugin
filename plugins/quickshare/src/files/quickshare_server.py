@@ -11,14 +11,14 @@ import re
 import sys
 import threading
 import time
-import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from quickshare_lib import ShareError, Store
-from folder_archive import open_folder, inventory, write_zip
+from folder_archive import open_folder, open_file, signature, inventory, write_zip
+from upload_transaction import Upload, server_guard
 
 MAX_UPLOAD = 20 * 1024 * 1024 * 1024
 TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{32}$")
@@ -185,24 +185,26 @@ class Handler(BaseHTTPRequestHandler):
         if record.get("kind") not in ("download", "folder"): return self.unavailable("wrong_type")
         if not self.authorized(record): return self.share_page(token)
         if record["kind"] == "folder": return self.download_folder(record)
-        try: target,_=self.server.store.resolve_path(record["path"],"file"); size=target.stat().st_size
-        except (ShareError,OSError): return self.unavailable("not_found")
-        try: self.server.store.consume(token,"download",self.client_address[0])
-        except ShareError as exc: return self.unavailable(str(exc))
-        mime=mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-        disposition="attachment; filename*=UTF-8''"+quote(target.name,safe="")
-        self.security_headers(mime,size,200,{"Content-Disposition":disposition,"Accept-Ranges":"none"})
-        sent=0;complete=False;started=time.monotonic()
+        sent=0;complete=False;started=time.monotonic();sending=False
         try:
-            with target.open("rb") as stream:
-                while True:
-                    chunk=stream.read(1024*1024)
-                    if not chunk: break
+            with open_file(self.server.store, record['path']) as (fd, info):
+                self.server.store.consume(token,"download",self.client_address[0])
+                mime=mimetypes.guess_type(record['name'])[0] or 'application/octet-stream'
+                disposition="attachment; filename*=UTF-8''"+quote(record['name'],safe='')
+                sending=True
+                self.security_headers(mime,info.st_size,200,{'Content-Disposition':disposition,'Accept-Ranges':'none'})
+                remaining=info.st_size
+                while remaining:
+                    chunk=os.read(fd,min(1024*1024,remaining))
+                    if not chunk: raise ShareError('下载期间文件内容已改变')
                     self.wfile.write(chunk)
-                    sent+=len(chunk)
-            self.wfile.flush();complete=sent==size
-        except OSError: pass
-        finally:self.transfer_event(record,target.name,'download',sent,complete,started)
+                    sent+=len(chunk);remaining-=len(chunk)
+                self.wfile.flush();complete=signature(os.fstat(fd))==signature(info)
+        except (OSError,ShareError) as exc:
+            if sending:self.close_connection=True
+            else:return self.unavailable(str(exc) if isinstance(exc,ShareError) else 'not_found')
+        finally:
+            if sending:self.transfer_event(record,record['name'],'download',sent,complete,started)
 
     def download_folder(self, record):
         if not self.server.archive_slots.acquire(blocking=False):
@@ -282,47 +284,29 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError: length=-1
         if length<0 or length>MAX_UPLOAD: return self.send_json({"ok":False,"error":"文件过大或长度无效"},413)
         try:
-            directory,_=self.server.store.resolve_path(record["path"],"dir")
             query=parse_qs(urlsplit(self.path).query); name=self.safe_upload_name(query.get("name",[""])[0])
         except ShareError as exc: return self.send_json({"ok":False,"error":str(exc)},400)
-        target=directory/name; stem,suffix=target.stem,target.suffix; counter=1
-        temp=directory/(".quickshare-upload-"+uuid.uuid4().hex)
         remaining=length;began=time.monotonic();complete=False
-        try: self.server.store.consume(token,"upload",self.client_address[0])
-        except ShareError as exc: return self.send_json({"ok":False,"error":"链接不可用："+str(exc)},410)
+        upload=Upload(self.server.store,record,name,self.client_address[0])
         try:
-            with temp.open("xb") as output:
-                while remaining:
-                    chunk=self.rfile.read(min(1024*1024,remaining))
-                    if not chunk: raise ConnectionError("上传中断")
-                    output.write(chunk); remaining-=len(chunk)
-                output.flush(); os.fsync(output.fileno())
-            # link() publishes the complete file atomically and NEVER replaces an
-            # existing directory entry, including a symlink or concurrent upload.
-            while True:
-                try:
-                    os.link(temp,target,follow_symlinks=False)
-                    break
-                except FileExistsError:
-                    target=directory/f"{stem} ({counter}){suffix}"; counter+=1
+            with upload:
+                with os.fdopen(os.dup(upload.fd),'wb') as output:
+                    while remaining:
+                        chunk=self.rfile.read(min(1024*1024,remaining))
+                        if not chunk: raise ConnectionError("上传中断")
+                        output.write(chunk); remaining-=len(chunk)
+                    output.flush()
+                name=upload.commit()
             complete=True
-            temp.unlink()
-            directory_fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY)
-            try: os.fsync(directory_fd)
-            finally: os.close(directory_fd)
-            return self.send_json({"ok":True,"name":target.name,"size":length})
-        except (OSError,ConnectionError) as exc:
-            if complete:
+            return self.send_json({"ok":True,"name":name,"size":length})
+        except (OSError,ConnectionError,ShareError) as exc:
+            if upload.committed:
                 # Commit already succeeded: expose the actual name so a caller
                 # can inspect the result instead of submitting the upload twice.
-                return self.send_json({"ok":False,"committed":True,"name":target.name,"size":length,
+                return self.send_json({"ok":False,"committed":True,"name":upload.name,"size":length,
                                        "error":"文件已保存，但确认步骤失败，请核对文件后再操作"},500)
-            try: temp.unlink()
-            except OSError: pass
-            try: self.server.store.rollback_use(token,"upload")
-            except ShareError: pass
             return self.send_json({"ok":False,"error":"上传失败："+str(exc)},500)
-        finally:self.transfer_event(record,target.name,'upload',length-remaining,complete,began)
+        finally:self.transfer_event(record,upload.name,'upload',length-remaining,complete,began)
 
 def main():
     parser=argparse.ArgumentParser(); parser.add_argument("--state",required=True); parser.add_argument("--port",type=int,default=19092); args=parser.parse_args()
@@ -333,9 +317,11 @@ def main():
     if not secret_file.is_file(): raise SystemExit("server.secret missing")
     user=state.parts[2] if len(state.parts)>2 and state.parts[1]=="home" else os.environ.get("USER","")
     if not re.fullmatch(r"u[0-9]+",user): raise SystemExit("invalid plugin user")
-    server=Server(("0.0.0.0",args.port),Handler,Store(state,user),secret_file.read_bytes())
-    print(f"QuickShare listening on 0.0.0.0:{args.port}",flush=True)
-    try: server.serve_forever(poll_interval=.5)
-    except KeyboardInterrupt: pass
-    finally: server.server_close()
+    store=Store(state,user)
+    with server_guard(store):
+        server=Server(("0.0.0.0",args.port),Handler,store,secret_file.read_bytes())
+        print(f"QuickShare listening on 0.0.0.0:{args.port}",flush=True)
+        try: server.serve_forever(poll_interval=.5)
+        except KeyboardInterrupt: pass
+        finally: server.server_close()
 if __name__=="__main__": main()

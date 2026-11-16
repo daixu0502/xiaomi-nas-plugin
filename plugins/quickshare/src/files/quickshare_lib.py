@@ -60,6 +60,9 @@ class Store:
                 stream.flush(); os.fsync(stream.fileno())
             os.chmod(tmp_name, 0o600)
             os.replace(tmp_name, self.state_file)
+            directory = os.open(self.state_dir, os.O_RDONLY | os.O_DIRECTORY)
+            try: os.fsync(directory)
+            finally: os.close(directory)
         finally:
             try: os.unlink(tmp_name)
             except FileNotFoundError: pass

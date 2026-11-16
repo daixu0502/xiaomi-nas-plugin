@@ -27,6 +27,7 @@ DOCKER = "/data/docker/docker"
 SYSTEMCTL = "/usr/bin/systemctl"
 BULK_STATUS = "docker-bulk-status.json"
 UPGRADE_STATUS = "docker-upgrade-status.json"
+OPERATION_STATUS = 'docker-operation-status.json'
 STATE_USER = None
 DOCKER_SOCKET = "/var/run/docker.sock"
 MAX_REQUEST = 131072
@@ -756,6 +757,79 @@ def process_exists(pid):
         return False
 
 
+def process_start(pid):
+    try:
+        return Path('/proc/%s/stat' % int(pid)).read_text().rsplit(')', 1)[1].split()[19]
+    except (OSError, ValueError, TypeError, IndexError):
+        return None
+
+
+def write_operation_status(value):
+    user_state_io.write_state(STATE_USER, 'dockermanager', OPERATION_STATUS,
+                              dict(value, updatedAt=time.time()))
+
+
+def operation_status(request):
+    value = user_state_io.read_state(STATE_USER, 'dockermanager', OPERATION_STATUS) or {'state': 'idle'}
+    if not isinstance(value, dict):
+        raise ApiError('后台操作状态不可读取，请刷新实际资源状态')
+    if request.get('taskId') and value.get('taskId') != required_text(request, 'taskId', 80):
+        raise ApiError('后台操作记录已变化，请刷新实际资源状态')
+    if value.get('state') == 'running':
+        alive = (value.get('bootId') == Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+                 and value.get('processStart') and value['processStart'] == process_start(value.get('pid')))
+        if not alive:
+            value.update(state='error', message='后台操作已中断；请核对实际结果后再操作，勿重复创建容器')
+            write_operation_status(value)
+    return {k: v for k, v in value.items() if k not in ('pid', 'processStart', 'bootId')}
+
+
+def run_operation_worker(value, request):
+    try:
+        result = ACTIONS[value['action']](request)
+        value.update(state='success', message=result.get('message', '操作已完成'), result=result)
+    except Exception as error:
+        value.update(state='error', message=str(error)[-3000:])
+    write_operation_status(value)
+
+
+def queue_operation(action, request):
+    # Dispatch already owns both root component and Docker locks. The child
+    # inherits those open descriptions; parent close never unlocks its worker.
+    task_id = '%d-%s' % (int(time.time() * 1000), os.urandom(4).hex())
+    labels = {'image_pull': '正在拉取镜像', 'container_create': '正在准备镜像并创建容器',
+              'engine_action': '正在操作 Docker 服务', 'container_action': '正在操作容器'}
+    value = dict(taskId=task_id, action=action, state='running', message=labels[action],
+                 bootId=Path('/proc/sys/kernel/random/boot_id').read_text().strip())
+    read_fd, write_fd = os.pipe()
+    try:
+        pid = os.fork()
+    except BaseException:
+        os.close(read_fd); os.close(write_fd)
+        raise
+    if pid == 0:
+        try:
+            os.close(write_fd)
+            with open(os.devnull, 'r+b') as null:
+                for descriptor in (0, 1, 2): os.dup2(null.fileno(), descriptor)
+            os.setsid()
+            accepted = os.read(read_fd, 1) == b'1'
+            os.close(read_fd)
+            if accepted:
+                value.update(pid=os.getpid(), processStart=process_start(os.getpid()))
+                run_operation_worker(value, request)
+        finally:
+            os._exit(0)
+    os.close(read_fd)
+    try:
+        value.update(pid=pid, processStart=process_start(pid))
+        write_operation_status(value)
+        os.write(write_fd, b'1')
+    finally:
+        os.close(write_fd)
+    return dict(accepted=True, taskId=task_id, message=value['message'])
+
+
 def run_bulk_worker(task_id, operation, ids, command, verb):
     result = None
     pending = set(ids)
@@ -1128,6 +1202,7 @@ def system_summary(_request):
 
 
 ACTIONS = {
+    "docker_operation_status": operation_status,
     "engine_action": engine_action,
     "system_summary": system_summary,
     "system_disk": system_disk,
@@ -1172,6 +1247,8 @@ def dispatch(request):
     # requests do not wait behind long pulls and upgrades.
     with runtime.docker_transaction() if action in MUTATIONS else contextlib.nullcontext():
         if action in MUTATIONS: recover_upgrade()
+        if action in {'image_pull', 'container_create', 'engine_action', 'container_action'}:
+            return queue_operation(action, request)
         return handler(request)
 
 

@@ -54,6 +54,18 @@ def open_entry(root_fd, parts, is_dir=False):
         os.close(fd)
 
 
+@contextmanager
+def open_file(store, relative):
+    """Pin every path component and the regular file before authorizing a send."""
+    path = PurePosixPath(relative)
+    with open_folder(store, path.parent.as_posix()) as parent:
+        with open_entry(parent, (path.name,)) as fd:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode):
+                raise ShareError('请选择普通文件，不能下载链接或特殊文件')
+            yield fd, info
+
+
 def inventory(root_fd):
     """Metadata only. Bounded entry/depth limits prevent unbounded memory/recursion."""
     entries = []

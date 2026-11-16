@@ -59,7 +59,7 @@ read_body() {
 action=$(get_action)
 [ -n "$action" ] || serve_frontend
 case "$action" in
-    engine_action|system_summary|system_disk|container_list|container_stats|container_action|container_upgrade|container_upgrade_status|container_bulk_action|container_bulk_status|container_logs|container_inspect|container_create|image_list|image_pull|image_remove|volume_list|volume_create|volume_remove|network_list) ;;
+    docker_operation_status|engine_action|system_summary|system_disk|container_list|container_stats|container_action|container_upgrade|container_upgrade_status|container_bulk_action|container_bulk_status|container_logs|container_inspect|container_create|image_list|image_pull|image_remove|volume_list|volume_create|volume_remove|network_list) ;;
     *) json_error "未知操作" ;;
 esac
 [ "${REQUEST_METHOD:-GET}" = "POST" ] || json_error "API 仅接受 POST 请求"
@@ -70,7 +70,7 @@ printf '%s' "$body" | jq empty >/dev/null 2>&1 || json_error "请求不是有效
 request=$(printf '%s' "$body" | jq --arg action "$action" '. + {action:$action}') || json_error "无法处理请求"
 response=$(printf '%s' "$request" | sudo -n "$HELPER" dockermanager 2>/dev/null) || json_error "无法调用公共 Docker 权限助手"
 printf '%s' "$response" | jq empty >/dev/null 2>&1 || json_error "权限助手返回了无法解析的数据"
-plugin_version=$(jq -r '.version // "1.1.56"' "$INFO_FILE" 2>/dev/null || printf '1.1.56')
+plugin_version=$(jq -r '.version // "1.1.57"' "$INFO_FILE" 2>/dev/null || printf '1.1.57')
 
 json_header
 printf '%s' "$response" | jq --arg pluginVersion "$plugin_version" '. + {pluginVersion:$pluginVersion}'
