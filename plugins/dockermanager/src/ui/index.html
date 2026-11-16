@@ -9,8 +9,8 @@
   <meta name="theme-color" content="#eef1f5" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#171a20" media="(prefers-color-scheme: dark)">
   <title>docker</title>
-  <link rel="stylesheet" href="style.css?v=1.1.58&amp;ui=image-filter">
-  <link rel="stylesheet" href="palette.css?v=1.1.58&amp;ui=compact-metrics-20260930">
+  <link rel="stylesheet" href="style.css?v=1.1.59&amp;ui=image-filter">
+  <link rel="stylesheet" href="palette.css?v=1.1.59&amp;ui=compact-metrics-20260930">
 </head>
 <body><div data-minas-plugin="dockermanager"><div class="minas-plugin-body">
   <main id="shell" class="shell">
@@ -29,7 +29,7 @@
     <section id="page-overview" class="page">
 
       <article class="panel">
-        <div class="panel-heading"><div><h3>Docker 服务</h3><p>启动、停止或重启整个 Docker 引擎</p></div></div>
+        <div class="panel-heading"><div><h3>Docker 服务</h3><p>停止或重启 Docker 会影响所有容器。</p></div></div>
         <div class="control-grid">
           <button id="startDockerButton" class="primary-button" type="button">启动 Docker</button>
           <button id="restartDockerButton" class="action-button" type="button">重启 Docker</button>
@@ -37,11 +37,11 @@
         </div>
       </article>
       <article class="panel">
-        <div class="panel-heading"><div><h3>系统信息</h3><p>Docker 服务与存储位置</p></div></div>
+        <div class="panel-heading"><div><h3>系统信息</h3></div></div>
         <div id="systemInfo" class="detail-list loading-row">正在读取…</div>
       </article>
       <article class="panel">
-        <div class="panel-heading"><div><h3>空间占用</h3><p>Docker system df 汇总</p></div></div>
+        <div class="panel-heading"><div><h3>空间占用</h3></div></div>
         <div id="diskUsage" class="stack loading-row">正在读取…</div>
       </article>
     </section>
@@ -57,7 +57,7 @@
         <button id="openCreateContainer" class="primary-button" type="button">＋ 创建</button>
       </div>
       <article class="panel compact bulk-panel">
-        <div class="panel-heading"><div><h3>全部容器</h3><p>一次操作所有现有容器</p></div></div>
+        <div class="panel-heading"><div><h3>全部容器</h3></div></div>
         <div class="control-grid">
           <button id="startAllContainersButton" class="primary-button" type="button">启动全部</button>
           <button id="restartAllContainersButton" class="action-button" type="button">重启全部</button>
@@ -97,14 +97,14 @@
     </section>
 
     <section id="page-networks" class="page"><div class="section-heading"><div><h2>容器网络</h2><p id="networkSummary">正在读取网络…</p></div><button id="refreshNetworks" class="icon-button refresh-control" type="button" aria-label="刷新网络" title="刷新网络"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button></div><div id="networkList" class="stack workbench-list-surface"></div></section>
-<footer id="pluginVersion">插件版本 1.1.58 · 公共权限组件读取中</footer>
+<footer id="pluginVersion">插件版本 1.1.59 · 公共权限组件读取中</footer>
   </main>
 
   <div id="modalBackdrop" class="modal-backdrop" hidden></div>
 
   <section id="createContainerModal" class="modal" hidden aria-modal="true" role="dialog">
     <div class="modal-handle"></div>
-    <div class="modal-heading"><div><h2>创建容器</h2><p>常用 Docker 参数</p></div><button class="close-modal" type="button">×</button></div>
+    <div class="modal-heading"><div><h2>创建容器</h2></div><button class="close-modal" type="button">×</button></div>
     <div class="modal-body form-grid">
       <label><span>容器名称</span><input id="containerName" type="text" placeholder="my-app"></label>
       <label><span>镜像 *</span><input id="containerImage" type="text" placeholder="nginx:latest"></label>
@@ -137,8 +137,8 @@
 
   <div id="busy" class="busy" hidden><div class="spinner"></div><span id="busyText">正在处理…</span></div>
   <div id="toast" class="toast" role="status"></div>
-  <script src="client-bridge.js?v=1.1.58&amp;ui=compact-metrics-20260930"></script>
-  <script src="app.js?v=1.1.58&amp;ui=image-filter"></script>
+  <script src="client-bridge.js?v=1.1.59&amp;ui=compact-metrics-20260930"></script>
+  <script src="app.js?v=1.1.59&amp;ui=image-filter"></script>
   <script>
     (function () {
       var document = window.XiaomiPluginClient.document;

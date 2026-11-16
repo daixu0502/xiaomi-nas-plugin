@@ -36,7 +36,7 @@ function render(s){
  if(s.emergencyPreparation){const p=s.emergencyPreparation,mark=v=>v===true?'已准备':v===false?'未准备':'未能检查';byId('emergencyRuntime').textContent=p.python&&p.cron?'可用':'需要检查';byId('emergencyImage').textContent=mark(p.rescueImage);byId('emergencyContainer').textContent=mark(p.rescueContainer);byId('emergencyPortainer').textContent=p.portainer===true?'运行中':p.portainer===false?'未检测到运行入口':'未能检查';byId('emergencyReady').textContent=Object.values(p).every(v=>v===true)?'已准备':'尚未全部就绪';}
  const a=s.loginAuthorization,reasons={home_missing:'目录缺失',ssh_missing:'目录缺失',authorization_missing:'未写入',saved_key_not_installed:'公钥未安装',no_saved_key:'未配置校验',permissions_or_content:'权限或内容异常',ready:'已就绪'};
  byId('authorizationState').textContent=a?(reasons[a.reason]||'待检查'):'待检查';
- byId('authorizationNote').textContent=a?'实际登录目录：'+a.rootHome+'。服务器身份密钥与登录授权分别检查；“恢复公钥已保存”不代表已安装到登录目录。':'正在检查实际登录目录和授权文件。';
+ byId('authorizationNote').textContent=a?'登录目录：'+a.rootHome+'。保存恢复公钥不等于已授权登录。':'正在检查实际登录目录和授权文件。';
  byId('fingerprint').textContent=s.fingerprint||'尚未保存恢复公钥';byId('fingerprint').classList.toggle('empty',!s.fingerprint);
  byId('bootState').textContent=s.bootFinished===false?'开机检查中':s.bootFinished===true?'开机检查已结束':'无开机检查单元';
  const b=s.bootService;byId('bootService').textContent=b.current===true?'已安装（与自带版本一致）':b.conflicts?.length?'已有配置需更新':b.worker&&b.cron&&b.dropin?'已安装':b.worker||b.cron||b.dropin?'配置不完整':'未安装';
@@ -44,7 +44,7 @@ function render(s){
  byId('installedScriptVersion').textContent=b.worker?scriptVersion(b.installedScript):'未安装';
  byId('bundledScriptVersion').textContent=scriptVersion(b.bundledScript);
  byId('generateKey').checked=s.settings?.generateWithoutPublicKey===true;
- byId('recoveryNote').textContent=byId('generateKey').checked?'未保存公钥时，点击恢复才生成登录密钥。请及时下载并妥善保存私钥。':'未保存公钥时，只开启 SSH，不改动密钥文件。已有公钥时，按保存的恢复材料恢复。';
+ byId('recoveryNote').textContent=byId('generateKey').checked?'恢复时生成登录密钥，请及时下载并妥善保存。':'未保存公钥时仅开启 SSH；已有公钥时恢复登录授权。';
  byId('downloadHint').hidden=!s.generated?.ready;
  if(s.generated?.ready)byId('downloadHint').textContent='新登录密钥仅可领取一次，截止 '+new Date(s.generated.expires*1000).toLocaleTimeString()+'；不要公开私钥。';
  byId('pluginVersion').textContent='插件版本 '+s.version+' · 公共权限组件 '+(s.helperVersion||'未知');
@@ -85,11 +85,11 @@ byId('recover').onclick=async()=>{
 };
 byId('generateKey').onchange=async()=>{
  const wanted=byId('generateKey').checked;
- if(wanted&&!(await confirmAction('开启登录密钥生成','仅当没有保存公钥且点击恢复 SSH 时生成新的登录密钥。保存设置不会立即生成密钥；生成后提供一次性下载。')).ok){byId('generateKey').checked=false;return;}
+ if(wanted&&!(await confirmAction('开启登录密钥生成','无公钥时，点击“恢复 SSH”将生成密钥，仅可下载一次。')).ok){byId('generateKey').checked=false;return;}
  const result=await perform('save_settings',{generateWithoutPublicKey:wanted});if(!result)byId('generateKey').checked=state?.settings?.generateWithoutPublicKey===true;
 };
 byId('downloadKeys').onclick=async()=>{
- if(!(await confirmAction('下载新登录密钥','密钥包包含登录私钥，只能领取一次。请使用可信连接并保存到安全位置；不会下载 NAS 主机私钥。')).ok)return;
+ if(!(await confirmAction('下载新登录密钥','包含登录私钥，仅可下载一次。请通过可信连接下载并妥善保存。')).ok)return;
  const result=await perform('download_keys');if(!result?.keyArchive)return;
  if(downloadURL)URL.revokeObjectURL(downloadURL);
  const bytes=Uint8Array.from(atob(result.keyArchive),c=>c.charCodeAt(0));delete result.keyArchive;
@@ -100,9 +100,9 @@ byId('downloadKeys').onclick=async()=>{
 byId('installBoot').onclick=async()=>{
  const latest=await perform('status');if(!latest)return;
  const conflicts=latest.bootService?.conflicts||[];
- let text='安装等待开机检查和有限复查任务，备份现有登录公钥供文件缺失时恢复，并修复新固件 mi-shell。不会生成登录密钥或重启 NAS。';
+ let text='安装开机恢复，并备份当前登录授权。不会生成新密钥或重启 NAS。';
  if(conflicts.length)text+=' 检测到内容不同的文件：'+conflicts.join('、')+'。确认替换后更新。';
- else if(latest.bootService?.current)text='当前开机修复与本插件一致。继续可同步登录授权快照并重新检查开机配置。不会生成登录密钥或重启 NAS。';
+ else if(latest.bootService?.current)text='版本已一致。继续将同步授权副本并检查开机配置，不重启 NAS。';
  const r=await confirmAction('安装 / 更新开机修复',text,conflicts.length>0);if(r.ok)perform('install_boot',{overwrite:r.overwrite});
 };
 byId('downloadEmergency').onclick=async()=>{
@@ -116,7 +116,7 @@ byId('selectFile').onclick=()=>byId('keyFile').click();
 byId('keyFile').onchange=()=>{byId('fileName').textContent=byId('keyFile').files[0]?.name||'尚未选择文件';clearKeyError();};
 byId('keyText').oninput=clearKeyError;
 function resetFile(){byId('keyText').value='';byId('keyFile').value='';byId('fileName').textContent='尚未选择文件';}
-byId('keyType').onchange=()=>{const privateMode=byId('keyType').value==='import_private';resetFile();clearKeyError();byId('keyText').disabled=privateMode;byId('privateNote').textContent=privateMode?'仅支持未加密的 OpenSSH Ed25519 私钥，只在内存中提取公钥，不写入磁盘。建议优先上传公钥；私钥上传应使用可信 HTTPS 连接。':'支持 OpenSSH .pub、换行公钥与 SSH2/RFC4716 公钥。保存到独立运行数据区，恢复时追加授权，不覆盖其他公钥。';};
+byId('keyType').onchange=()=>{const privateMode=byId('keyType').value==='import_private';resetFile();clearKeyError();byId('keyText').disabled=privateMode;byId('privateNote').textContent=privateMode?'仅支持未加密的 OpenSSH Ed25519 私钥，只提取公钥。上传私钥请使用可信 HTTPS。':'支持 OpenSSH 和 SSH2 公钥。恢复时追加授权，保留其他公钥。';};
 async function readKeyFile(file){
  const raw=new Uint8Array(await file.arrayBuffer());let encoding='utf-8';
  if((raw[0]===255&&raw[1]===254)||(raw[1]===0&&raw[3]===0))encoding='utf-16le';

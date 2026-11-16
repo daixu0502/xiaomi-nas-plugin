@@ -39,7 +39,7 @@
         rankings.appendChild(section);
       });
       fragment.appendChild(rankings);
-      fragment.appendChild(node('p', 'process-note', data.note + ' 高负载只表示资源压力，可能是正常下载、备份或索引；未执行终止进程或清理操作。'));
+      fragment.appendChild(node('p', 'process-note', data.note + ' 高负载可能来自下载、备份或索引。'));
     } else {
       var rows = data.rows.filter(function (r) { return !query || (r.name + ' ' + (r.pid || (r.pids || []).join(' ')) + ' ' + r.description).toLowerCase().indexOf(query) >= 0; });
       id('processHelpText').textContent = mode === 'network' ? data.warnings.join('\n') : data.note;
@@ -81,7 +81,7 @@
     id('processTitle').textContent = {cpu:'CPU 进程', memory:'内存进程', network:'进程网络', health:'负载与健康详情'}[kind];
     panel.dataset.mode = kind;
     id('processHelp').hidden = kind === 'health'; id('processHelp').open = false;
-    id('processHelpTitle').textContent = kind === 'network' ? '仅统计可测 TCP 速率 · 采样说明' : '统计口径与采样说明';
+    id('processHelpTitle').textContent = kind === 'network' ? 'TCP 速率统计说明' : '统计说明';
     id('processHelpText').textContent = '正在读取采样说明…';
     id('processSearch').hidden = kind === 'health'; id('processSearch').value = '';
     id('processStatus').textContent = '正在采样，请稍候…'; body.textContent = ''; body.scrollTop = 0;

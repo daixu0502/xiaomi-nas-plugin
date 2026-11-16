@@ -33,7 +33,7 @@
 [data-minas-plugin="quickshare"] .segmented{display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px;}
 [data-minas-plugin="quickshare"] #browseButton{flex-shrink: 0; white-space: nowrap;}
 [data-minas-plugin="quickshare"] .segmented button, [data-minas-plugin="quickshare"] .choice-grid button{min-height: 42px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); background: var(--surface);}
-[data-minas-plugin="quickshare"] .segmented button.active, [data-minas-plugin="quickshare"] .choice-grid button.active{border-color: var(--green); color: var(--green-dark); background: var(--green-soft); font-weight: 800;}
+[data-minas-plugin="quickshare"] .segmented button.active, [data-minas-plugin="quickshare"] .choice-grid button.active{border-color: var(--accent); color: var(--green-dark); background: var(--green-soft); font-weight: 800;}
 [data-minas-plugin="quickshare"] .selected-path{min-height: 45px; padding: 12px 13px; border: 1px solid var(--line); border-radius: 12px; color: var(--text); background: var(--bg); font-size: 13px; overflow-wrap: anywhere;}
 [data-minas-plugin="quickshare"] .selected-path.empty{color: var(--muted);}
 [data-minas-plugin="quickshare"] .form-grid{display: grid; grid-template-columns: minmax(0px, 1fr) minmax(0px, 1fr); gap: 14px;}

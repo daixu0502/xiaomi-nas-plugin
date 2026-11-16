@@ -117,7 +117,7 @@ var document = window.XiaomiPluginClient.document;
     const retry=t.retry||{};$('retryEnabled').checked=!!retry.enabled;$('retryMinutes').value=retry.minutes||5;$('retryMax').value=retry.max||3;
     setSelect('cleanupMode',p.mode||'logs');$('cleanupPath').value=p.path||'';$('cleanupDays').value=p.days||30;$('cleanupMaxFiles').value=p.maxFiles||1000;$('cleanupMaxMiB').value=p.maxMiB||1024;$('cleanupRecursive').checked=p.recursive!==false;
     fillOptions('container',[],p.container); fillOptions('image',[],p.image); $('resourceError').textContent='正在读取 Docker 容器与镜像…'; updateFields(); show('editor');
-    try { const r=await request('resources'); if($('editor').hidden||session!==editSession)return; fillOptions('container',r.containers.map(c=>c.Names),p.container); fillOptions('image',r.images.map(i=>i.Repository==='<none>'||i.Tag==='<none>'?i.ID:i.Repository+':'+i.Tag),p.image); $('resourceError').textContent='Docker 操作会影响整台 NAS 上的容器，请确认目标。'; }
+    try { const r=await request('resources'); if($('editor').hidden||session!==editSession)return; fillOptions('container',r.containers.map(c=>c.Names),p.container); fillOptions('image',r.images.map(i=>i.Repository==='<none>'||i.Tag==='<none>'?i.ID:i.Repository+':'+i.Tag),p.image); $('resourceError').textContent='Docker 容器为整机共享，请确认目标。'; }
     catch(e) { if(session===editSession)$('resourceError').textContent=e.message+'；仍可配置脚本、重启和清理任务。'; }
   }
   $('taskForm').onsubmit=e=>{e.preventDefault();busy($('saveTask'),async()=>{
@@ -181,7 +181,7 @@ var document = window.XiaomiPluginClient.document;
     const last=data.runs[0];$('lastTaskRun').textContent=last?last.name+' · '+(states[last.state]||last.state)+' · '+timestamp(last.started):'尚未执行';
     const next=data.tasks.filter(t=>t.enabled&&typeof t.nextRun==='number'&&t.nextRun>0).sort((a,b)=>a.nextRun-b.nextRun)[0];$('nextTaskRun').textContent=!data.scheduler?'调度已停止':next?next.name+' · '+timestamp(next.nextRun):data.tasks.some(t=>t.enabled&&typeof t.nextRun==='string')?'等待开机或前置任务':'没有待执行的定时任务';
     $('taskSummary').textContent=data.tasks.length+' 个任务 · '+data.tasks.filter(t=>t.enabled).length+' 个已启用';
-    list('taskList',data.tasks,t=>taskCard(t,false),'暂无任务，可从模板创建。');list('templateList',templates,t=>taskCard(t,true),'正在读取模板…');list('historyList',data.runs,runCard,'还没有执行记录。安装后所有预置任务保持停用。');
+    list('taskList',data.tasks,t=>taskCard(t,false),'暂无任务，可从模板创建。');list('templateList',templates,t=>taskCard(t,true),'正在读取模板…');list('historyList',data.runs,runCard,'暂无执行记录。');
     $('version').textContent='插件版本 '+(data.pluginVersion||'未知')+' · 公共权限组件 '+(data.helperVersion||'不可用');
   }
   async function refresh() { if(loading)return; loading=true;try{data=await request('list');if(!templates.length)templates=(await request('templates')).templates;render();}catch(error){$('health').className='badge failed';$('health').textContent='连接失败';throw error;}finally{loading=false;} }

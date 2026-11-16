@@ -428,26 +428,26 @@ var document = window.XiaomiPluginClient.document;
       var summary = byId('dockerProxySummary');
       var labels = {
         unavailable: ['不可用', '设备上未检测到可用的 Docker 服务。'],
-        docker_stopped: ['Docker 未运行', '配置是否保存与服务是否运行是两回事；当前没有运行中的 Docker 进程。'],
-        unknown: ['状态待确认', '无法读取 Docker 进程的实际代理，或检查期间 Docker 发生了重启。请刷新重试。'],
-        pending_apply: ['已配置 · 未生效', '配置文件已保存，但 Docker 进程未加载此代理。可点击“重新应用代理”；会重启 Docker。'],
-        bypassed: ['已配置 · 被绕过', 'Docker 已加载代理，但 NO_PROXY 将 Docker Hub 或认证域名排除。重新应用可修正该设置。'],
-        pending_disable: ['关闭待生效', '配置已移除或改变，但 Docker 进程仍使用此代理。关闭或重新应用需要重启 Docker。'],
+        docker_stopped: ['Docker 未运行', 'Docker 已停止，代理尚未运行。'],
+        unknown: ['状态待确认', '无法确认 Docker 代理状态，请刷新重试。'],
+        pending_apply: ['已配置 · 未生效', '配置已保存，需重新应用并重启 Docker。'],
+        bypassed: ['已配置 · 被绕过', 'NO_PROXY 绕过了 Docker Hub；重新应用代理可修正。'],
+        pending_disable: ['关闭待生效', 'Docker 仍使用旧代理，需重启后生效。'],
         disabled: ['未配置', 'Docker 未使用当前用户的 Mihomo 代理。'],
-        unreachable: ['代理不可达', 'Docker 已加载代理，但本机代理端口无法连接。请先检查 Mihomo 核心，不必反复重启 Docker。'],
-        upstream_failed: ['代理出口异常', 'Docker 已加载代理，本机端口可连接，但经代理访问 Docker Hub 未通过。请检查节点、规则或网络后重试。'],
-        probe_unknown: ['已加载 · 待验证', 'Docker 已加载代理，但缺少连通性检测工具，无法确认 Docker Hub 是否可达。'],
-        effective: ['已生效', 'Docker 进程已加载当前代理，且通过该代理访问 Docker Hub 正常。']
+        unreachable: ['代理不可达', '无法连接 Mihomo，请检查代理服务。'],
+        upstream_failed: ['代理出口异常', '代理无法访问 Docker Hub，请检查节点和规则。'],
+        probe_unknown: ['已加载 · 待验证', '代理已加载，缺少工具验证 Docker Hub 连通性。'],
+        effective: ['已生效', 'Docker Hub 代理连接正常。']
       };
       var view = labels[data.state] || labels.unknown;
       badge.className = 'mini-badge' + (data.state === 'effective' ? ' ready' : '');
       badge.textContent = view[0];
       summary.textContent = view[1];
-      if (data.configuredElsewhere) summary.textContent += ' 当前配置属于其他代理端口；启用本代理会替换 Docker 全局代理。';
+      if (data.configuredElsewhere) summary.textContent += ' 启用后将替换现有 Docker 全局代理。';
       byId('dockerProxyConfig').textContent = data.configured ? '已配置' : (data.configuredElsewhere ? '其他代理配置' : '未配置');
       byId('dockerProxyRuntime').textContent = !data.dockerActive ? 'Docker 未运行' : (!data.runtimeKnown ? '待确认' : (data.effective ? '已加载' : (data.registryBypassed && data.runtimeUsesProxy ? '被 NO_PROXY 绕过' : '未加载此代理')));
       byId('dockerProxyReachability').textContent = data.proxyReachable === true ? 'Docker Hub 可达' : (data.proxyReachable === false ? (data.mihomoListening ? '出口检测失败' : '本机端口不可达') : (data.probeStatus === 'probe_unavailable' ? '无法检测' : '未检测'));
-      byId('dockerProxyEndpoint').textContent = '代理地址：' + (data.proxy || '—') + ' · 仅代表本次检查，不保证所有镜像站均可访问。';
+      byId('dockerProxyEndpoint').textContent = '代理地址：' + (data.proxy || '—') + ' · 仅检测 Docker Hub';
       byId('enableDockerProxy').textContent = data.configured ? '重新应用代理' : '启用 Docker 代理';
       byId('enableDockerProxy').disabled = !data.available || !data.mihomoListening || (data.configured && data.effective);
       byId('disableDockerProxy').disabled = !data.available || !(data.configured || (data.runtimeUsesProxy && !data.configuredElsewhere));
@@ -460,7 +460,7 @@ var document = window.XiaomiPluginClient.document;
       byId('dockerProxyBadge').textContent = '读取失败';
       byId('dockerProxySummary').textContent = error.message;
       ['dockerProxyConfig', 'dockerProxyRuntime', 'dockerProxyReachability'].forEach(function (name) { byId(name).textContent = '待确认'; });
-      byId('dockerProxyEndpoint').textContent = '本次读取失败，不能确认实际代理状态。';
+      byId('dockerProxyEndpoint').textContent = '代理状态读取失败，请重试。';
       byId('enableDockerProxy').disabled = true;
       byId('disableDockerProxy').disabled = true;
       if (showMessage) toast(error.message, true);
@@ -479,8 +479,8 @@ var document = window.XiaomiPluginClient.document;
       updateAccessButtons(data.mode);
       state.mixedPort = Number(data.port) || state.mixedPort;
       byId('networkAccessSummary').textContent = data.mode === 'lan'
-        ? '已监听所有网卡，局域网设备可使用 NAS IP 和 ' + state.mixedPort + ' 端口。'
-        : '只监听 127.0.0.1，局域网设备无法连接。';
+        ? '局域网设备可通过 NAS IP 和 ' + state.mixedPort + ' 端口连接。'
+        : '仅本机可访问。';
       if (showMessage) toast('访问范围已刷新');
       return data;
     }).catch(function (error) {

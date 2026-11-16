@@ -15,9 +15,9 @@ var document = window.XiaomiPluginClient.document;
   const pathLabel = s => '我的文件' + (s ? ' / ' + s : '');
   function renderCoreStatus(id, state) {
     const el = $(id), busy = ['pending', 'checking', 'downloading', 'installing'].includes(state.state);
-    const prompts = { pending: '正在准备' + (state.command === 'apply' ? '下载更新…' : '检查更新…'), checking: '正在检查当前渠道的最新版本…', downloading: '正在下载并校验 SHA-256…', installing: '正在保存任务并切换内核，下载将短暂中断…' };
+    const prompts = { pending: '正在准备' + (state.command === 'apply' ? '下载更新…' : '检查更新…'), checking: '正在检查更新…', downloading: '正在下载并校验 SHA-256…', installing: '正在更新内核，下载将短暂中断…' };
     el.dataset.state = state.state === 'error' ? 'error' : busy ? 'busy' : state.state === 'done' ? 'done' : 'idle';
-    let message = prompts[state.state] || state.message || '点击“检查更新”获取当前渠道的最新版本。';
+    let message = prompts[state.state] || state.message || '尚未检查更新';
     if (state.state === 'done' && state.command === 'check') message = state.updateAvailable ? '发现新版本，可下载并更新。' : '当前已是此渠道的最新版本。';
     if (state.state === 'error') message = (state.command === 'apply' ? '更新失败：' : '检查失败：') + (state.message || '请稍后重试。');
     if (el.textContent !== message) el.textContent = message;
@@ -158,7 +158,7 @@ var document = window.XiaomiPluginClient.document;
         $(prefix + 'LanUrl').textContent = item.url || '仅本机访问';
       }
       if (!$('credentialsSave').hasAttribute('aria-busy')) $('credentialsSave').disabled = !s.credentialsEditable || Boolean(servicePending);
-      $('credentialsStatus').textContent = s.credentialsEditable ? '服务已停止，可以保存密钥；保存后请启动服务。' : '服务运行期间不可修改密钥，请先停止下载服务。';
+      $('credentialsStatus').textContent = s.credentialsEditable ? '服务已停止，可保存密钥。' : '请先停止服务再修改密钥。';
       if (!settingsLoaded) { fillSettings(); settingsLoaded = true; }
       if (!btLoaded) { fillBt(); btLoaded = true; }
       const bt = s.bt || {};
@@ -272,7 +272,7 @@ var document = window.XiaomiPluginClient.document;
     const r = await api('bt_settings', data); toast(r.restartRequired ? '已保存，重启下载核心后生效；未中断当前任务' : 'BT 设置已保存'); await refresh(true);
   }); };
   $('btRestart').onclick = () => busy($('btRestart'), async () => {
-    if (!(await confirm('重启下载核心？', '仅重启当前用户的两个下载核心；共用此核心的 Openlist 下载也会短暂中断并从已保存的会话恢复；暂停任务仍保持暂停。不会重启 NAS 或删除文件。')).ok) return;
+    if (!(await confirm('重启下载核心？', '将短暂中断本账号和 Openlist 下载，随后恢复；暂停任务保持暂停，下载文件保留。')).ok) return;
     await api('service', { command: 'restart' }); servicePending = { command: 'restart', time: Date.now() }; toast('正在后台重启，完成后应用 BT 参数'); await refresh(true);
   });
   $('openlistInfo').onclick = () => busy($('openlistInfo'), async () => { const box = $('openlistDetails'); if (!box.hidden) { box.hidden = true; $('openlistUrl').value = ''; $('openlistInfo').textContent = '显示 Openlist 连接信息'; return; } const r = await api('openlist_info'); $('openlistUrl').value = r.url; $('openlistDirectory').textContent = '容器临时目录对应 NAS：' + r.directory; box.hidden = false; $('openlistInfo').textContent = '隐藏连接信息'; });

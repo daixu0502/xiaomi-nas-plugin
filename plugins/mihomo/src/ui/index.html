@@ -11,8 +11,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Mihomo</title>
   <link rel="icon" href="../../icon/mihomo.icon">
-  <link rel="stylesheet" href="style.css?v=1.7.85&amp;ui=docker-proxy-state">
-  <link rel="stylesheet" href="palette.css?v=1.7.85&amp;ui=compact-metrics-20260930">
+  <link rel="stylesheet" href="style.css?v=1.7.86&amp;ui=docker-proxy-state">
+  <link rel="stylesheet" href="palette.css?v=1.7.86&amp;ui=compact-metrics-20260930">
 </head>
 <body><div data-minas-plugin="mihomo"><div class="minas-plugin-body">
   <main class="shell">
@@ -53,7 +53,7 @@
         <div class="card-heading">
           <div>
             <h2>核心控制</h2>
-            <p>控制端仅监听 127.0.0.1，密钥保存在设备上。</p>
+
           </div>
         </div>
         <div class="button-row">
@@ -66,7 +66,7 @@
         <div class="card-heading">
           <div>
             <h2>运行模式</h2>
-            <p>切换后立即生效，不会修改配置文件。</p>
+            <p>立即生效，不修改配置文件。</p>
           </div>
         </div>
         <div id="modeSwitch" class="segmented" role="group" aria-label="运行模式">
@@ -79,7 +79,7 @@
         <div class="card-heading">
           <div>
             <h2>策略组</h2>
-            <p>选择各策略组当前使用的节点。</p>
+
           </div>
           <div class="proxy-heading-actions">
             <button id="openNodeTests" class="button secondary" type="button" aria-haspopup="dialog" aria-controls="nodeTestDialog" aria-expanded="false">节点测速</button>
@@ -92,7 +92,7 @@
         <div class="card-heading provider-heading">
           <div>
             <h2>代理提供者</h2>
-            <p>更新代理提供者；空的受管节点列表和内置提供者无需更新。</p>
+            <p>内置提供者和空列表无需更新。</p>
           </div>
           <button id="updateAllProviders" class="button secondary provider-update" disabled>全部更新</button>
         </div>
@@ -120,7 +120,7 @@
           <button id="updateGeoData" class="button secondary">更新 GeoIP / GeoSite</button>
           <button id="applyGeoPolicy" class="button primary">应用所选策略</button>
         </div>
-        <div class="privacy-note">Geo 数据只通过本机 PROXY 从 MetaCubeX GitHub 官方仓库下载，并校验官方 SHA-256；不使用第三方镜像。应用策略失败会自动回滚。</div>
+        <div class="privacy-note">通过 Mihomo 代理下载官方数据；应用失败自动恢复。</div>
       </article>
       <article class="card">
         <div class="card-heading">
@@ -133,7 +133,7 @@
           <button data-access="local">仅本机访问</button>
           <button data-access="lan">开放局域网</button>
         </div>
-        <div class="notice warning network-notice">开放后局域网设备可访问此用户自动分配的混合端口。请确保局域网可信，并在客户端使用 NAS 的局域网 IP 与概览中显示的端口。</div>
+        <div class="notice warning network-notice">仅向可信局域网开放，连接时使用 NAS IP 和概览中的端口。</div>
       </article>
       <article class="card"><div class="card-heading"><div><h2>Mihomo 内核更新</h2></div></div>
         <div class="card-heading">
@@ -147,9 +147,9 @@
           <button id="checkCoreUpdate" class="button secondary">检查更新</button>
           <button id="applyCoreUpdate" class="button primary">下载并更新</button>
         </div>
-        <div class="privacy-note">只安装 MetaCubeX 官方 ARM64 Release，并校验官方 SHA-256；启动失败会自动恢复旧内核。</div>
+        <div class="privacy-note">安装官方内核；启动失败自动恢复旧版。</div>
       </article>
-      <article class="card"><div class="card-heading"><div><h2>Docker 守护进程代理</h2></div></div>
+      <article class="card"><div class="card-heading"><div><h2>Docker 镜像代理</h2></div></div>
         <div class="card-heading">
           <div>
 
@@ -169,7 +169,7 @@
           <button id="refreshDockerProxy" class="icon-button refresh-control" type="button" aria-label="刷新状态" title="刷新状态"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button>
         </div>
         <div class="notice warning docker-notice">
-          用于 Docker 拉取镜像和构建；操作会重启 docker.service，运行中的容器可能短暂中断。不会自动修改容器内部的代理环境变量。
+          切换会重启 Docker，容器可能短暂中断。代理用于拉取和构建镜像；容器内代理需另行设置。
         </div>
       </article>
     </section>
@@ -179,12 +179,12 @@
         <div class="card-heading">
           <div>
 
-            <p>导入 Clash 格式订阅中的节点，并保存为本地代理提供者。</p>
+            <p>支持 Clash 格式订阅。</p>
           </div>
         </div>
-        <label class="field-label" for="subscriptionUrl">HTTPS 订阅 URL</label>
+        <label class="field-label" for="subscriptionUrl">HTTPS 订阅地址</label>
         <input id="subscriptionUrl" class="url-input" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://example.com/subscription?token=…">
-        <div class="privacy-note">完整 URL 仅以 0600 权限保存在设备上；页面状态不会回显查询参数。</div>
+
         <div class="button-row subscription-actions">
           <button id="importSubscription" class="button primary">导入并启用</button>
           <button id="updateSubscription" class="button secondary">更新已保存订阅</button>
@@ -200,7 +200,7 @@
           <div id="subscriptionBadge" class="mini-badge">检查中</div>
         </div>
         <div class="notice warning">
-          首次导入会生成安全的受管配置并备份现有 config.yaml；默认仍只监听本机，不开启 TUN。以后点击更新只替换节点文件。
+          首次导入会备份并替换当前配置；后续更新只替换节点。
         </div>
         <div id="subscriptionNodes" class="stack subscription-node-list empty-state">正在读取订阅节点…</div>
       </article>
@@ -209,12 +209,12 @@
         <div class="card-heading">
           <div>
 
-            <p>支持常见分享链接，也支持单个 Clash JSON 节点。</p>
+            <p>支持分享链接或单个 Clash JSON 节点。</p>
           </div>
         </div>
         <label class="field-label" for="manualNodeInput">节点分享链接或 JSON</label>
         <textarea id="manualNodeInput" class="node-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="vmess://… / vless://… / trojan://… / ss://…"></textarea>
-        <div class="privacy-note">支持 ss、vmess、vless、trojan、hysteria2/hy2、tuic；凭据只保存在设备本地。</div>
+        <div class="privacy-note">支持 SS、VMess、VLESS、Trojan、Hysteria2 和 TUIC。</div>
         <div class="button-row subscription-actions">
           <button id="importManualNode" class="button primary">导入节点</button>
         </div>
@@ -224,18 +224,18 @@
         <div class="card-heading">
           <div>
             <h2>手动节点</h2>
-            <p>导入后可到“策略”页的 PROXY 组中选择使用。</p>
+            <p>导入后在“概览 → 策略组”中选择节点。</p>
           </div>
           <button id="reloadManualNodes" class="icon-button refresh-control" type="button" aria-label="刷新手动节点" title="刷新手动节点"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button>
         </div>
         <div id="manualNodes" class="stack empty-state">正在读取手动节点…</div>
       </article>
 
-      <article class="card"><div class="card-heading"><div><h2>URL 导入规则提供者</h2></div></div>
+      <article class="card"><div class="card-heading"><div><h2>导入规则集</h2></div></div>
         <div class="card-heading">
           <div>
 
-            <p>写入 rule-providers，并把 RULE-SET 规则放到最终 MATCH 之前。</p>
+            <p>规则集将在默认匹配规则前应用。</p>
           </div>
         </div>
         <div class="form-grid">
@@ -247,14 +247,14 @@
           <label><span>下载通道</span><select id="ruleProviderVia"><option value="PROXY">PROXY</option><option value="DIRECT">DIRECT</option></select></label>
         </div>
         <div class="button-row geo-actions"><button id="importRuleProvider" class="button primary">导入规则提供者</button></div>
-        <div class="privacy-note">同名导入会更新原提供者；配置先校验再重启，失败自动恢复。</div>
+        <div class="privacy-note">同名规则集将被覆盖；保存后重启内核，失败自动恢复。</div>
       </article>
 
       <article class="card">
         <div class="card-heading provider-heading">
           <div>
             <h2>规则提供者</h2>
-            <p>查看和更新已导入或配置中的 rule-providers 规则集。</p>
+
           </div>
           <button id="updateAllRuleProviders" class="button secondary provider-update" disabled>全部更新</button>
         </div>
@@ -267,7 +267,7 @@
         <div class="card-heading">
           <div>
             <h2>config.yaml</h2>
-            <p>保存前自动校验；通过后重启核心。旧配置保留为 config.yaml.bak。</p>
+            <p>保存后重启内核，旧配置自动备份。</p>
           </div>
           <button id="loadConfig" class="icon-button refresh-control" type="button" aria-label="重新载入配置" title="重新载入配置"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button>
         </div>
@@ -284,7 +284,7 @@
         <div class="card-heading">
           <div>
             <h2>最近 200 行</h2>
-            <p>用于排查配置和启动问题。</p>
+
           </div>
           <button id="loadLogs" class="icon-button refresh-control" type="button" aria-label="刷新日志" title="刷新日志"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button>
         </div>
@@ -292,7 +292,7 @@
       </article>
     </section>
 
-    <footer id="pluginVersion">插件版本 1.7.85 · 公共权限组件读取中</footer>
+    <footer id="pluginVersion">插件版本 1.7.86 · 公共权限组件读取中</footer>
   </main>
 
   <div id="nodeTestBackdrop" class="mi-picker-backdrop" hidden></div>
@@ -307,7 +307,7 @@
         <button id="testAllDelays" class="button primary" type="button">全部测延迟</button>
         <button id="cancelNodeTest" class="button secondary" type="button" hidden>停止测试</button>
       </div>
-      <p class="hint">延迟为 HTTP 请求耗时；下载测速每次最多约 20 MiB、下载阶段约 8 秒，会消耗节点流量。</p>
+      <p class="hint">延迟为 HTTP 请求耗时；下载测速每次最多约 20 MiB，会消耗节点流量。</p>
       <p id="nodeTestStatus" role="status" aria-live="polite">正在读取节点…</p>
       <div id="nodeTestList" class="stack node-test-list"></div>
     </div>
@@ -342,8 +342,8 @@
   </section>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="client-bridge.js?v=1.7.85&amp;ui=compact-metrics-20260930"></script>
-  <script src="app.js?v=1.7.85&amp;ui=docker-proxy-state"></script>
+  <script src="client-bridge.js?v=1.7.86&amp;ui=compact-metrics-20260930"></script>
+  <script src="app.js?v=1.7.86&amp;ui=docker-proxy-state"></script>
   <script>
     (function () {
       var document = window.XiaomiPluginClient.document;

@@ -1,6 +1,23 @@
 /* Clear workbench: one shared production skin; all selectors stay in this plugin. */
 @ROOT@.workbench-ui,@ROOT@.workbench-ui[data-theme=light]{--bg:#f5f7fb;--surface:#fff;--surface-solid:#fff;--text:#202c40;--muted:#69778c;--line:#e4eaf2;--sidebar:#fff;--accent:#4f65d8;--soft:#edf1ff;--on-accent:#fff;--red:#b92d40;--danger:#b92d40;--danger-soft:#fcebed;--success:#18734f;--amber:#966016;--warning:#966016;--warning-soft:#fff3d9;--disabled-bg:#e2e7ee;--disabled-text:#647084;--disabled-border:#ccd4df;--status-online:#147968;--status-online-bg:#e3f3ee;--status-online-border:rgba(13,141,131,.28);--status-online-ring:rgba(13,141,131,.13);--blue:var(--accent);--blue-dark:var(--accent);--blue-soft:var(--soft);--teal:var(--accent);--teal-dark:var(--accent);--teal-soft:var(--soft);--purple:var(--accent);--purple-dark:var(--accent);--purple-soft:var(--soft);--green-dark:var(--accent);--green-soft:var(--soft);--shadow:none;--card-radius:14px;--card-gap:18px;color-scheme:light}
 /* Desktop type sizes remain owned by typography.css. */
+/* Optional help stays compact; operational warnings remain outside disclosures. */
+@ROOT@.workbench-ui .help-details{margin-top:12px}
+@ROOT@.workbench-ui .help-details>summary{cursor:pointer;color:var(--muted);padding:4px 0}
+@ROOT@.workbench-ui .help-details>summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+@ROOT@.workbench-ui .help-details>p{margin:10px 0 0}
+@ROOT@.workbench-ui .scope-choice{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:4px 10px}
+@ROOT@.workbench-ui .scope-choice>.sub{grid-column:2}
+@ROOT@[data-minas-plugin=dockermanager].workbench-ui #page-containers>.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+@ROOT@[data-minas-plugin=dockermanager].workbench-ui #page-containers>.metric-grid>*{border:0;border-bottom:1px solid var(--line)}
+@ROOT@[data-minas-plugin=dockermanager].workbench-ui #page-containers>.metric-grid>:nth-child(even){border-left:1px solid var(--line)}
+@ROOT@[data-minas-plugin=dockermanager].workbench-ui #page-containers>.metric-grid>:nth-last-child(-n+2){border-bottom:0}
+@container workbench-page (min-width:620px){
+@ROOT@[data-minas-plugin=dockermanager].workbench-ui #page-containers>.metric-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+@ROOT@[data-minas-plugin=dockermanager].workbench-ui #page-containers>.metric-grid>:nth-child(n){border-left:0;border-bottom:1px solid var(--line)}
+@ROOT@[data-minas-plugin=dockermanager].workbench-ui #page-containers>.metric-grid>:not(:nth-child(3n+1)){border-left:1px solid var(--line)}
+@ROOT@[data-minas-plugin=dockermanager].workbench-ui #page-containers>.metric-grid>:nth-last-child(-n+3){border-bottom:0}
+}
 @ROOT@.workbench-ui.desktop-client{--text:#20242a;--muted:#536074}
 @ROOT@.workbench-ui.desktop-client .plugin-header h1{font-weight:600!important;letter-spacing:normal}
 @ROOT@.workbench-ui .minas-plugin-body{background:var(--bg);color:var(--text)}

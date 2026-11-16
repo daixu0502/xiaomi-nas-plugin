@@ -9,9 +9,9 @@
   <meta name="theme-color" content="#eef1f5" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#171a20" media="(prefers-color-scheme: dark)">
   <title>文件快传</title>
-  <link rel="stylesheet" href="style.css?v=1.1.83&amp;ui=clipboard-20261015">
-  <link rel="stylesheet" href="modal.css?v=1.1.83">
-  <link rel="stylesheet" href="palette.css?v=1.1.83&amp;ui=clipboard-20261015">
+  <link rel="stylesheet" href="style.css?v=1.1.84&amp;ui=clipboard-20261015">
+  <link rel="stylesheet" href="modal.css?v=1.1.84">
+  <link rel="stylesheet" href="palette.css?v=1.1.84&amp;ui=clipboard-20261015">
 </head>
 <body><div data-minas-plugin="quickshare"><div class="minas-plugin-body">
   <main class="shell">
@@ -31,27 +31,27 @@
       <div id="shareList" class="stack loading workbench-list-surface">正在读取分享记录…</div>
     </section>
 
-    <section id="page-transfers" class="page"><div class="metrics workbench-share-metrics"><article><span>今日传输</span><strong id="transferTodayBytes">—</strong></article><article><span>今日次数</span><strong id="transferTodayCount">—</strong></article><article><span>累计传输</span><strong id="transferTotalBytes">—</strong></article></div><div class="section-heading"><div><h2>最近传输</h2><p>最近 500 条；从本版本开始记录，不包含分享口令或访问链接。</p></div><button id="refreshTransfers" class="icon-button refresh-control" type="button" aria-label="刷新" title="刷新"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button></div><label class="field-label">传输方向<select id="transferDirection"><option value="all">全部传输</option><option value="download">下载</option><option value="upload">上传</option></select></label><div id="transferList" class="stack workbench-list-surface">正在读取…</div><p class="note">流量以服务器确认收发的字节数为准；中断下载只统计确认写出的数据块，完成表示服务器已结束传输。</p></section><section id="page-settings" class="page">
+    <section id="page-transfers" class="page"><div class="metrics workbench-share-metrics"><article><span>今日传输</span><strong id="transferTodayBytes">—</strong></article><article><span>今日次数</span><strong id="transferTodayCount">—</strong></article><article><span>累计传输</span><strong id="transferTotalBytes">—</strong></article></div><div class="section-heading"><div><h2>最近传输</h2><p>最近 500 条传输记录。</p></div><button id="refreshTransfers" class="icon-button refresh-control" type="button" aria-label="刷新" title="刷新"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 9 M20 4v5h-5"/></svg></button></div><label class="field-label">传输方向<select id="transferDirection"><option value="all">全部传输</option><option value="download">下载</option><option value="upload">上传</option></select></label><div id="transferList" class="stack workbench-list-surface">正在读取…</div><p class="note">流量按服务器已收发的数据统计，包含中断传输。完成表示服务器已结束传输。</p></section><section id="page-settings" class="page">
       <article class="panel">
-        <div class="panel-heading"><div><h3>分享服务</h3><p>安装时自动分配独立 TCP 端口，避免多用户冲突。</p></div></div>
+        <div class="panel-heading"><div><h3>分享服务</h3></div></div>
         <div class="button-row"><button id="startService" class="primary-button" type="button">启动服务</button><button id="stopService" class="danger-button" type="button">停止服务</button></div>
       </article>
       <article class="panel">
-        <div class="panel-heading"><div><h3>公网分享地址</h3><p>生成链接时使用；不会自动修改路由器。</p></div></div>
+        <div class="panel-heading"><div><h3>公网分享地址</h3><p>用于生成公网链接，需自行配置端口转发或反向代理。</p></div></div>
         <label class="field-label"><span>外部基础地址</span><input id="externalBase" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例如 https://share.example.com 或 http://公网IP:端口"></label>
         <div id="lanAddress" class="selected-path"></div>
         <button id="saveSettings" class="primary-button full" type="button">保存地址</button>
-        <div class="warning-note">如果填写 HTTP 公网地址，密码和文件传输不会被加密。建议由路由器或反向代理提供 HTTPS，再转发到上方显示的局域网端口。</div>
+        <div class="warning-note">HTTP 不加密密码和文件，公网访问建议使用 HTTPS。</div>
       </article>
-      <article class="panel compact"><h3>路由器端口转发</h3><p class="router-help">协议选择 TCP，内网主机填写本设备 IP，内网端口使用上方“局域网地址”中的端口；公网端口可以自定义。然后将完整公网地址填写到上方。</p></article>
+      <details class="panel help-details"><summary>端口转发设置</summary><p class="router-help">将公网 TCP 端口转发到上方局域网地址，再填写完整公网地址。</p></details>
     </section>
 
-    <footer id="version">插件版本 1.1.83</footer>
+    <footer id="version">插件版本 1.1.84</footer>
   </main>
 
 <section id="page-create" class="dialog create-share-dialog" role="dialog" aria-modal="true" aria-labelledby="createShareTitle" hidden><header class="dialog-head"><h2 id="createShareTitle">新建分享</h2><button id="closeCreateShare" type="button" class="close-button" aria-label="关闭新建分享">×</button></header>
       <article class="panel">
-        <div class="panel-heading"><div><h3>分享类型</h3><p>分享文件、整个文件夹，或接收朋友上传的文件。</p></div></div>
+        <div class="panel-heading"><div><h3>分享类型</h3></div></div>
         <div id="kindSwitch" class="segmented"><button class="active" data-kind="download">文件下载</button><button data-kind="folder">文件夹分享</button><button data-kind="upload">上传入口</button></div>
       </article>
 
@@ -65,11 +65,11 @@
           <label class="wide"><span>访问密码（可选）</span><input id="password" type="password" minlength="4" maxlength="128" autocomplete="new-password" placeholder="至少 4 位；留空表示无需密码"></label>
           <div class="wide"><span class="field-title">有效期</span><div id="expiryChoices" class="choice-grid"><button data-value="3600">1 小时</button><button data-value="21600">6 小时</button><button class="active" data-value="86400">1 天</button><button data-value="259200">3 天</button><button data-value="604800">7 天</button></div></div>
           <label><span id="usesLabel">最多下载次数</span><input id="maxUses" type="number" inputmode="numeric" min="0" max="1000" value="3"></label>
-          <div class="field-note">填写 0 表示有效期内不限次数。下载开始传输即计一次，中断重试再次计次；整个文件夹 ZIP 计一次。上传成功计一次。</div>
+          <div class="field-note">0 表示不限次数。下载开始即计次，重试另计；文件夹 ZIP 计一次，上传成功计一次。</div>
         </div>
         <button id="createButton" class="primary-button full" type="button">生成临时链接</button>
       </article>
-      <div class="security-note">公网使用密码时请优先配置 HTTPS。随机链接本身具有访问权限，请勿发送到公开群聊。</div>
+      <div class="security-note">链接可用于访问文件，请勿公开。公网传输建议使用 HTTPS。</div>
     </section>
   <div id="modalBackdrop" class="modal-backdrop" hidden></div>
   <section id="browserModal" class="sheet" role="dialog" aria-modal="true" aria-labelledby="browserTitle" hidden>
@@ -111,8 +111,8 @@
   </section>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="client-bridge.js?v=1.1.83&amp;ui=clipboard-20261015"></script>
-  <script src="app.js?v=1.1.83&amp;ui=clipboard-20261015"></script>
+  <script src="client-bridge.js?v=1.1.84&amp;ui=clipboard-20261015"></script>
+  <script src="app.js?v=1.1.84&amp;ui=clipboard-20261015"></script>
   <script>
     (function () {
       var document = window.XiaomiPluginClient.document;
