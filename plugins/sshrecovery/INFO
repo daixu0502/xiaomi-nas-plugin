@@ -2,15 +2,15 @@
   "plugin": "sshrecovery",
   "name": "SSH 恢复",
   "id": 19098,
-  "version": "1.1.62",
+  "version": "1.1.63",
   "tags": [
     "tool"
   ],
-  "timestamp": 1794793388,
+  "timestamp": 1794797080,
   "desc": "手动开启 SSH、恢复主机密钥与登录公钥",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "同步后台状态查询的页面请求管理。",
+  "changelog": "修复经 Mihomo 代理检查插件更新失败；直接读取并验证官方发布签名清单。",
   "system": false,
   "size": 195487,
   "port": "",

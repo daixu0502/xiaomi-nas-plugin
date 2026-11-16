@@ -155,7 +155,7 @@ case "$action" in
        export TMPDIR="$RUNTIME_DIR" ;;
 esac
 case "$action" in
-    set_mode|select_proxy|manual_node_import|manual_node_delete|core_update_apply|network_access_set|start|stop|restart|config_save)
+    set_mode|select_proxy|manual_node_import|manual_node_delete|network_access_set|start|stop|restart|config_save)
         require_post
         mkdir -p "$VAR_DIR"
         exec 8>"$RUNTIME_DIR/update-operation.lock"
@@ -174,7 +174,7 @@ case "$action" in
         json_header
         printf '%s\n' "$response"
         ;;
-    subscription_import|subscription_update|geodata_update|geodata_apply_policy|rule_provider_import|update_provider|update_rule_provider)
+    subscription_import|subscription_update|geodata_update|geodata_apply_policy|rule_provider_import|update_provider|update_rule_provider|core_update_check|core_update_apply)
         require_post
         body=$(read_json_body) || json_error "请求内容无效或超过 64 KiB"
         response=$(printf '%s' "$body" | PLUG_HOME_DIR="$PLUGIN_HOME" python3 -B "$SRC_DIR/files/update_tasks.py" start "$action" 2>/dev/null) || true
@@ -332,21 +332,6 @@ case "$action" in
         [ -x "$CORE_UPDATER" ] || json_error "核心更新组件尚未安装"
         response=$("$CORE_UPDATER" status 2>/dev/null) || json_error "无法读取核心更新状态"
         printf '%s' "$response" | jq empty >/dev/null 2>&1 || json_error "核心更新状态返回异常"
-        json_header
-        printf '%s\n' "$response"
-        ;;
-    core_update_check)
-        [ -x "$CORE_UPDATER" ] || json_error "核心更新组件尚未安装"
-        response=$("$CORE_UPDATER" check 2>/dev/null) || json_error "检查 Mihomo 更新失败"
-        printf '%s' "$response" | jq empty >/dev/null 2>&1 || json_error "核心更新检查返回异常"
-        json_header
-        printf '%s\n' "$response"
-        ;;
-    core_update_apply)
-        require_post
-        [ -x "$CORE_UPDATER" ] || json_error "核心更新组件尚未安装"
-        response=$("$CORE_UPDATER" update 2>/dev/null) || json_error "Mihomo 核心更新失败"
-        printf '%s' "$response" | jq empty >/dev/null 2>&1 || json_error "核心更新返回异常"
         json_header
         printf '%s\n' "$response"
         ;;

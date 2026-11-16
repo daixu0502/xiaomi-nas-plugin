@@ -20,7 +20,6 @@ PORTS_FILE="$ETC_DIR/ports.env"
 MIXED_PORT=$(sed -n 's/^MIXED_PORT=\([0-9][0-9]*\)$/\1/p' "$PORTS_FILE" 2>/dev/null | head -n 1)
 [ -n "$MIXED_PORT" ] || MIXED_PORT=7890
 META_FILE="$ETC_DIR/core-update.meta.json"
-API_URL="https://api.github.com/repos/MetaCubeX/mihomo/releases/latest"
 
 api_tmp=""
 archive_tmp=""
@@ -85,8 +84,11 @@ fetch_latest() {
     mkdir -p "$VAR_DIR"
     umask 077
     api_tmp="$RUNTIME_DIR/mihomo-release.$$"
-    download_https "$API_URL" "$api_tmp" 'xiaomi-storage-mihomo/1.5.0' \
-        || json_error "无法连接 GitHub 检查 Mihomo 更新"
+    task_progress checking 5 '正在读取官方稳定版与 SHA-256'
+    metadata_proxy=''
+    control_command status >/dev/null 2>&1 && metadata_proxy="http://127.0.0.1:$MIXED_PORT"
+    metadata_error=$(python3 -B "$SCRIPT_DIR/github_release.py" "$metadata_proxy" 2>&1 > "$api_tmp") \
+        || json_error "无法读取 Mihomo 官方发布：$metadata_error"
     [ -s "$api_tmp" ] || json_error "GitHub 返回了空的版本信息"
     [ "$(wc -c < "$api_tmp")" -le 2097152 ] || json_error "GitHub 版本信息异常"
     jq empty "$api_tmp" >/dev/null 2>&1 || json_error "GitHub 版本信息无法解析"
@@ -196,12 +198,14 @@ do_update() {
     CORE_TARGET="$CORE_DIR/mihomo"
     binary_tmp=$(mktemp "$CORE_DIR/.mihomo-candidate.XXXXXXXX") || json_error "无法创建核心候选文件"
     test_log="$RUNTIME_DIR/core-update-test.$$"
+    task_progress downloading 25 '正在下载 Mihomo 内核'
     download_https "$asset_url" "$archive_tmp" 'xiaomi-storage-mihomo/1.5.0' \
         || json_error "Mihomo 核心下载失败，请检查网络或代理节点"
     archive_size=$(wc -c < "$archive_tmp")
     [ "$archive_size" -gt 1048576 ] && [ "$archive_size" -le 104857600 ] \
         || json_error "下载的 Mihomo 核心大小异常"
     actual_sha=$(sha256sum "$archive_tmp" | awk '{print $1}')
+    task_progress verifying 65 '正在校验内核摘要、架构和现有配置'
     [ "$actual_sha" = "$expected_sha" ] || json_error "Mihomo 核心 SHA-256 校验失败"
     gzip -t "$archive_tmp" >/dev/null 2>&1 || json_error "下载的 Mihomo 核心压缩包损坏"
     gzip -dc "$archive_tmp" > "$binary_tmp" || json_error "Mihomo 核心解压失败"
@@ -217,6 +221,7 @@ do_update() {
         || json_error "新核心无法通过当前配置校验，未执行替换"
 
     was_running=false
+    task_progress installing 85 '正在保存旧内核并准备切换'
     if control_command status >/dev/null 2>&1; then
         was_running=true
     fi

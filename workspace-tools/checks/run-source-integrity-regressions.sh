@@ -17,7 +17,7 @@ for suite in test_review_regressions.py test_runtime_paths.py test_cgi_descripto
 done
 # Reproduce firmware RAM limits without mounting anything in the host namespace.
 unshare --mount --propagation private python3 -B workspace-tools/tests/test_mihomo_update_storage.py
-for suite in test_core_security.py test_mediaeditor.py test_nascenter_smart.py test_online_kernel_policy.py test_runtime_optimizations.py test_shared_update_check.py test_stability_events.py test_task_script_identity.py test_review_20261116.py; do
+for suite in test_core_security.py test_mediaeditor.py test_nascenter_smart.py test_online_kernel_policy.py test_runtime_optimizations.py test_shared_update_check.py test_stability_events.py test_task_script_identity.py test_review_20261116.py test_proxy_update_fixes.py; do
     python3 -B -m unittest discover -s workspace-tools/tests -p "$suite"
 done
 # User-owned cache and node probes must exercise their real non-root boundary.

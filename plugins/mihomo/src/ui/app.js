@@ -48,7 +48,7 @@ var document = window.XiaomiPluginClient.document;
       panel.setAttribute('aria-busy', String(busy));
     }
     if (busy && !wasBusy) {
-      savedUpdateButtons = Array.prototype.slice.call(document.querySelectorAll('#importSubscription,#updateSubscription,#updateGeoData,#applyGeoPolicy,#importRuleProvider,#updateAllProviders,#updateAllRuleProviders,#applyCoreUpdate,#saveConfig,#startButton,#stopButton,#restartButton,[data-update-provider]')).map(function (button) {
+      savedUpdateButtons = Array.prototype.slice.call(document.querySelectorAll('#importSubscription,#updateSubscription,#updateGeoData,#applyGeoPolicy,#importRuleProvider,#updateAllProviders,#updateAllRuleProviders,#checkCoreUpdate,#applyCoreUpdate,#saveConfig,#startButton,#stopButton,#restartButton,[data-update-provider]')).map(function (button) {
         return { button: button, disabled: button.disabled };
       });
     }
@@ -1107,7 +1107,7 @@ var document = window.XiaomiPluginClient.document;
   byId('checkCoreUpdate').addEventListener('click', function () {
     var button = this;
     button.disabled = true;
-    request('core_update_check').then(function (data) {
+    postJson('core_update_check', {}).then(function (data) {
       state.coreUpdateAvailable = Boolean(data.updateAvailable);
       toast(data.updateAvailable ? '发现新内核 ' + data.latestVersion : '当前已是最新稳定版');
       return loadCoreUpdate(false);
@@ -1128,7 +1128,7 @@ var document = window.XiaomiPluginClient.document;
         toast(error.message, true);
         loadStatus(false);
         return loadCoreUpdate(false);
-      });
+      }).finally(function () { button.disabled = !state.coreUpdateAvailable || updateTaskBusy(); });
     });
   });
   byId('updateGeoData').addEventListener('click', function () {

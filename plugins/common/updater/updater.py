@@ -27,7 +27,7 @@ import urllib.request
 import uuid
 
 sys.dont_write_bytecode = True
-VERSION = '2.0.3'
+VERSION = '2.0.4'
 REPOSITORY = 'daixu0502/xiaomi-nas-plugin'
 BASE = Path('/data/minas/plugins/updater')
 RECOVERY = Path('/data/minas/plugins/recovery')
@@ -200,7 +200,8 @@ def allowed_url(url):
     if parsed.hostname == 'api.github.com':
         require(parsed.path.startswith('/repos/' + REPOSITORY + '/releases/'), '仅允许官方仓库')
     elif parsed.hostname == 'github.com':
-        require(parsed.path.startswith('/' + REPOSITORY + '/releases/download/'), '仅允许官方发布文件')
+        require(parsed.path.startswith('/' + REPOSITORY + '/releases/download/')
+                or parsed.path == '/' + REPOSITORY + '/releases/latest/download/' + MANIFEST, '仅允许官方发布文件')
     else:
         require(parsed.hostname in ('release-assets.githubusercontent.com', 'objects.githubusercontent.com'), '下载重定向不受信任')
     return url
@@ -244,6 +245,11 @@ def fetch():
                 total += len(block)
                 require(total <= limit, '下载文件超过大小限制')
                 sys.stdout.buffer.write(block)
+    except urllib.error.HTTPError as error:
+        # Only bounded, selected metadata crosses the privilege boundary.
+        print(json.dumps(dict(httpStatus=error.code, rateLimited=error.code in (403,429)
+              and error.headers.get('X-RateLimit-Remaining') == '0')), file=sys.stderr)
+        sys.exit(1)
     except Exception:
         # Never echo URLs, proxy credentials or authentication headers.
         sys.exit(1)
@@ -252,7 +258,7 @@ def fetch():
 def download(user, url, proxy, limit, output=None, progress=None):
     request = encoded(dict(url=allowed_url(url), proxy=proxy, limit=limit))
     cmd = ['runuser', '-u', user, '--', '/usr/bin/python3', '-I', '-B', str(BASE / 'updater.py'), 'fetch']
-    process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=ENV)
+    process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=ENV)
     buffer, total, last = io.BytesIO() if output is None else output, 0, 0
     try:
         process.stdin.write(request)
@@ -267,13 +273,23 @@ def download(user, url, proxy, limit, output=None, progress=None):
             if progress and time.monotonic() - last > 1:
                 progress(total, limit)
                 last = time.monotonic()
-        require(process.wait(timeout=35) == 0, 'GitHub 下载失败，请检查网络或代理；也可能尚未发布完整安装包')
+        code = process.wait(timeout=35)
+        diagnostic = process.stderr.read(4097)
+        if code:
+            try: detail = json.loads(diagnostic)
+            except (ValueError, UnicodeError): detail = {}
+            require(not detail.get('rateLimited'), '当前代理出口的 GitHub 请求额度已用尽，请稍后重试或切换代理节点')
+            status = detail.get('httpStatus')
+            require(type(status) is not int or not 400 <= status <= 599,
+                    'GitHub 返回 HTTP %s，请检查当前代理节点或发布文件是否可访问' % status)
+            raise ValueError('GitHub 下载失败，请检查网络或代理；也可能尚未发布完整安装包')
         return buffer.getvalue() if output is None else total
     finally:
         if process.poll() is None:
             process.kill()
             process.wait()
         process.stdout.close()
+        process.stderr.close()
 
 
 def tag_url(tag, asset):
@@ -341,19 +357,17 @@ def latest_locked(user, plugin, job, proxy, use_cache=False):
         manifest = verify_manifest(base64.b64decode(cache['manifest']), base64.b64decode(cache['signature']), job)
         save(plugin_dir(user, plugin) / 'candidate.json', cache)
         return manifest
-    release = json.loads(download(user, 'https://api.github.com/repos/' + REPOSITORY + '/releases/latest', proxy, 2 * 1024 * 1024))
-    require(not release.get('draft') and not release.get('prerelease'), '当前发布不是正式版本')
-    tag = release['tag_name']
-    assets = {item['name']: item for item in release.get('assets', [])}
-    require(MANIFEST in assets and SIGNATURE in assets, '最新发布尚未提供签名更新清单')
-    for asset in (MANIFEST, SIGNATURE):
-        require(assets[asset].get('browser_download_url') == tag_url(tag, asset), '更新清单来源不匹配')
-    raw = download(user, tag_url(tag, MANIFEST), proxy, 131072)
+    # GitHub's stable-release download redirect does not consume the REST API
+    # quota shared by proxy exits. Pin the signature to the manifest's tag so
+    # publishing a newer release between requests cannot mix two releases.
+    raw = download(user, 'https://github.com/' + REPOSITORY + '/releases/latest/download/' + MANIFEST, proxy, 131072)
+    try: tag = json.loads(raw)['tag']
+    except (ValueError, KeyError, TypeError): raise ValueError('最新发布未提供有效更新清单') from None
     signature = download(user, tag_url(tag, SIGNATURE), proxy, 2048)
     manifest = verify_manifest(raw, signature, job)
     require(manifest['tag'] == tag, '发布标签与签名清单不一致')
-    for item in [*manifest['plugins'].values(), *manifest['components'].values()]:
-        require(item['asset'] in assets and assets[item['asset']].get('browser_download_url') == tag_url(tag, item['asset']) and assets[item['asset']]['size'] == item['size'], '发布安装包不完整或大小不匹配')
+    # Package names and sizes are signed; download/install checks every byte
+    # against that manifest before anything is applied on the device.
     value = dict(manifest=base64.b64encode(raw).decode(), signature=base64.b64encode(signature).decode(), checkedAt=time.time())
     save(user_dir(user) / 'release-cache.json', value)
     save(plugin_dir(user, plugin) / 'candidate.json', value)

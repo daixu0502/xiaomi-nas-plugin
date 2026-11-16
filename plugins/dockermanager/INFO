@@ -2,15 +2,15 @@
   "plugin": "dockermanager",
   "name": "docker",
   "id": 19091,
-  "version": "1.1.57",
+  "version": "1.1.58",
   "tags": [
     "tool"
   ],
-  "timestamp": 1794793388,
+  "timestamp": 1794797080,
   "desc": "容器、镜像与存储卷管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "镜像拉取、容器创建与服务操作改为后台任务，重新打开页面可查询结果。",
+  "changelog": "修复经 Mihomo 代理检查插件更新失败；直接读取并验证官方发布签名清单。",
   "system": false,
   "size": 239040,
   "port": "",

@@ -23,3 +23,6 @@ for name in ('mihomo','quickshare','downloadcenter'):
     (ROOT/'plugins'/name/'src/files/runtime_log.py').write_bytes((ROOT/'plugins/common/runtime/runtime_log.py').read_bytes().replace(b'\r\n',b'\n'))
 
 (ROOT/'plugins/downloadcenter/src/files/event_wait.py').write_bytes((ROOT/'plugins/common/privileged/common/event_wait.py').read_bytes().replace(b'\r\n',b'\n'))
+
+for name in ('mihomo','downloadcenter'):
+    (ROOT/'plugins'/name/'src/files/github_release.py').write_bytes((ROOT/'plugins/common/runtime/github_release.py').read_bytes().replace(b'\r\n',b'\n'))

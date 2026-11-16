@@ -2,15 +2,15 @@
   "plugin": "nascenter",
   "name": "控制中心",
   "id": 19093,
-  "version": "1.1.85",
+  "version": "1.1.86",
   "tags": [
     "tool"
   ],
-  "timestamp": 1794793388,
+  "timestamp": 1794797080,
   "desc": "性能、硬盘健康、网络和服务管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "隔离单盘 SMART 超时、限制整体检测耗时，并协调服务维护的等待时间。",
+  "changelog": "修复经 Mihomo 代理检查插件更新失败；直接读取并验证官方发布签名清单。",
   "system": false,
   "size": 240511,
   "port": "",

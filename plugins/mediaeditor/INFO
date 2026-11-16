@@ -2,15 +2,15 @@
   "plugin": "mediaeditor",
   "name": "影视编辑",
   "id": 19100,
-  "version": "1.1.37",
+  "version": "1.1.38",
   "tags": [
     "tool"
   ],
-  "timestamp": 1794793388,
+  "timestamp": 1794797080,
   "desc": "官方影视代码搜索、系列归属修正与批量集数编辑",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "同步后台状态查询的页面请求管理。",
+  "changelog": "修复经 Mihomo 代理检查插件更新失败；直接读取并验证官方发布签名清单。",
   "system": false,
   "size": 302696,
   "port": "",

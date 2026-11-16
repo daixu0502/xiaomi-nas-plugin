@@ -23,11 +23,11 @@ RUNTIME = runtime_directory(HOME)
 TASKS = RUNTIME / 'update-tasks'
 LOCK = RUNTIME / 'update-operation.lock'
 ACTIONS = {'subscription_update', 'subscription_import', 'geodata_update', 'geodata_apply_policy',
-           'rule_provider_import', 'update_provider', 'update_rule_provider'}
+           'rule_provider_import', 'update_provider', 'update_rule_provider', 'core_update_check', 'core_update_apply'}
 TITLES = {'subscription_update': '更新订阅', 'subscription_import': '导入订阅',
           'geodata_update': '更新 Geo 数据', 'geodata_apply_policy': '应用 Geo 策略',
           'rule_provider_import': '导入规则提供者', 'update_provider': '更新节点提供者',
-          'update_rule_provider': '更新规则提供者'}
+          'update_rule_provider': '更新规则提供者', 'core_update_check': '检查 Mihomo 内核', 'core_update_apply': '更新 Mihomo 内核'}
 
 
 def redact(message):
@@ -237,6 +237,8 @@ def worker(ident, fd):
                        'subscription_import': ('subscription.sh', ['import'], payload.get('url', '')),
                        'geodata_update': ('geodata.sh', ['update'], ''),
                        'geodata_apply_policy': ('geodata.sh', ['apply', payload.get('policy', '')], ''),
+                       'core_update_check': ('core-update.sh', ['check'], ''),
+                       'core_update_apply': ('core-update.sh', ['update'], ''),
                        'rule_provider_import': ('rule-provider.sh', ['import'], json.dumps(payload))}
             script, arguments, body = mapping[action]
             with output.open('wb') as out, errors.open('wb') as err:

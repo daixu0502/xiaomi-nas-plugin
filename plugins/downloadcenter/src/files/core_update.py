@@ -17,7 +17,7 @@ import tempfile
 import time
 import zipfile
 from pathlib import Path
-from urllib.request import Request, ProxyHandler, build_opener
+from github_release import fetch, latest_tag, asset as release_asset
 
 sys.dont_write_bytecode = True
 from download_lib import DownloadError, atomic_json, core_path
@@ -88,27 +88,12 @@ def mihomo_proxy(home):
         raise DownloadError('无法读取当前账号的 Mihomo 代理端口，请先启动 Mihomo 或取消代理选项') from exc
 
 
-def fetch(url, proxy, maximum):
-    if proxy and (not isinstance(proxy, str) or not re.fullmatch(r'http://127\.0\.0\.1:[0-9]+', proxy)):
-        raise DownloadError('代理地址无效，请重新读取当前账号的 Mihomo 配置')
-    proxies = {'http': proxy, 'https': proxy} if proxy else {}
-    request = Request(url, headers={'User-Agent': 'MinasDownloadCenter', 'Accept': 'application/vnd.github+json' if 'api.github.com/' in url else 'application/octet-stream'})
-    with build_opener(ProxyHandler(proxies)).open(request, timeout=20) as response:
-        data = response.read(maximum + 1)
-    if len(data) > maximum: raise DownloadError('下载内容超过大小限制')
-    return data
-
-
 def release(proxy, arch=None):
     arch = arch or platform.machine()
     if arch not in ASSETS: raise DownloadError('此设备架构暂不支持自动更新')
-    data = json.loads(fetch('https://api.github.com/repos/' + REPOSITORY + '/releases/latest', proxy, 2 * 1024 * 1024))
-    tag = data.get('tag_name'); version_tuple(tag)
-    if data.get('draft') or data.get('prerelease'): raise DownloadError('不安装测试版或草稿版本')
+    tag = latest_tag(REPOSITORY, proxy); version_tuple(tag)
     filename, pinned = ASSETS[arch]
-    assets = [a for a in data.get('assets', []) if a.get('name') == filename]
-    if len(assets) != 1: raise DownloadError('发布页没有匹配设备架构的静态核心')
-    asset = assets[0]
+    asset = release_asset(REPOSITORY, tag, filename, proxy, 40 * 1024 * 1024)
     digest = asset.get('digest') or ('sha256:' + pinned if tag.lstrip('v') == '1.37.0' else '')
     if not re.fullmatch(r'sha256:[a-fA-F0-9]{64}', digest):
         raise DownloadError('发布方未提供有效 SHA-256，已拒绝更新')
@@ -236,7 +221,7 @@ def run(m, command, proxy):
             write_state(m, **common, state='done', message='更新完成，任务、设置和 Openlist 连接已保留。')
         except Exception as exc:
             # Shared network formatter mentions subscriptions; use core terminology.
-            message = tracker_error(exc).replace('订阅', '核心发布源').replace('8 秒', '20 秒')
+            message = str(exc) if isinstance(exc, ValueError) else tracker_error(exc).replace('订阅', '核心发布源').replace('8 秒', '25 秒')
             write_state(m, **common, state='error', message=message)
 
 

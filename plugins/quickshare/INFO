@@ -2,15 +2,15 @@
   "plugin": "quickshare",
   "name": "文件快传",
   "id": 19092,
-  "version": "1.1.82",
+  "version": "1.1.83",
   "tags": [
     "tool"
   ],
-  "timestamp": 1794793388,
+  "timestamp": 1794797080,
   "desc": "临时下载链接与文件上传入口",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "固定单文件下载描述符，增加上传事务恢复，避免中断残留文件及重复消耗次数。",
+  "changelog": "修复经 Mihomo 代理检查插件更新失败；直接读取并验证官方发布签名清单。",
   "system": false,
   "size": 293993,
   "port": "",

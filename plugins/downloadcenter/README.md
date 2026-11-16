@@ -4,6 +4,8 @@
 
 勾选“通过本机 Mihomo 代理检查与下载”后，aria2 与 qBittorrent 更新均读取当前账号的 Mihomo 端口。无法读取时会提示启动 Mihomo 或取消代理选项，不会改用其他账号的默认端口。
 
+内核版本、SHA-256 和大小通过上游官方稳定发布页及附件读取，不依赖 GitHub REST API 额度。勾选代理后所有检查和下载保持使用该代理；缺少校验信息、返回错误或连接失败时明确报告，不跳过验证。qBittorrent 自动更新仅接受 5.x / libtorrent 2.x 稳定系列。
+
 ## 功能说明
 
 - 使用 aria2 下载 HTTP / HTTPS / FTP / SFTP 直链，使用 qBittorrent 下载 BT 种子和磁链，无需 Docker。

@@ -17,6 +17,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 from download_lib import DownloadError, atomic_json
 from core_update import fetch, mihomo_proxy, BUSY
+from github_release import latest_tag, asset as release_asset
 from fetch_qb import RELEASE, ASSETS
 
 REPOSITORY = 'userdocs/qbittorrent-nox-static'
@@ -90,23 +91,16 @@ def current(m):
 def release(proxy, arch=None):
     arch = arch or platform.machine()
     if arch not in ASSETS: raise DownloadError('不支持此设备架构')
-    releases = json.loads(fetch('https://api.github.com/repos/' + REPOSITORY + '/releases?per_page=50', proxy, 4 * 1024 * 1024))
-    candidates = []
-    for item in releases:
-        match = re.fullmatch(r'release-(5\.\d+\.\d+)_v(2\.\d+\.\d+)', item.get('tag_name', ''))
-        if match and not item.get('draft') and not item.get('prerelease'):
-            candidates.append((parts(match[1]), parts(match[2]), item, match))
-    if not candidates: raise DownloadError('未找到稳定的 qBittorrent 5 / libtorrent 2 构建；跨大版本需先更新插件')
-    _, _, item, match = max(candidates, key=lambda v: (v[0], v[1]))
+    tag = latest_tag(REPOSITORY, proxy)
+    match = re.fullmatch(r'release-(5\.\d+\.\d+)_v(2\.\d+\.\d+)', tag)
+    if not match: raise DownloadError('最新稳定版不属于 qBittorrent 5 / libtorrent 2 系列；跨大版本需先更新插件')
     name = arch + '-qbittorrent-nox'
-    assets = [a for a in item.get('assets', []) if a.get('name') == name]
-    if len(assets) != 1: raise DownloadError('发布页缺少当前架构核心')
-    asset = assets[0]
-    digest = asset.get('digest') or ('sha256:' + ASSETS[arch] if item['tag_name'] == RELEASE else '')
+    asset = release_asset(REPOSITORY, tag, name, proxy, 100 * 1024 * 1024)
+    digest = asset.get('digest') or ('sha256:' + ASSETS[arch] if tag == RELEASE else '')
     if not re.fullmatch(r'sha256:[a-fA-F0-9]{64}', digest): raise DownloadError('发布方未提供 SHA-256，拒绝更新')
     if type(asset.get('size')) is not int or not 0 < asset['size'] <= 100 * 1024 * 1024: raise DownloadError('核心大小异常')
     return {'latest': match[1], 'libtorrent': match[2], 'digest': digest[7:].lower(), 'size': asset['size'],
-            'arch': arch, 'url': 'https://github.com/' + REPOSITORY + '/releases/download/' + item['tag_name'] + '/' + name}
+            'arch': arch, 'url': 'https://github.com/' + REPOSITORY + '/releases/download/' + tag + '/' + name}
 
 
 def newer(info, installed):
@@ -226,7 +220,8 @@ def run(m, command, proxy):
             common.update(current=info['latest'], currentLibtorrent=info['libtorrent'], updateAvailable=False)
             write_state(m, **common, state='done', message='更新完成，任务、设置和 Openlist 连接已保留。')
         except Exception as exc:
-            write_state(m, **common, state='error', message=tracker_error(exc).replace('订阅', '核心发布源').replace('8 秒', '20 秒'))
+            message = str(exc) if isinstance(exc, ValueError) else tracker_error(exc).replace('订阅', '核心发布源').replace('8 秒', '25 秒')
+            write_state(m, **common, state='error', message=message)
 
 
 if __name__ == '__main__':

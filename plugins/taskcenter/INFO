@@ -2,15 +2,15 @@
   "plugin": "taskcenter",
   "name": "定时任务",
   "id": 19094,
-  "version": "1.0.58",
+  "version": "1.0.59",
   "tags": [
     "tool"
   ],
-  "timestamp": 1794793388,
+  "timestamp": 1794797080,
   "desc": "可视化任务计划与执行记录",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "同步后台状态查询的页面请求管理。",
+  "changelog": "修复经 Mihomo 代理检查插件更新失败；直接读取并验证官方发布签名清单。",
   "system": false,
   "size": 216095,
   "port": "",
