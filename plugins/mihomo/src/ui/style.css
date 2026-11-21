@@ -77,7 +77,10 @@
 [data-minas-plugin="mihomo"] .geo-actions{margin-top: 10px;}
 [data-minas-plugin="mihomo"] .subscription-node-list{margin-top: 12px;}
 [data-minas-plugin="mihomo"] .subscription-node{grid-template-columns: minmax(0px, 1fr) auto;}
+[data-minas-plugin="mihomo"] #checkSubscriptionNodes{flex-shrink:0;white-space:nowrap;}
 [data-minas-plugin="mihomo"] .node-state{color: var(--muted); font-size:13px; white-space: nowrap;}
+[data-minas-plugin="mihomo"] .node-state[data-state="available"]{color:var(--success);}
+[data-minas-plugin="mihomo"] .node-state[data-state="unavailable"]{color:var(--danger);}
 [data-minas-plugin="mihomo"] .form-grid{display: grid; grid-template-columns: repeat(2, minmax(0px, 1fr)); gap: 11px;}
 [data-minas-plugin="mihomo"] .form-grid label{display: grid; min-width: 0px; gap: 7px; color: var(--muted); font-size:13px; font-weight: 700;}
 [data-minas-plugin="mihomo"] .form-grid label.wide{grid-column: 1 / -1;}

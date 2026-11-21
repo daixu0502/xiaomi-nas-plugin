@@ -23,10 +23,35 @@ from urllib.error import HTTPError, URLError
 from plugin_paths import runtime_directory
 
 DELAY_URL = 'https://cp.cloudflare.com/generate_204'
+SUBSCRIPTION_PROVIDER = 'APP-SUBSCRIPTION'
 DOWNLOAD_HOST = 'speed.cloudflare.com'
 MAX_BYTES = 20 * 1024 * 1024
 MAX_SECONDS = 8
 BUILTINS = {'direct', 'reject', 'rejectdrop', 'pass', 'passrule', 'compatible', 'dns'}
+
+
+def provider_node_path(provider, name):
+    return '/providers/proxies/' + quote(provider, safe='') + '/' + quote(name, safe='')
+
+
+def availability(node):
+    # Mihomo initializes alive=true before its first probe.
+    if node.get('alive') is False:
+        return False
+    history = node.get('history') or []
+    if not history:
+        return None
+    latest = history[-1]
+    checked_at = latest.get('time')
+    # Per-URL results also record HTTP status mismatches as zero delay.
+    if checked_at:
+        for state in (node.get('extra') or {}).values():
+            samples = state.get('history') or []
+            if samples and samples[-1].get('time') == checked_at:
+                latest = samples[-1]
+                break
+    delay = latest.get('delay')
+    return delay > 0 if type(delay) is int else None
 
 
 def child_setup():
@@ -144,17 +169,26 @@ class Tests:
 
     def start(self, data):
         kind = data.get('kind'); names = data.get('names')
-        if kind not in ('delay', 'speed') or not isinstance(names, list) or not 1 <= len(names) <= (200 if kind == 'delay' else 1):
-            raise RuntimeError('延迟最多测试 200 个节点；下载测速每次选择一个节点')
-        if any(not isinstance(n, str) or not n or len(n) > 256 for n in names) or len(set(names)) != len(names):
-            raise RuntimeError('节点名称无效或重复')
+        subscription = data.get('scope') == 'subscription'
+        if subscription:
+            if kind != 'delay':
+                raise RuntimeError('订阅全部检测只支持延迟检测')
+            names = []
+        else:
+            if kind not in ('delay', 'speed') or not isinstance(names, list) or not 1 <= len(names) <= (200 if kind == 'delay' else 1):
+                raise RuntimeError('延迟最多测试 200 个节点；下载测速每次选择一个节点')
+            if any(not isinstance(n, str) or not n or len(n) > 256 for n in names) or len(set(names)) != len(names):
+                raise RuntimeError('节点名称无效或重复')
         with self.lock('node-test.lock') as job_fd, self.lock('update-operation.lock', True) as update_fd:
-            nodes = self.nodes()
-            if any(n not in nodes for n in names): raise RuntimeError('节点已改变，请刷新节点列表')
-            if kind == 'speed' and self.source(nodes[names[0]]) is None:
-                raise RuntimeError('该节点暂无独立测速来源，请使用插件导入的订阅或手动节点；链式代理暂不支持')
+            if not subscription:
+                nodes = self.nodes()
+                if any(n not in nodes for n in names): raise RuntimeError('节点已改变，请刷新节点列表')
+                if kind == 'speed' and self.source(nodes[names[0]]) is None:
+                    raise RuntimeError('该节点暂无独立测速来源，请使用插件导入的订阅或手动节点；链式代理暂不支持')
             job = {'id': secrets.token_hex(16), 'kind': kind, 'names': names, 'status': 'queued',
                    'done': 0, 'total': len(names), 'message': '正在准备测试', 'created': time.time()}
+            if subscription:
+                job['scope'] = 'subscription'
             atomic(self.path, job)
             env = {k: v for k, v in os.environ.items() if k in ('PATH', 'LANG', 'LC_ALL')}
             env.update(PLUG_HOME_DIR=str(self.home), PYTHONDONTWRITEBYTECODE='1')
@@ -176,12 +210,27 @@ class Tests:
         if job['status'] in ('queued', 'running'): atomic(self.cancel_path, {'id': job['id']})
         return {'ok': True}
 
+    def subscription_proxies(self):
+        try:
+            provider = self.controller('GET', '/providers/proxies/' + SUBSCRIPTION_PROVIDER)
+        except HTTPError as error:
+            if error.code != 404:
+                raise
+            return []
+        return [node for node in provider.get('proxies', []) if node.get('name')]
+
+    def subscription_nodes(self):
+        return {'ok': True, 'nodes': [
+            {'name': node['name'], 'type': node.get('type', ''), 'alive': availability(node)}
+            for node in self.subscription_proxies()
+        ]}
+
     def delay(self, name, node=None):
         node = node or self.nodes().get(name)
         if node is None: raise RuntimeError('节点已改变，请刷新')
         actual = node.get('_name', name); provider = node.get('_provider')
         query = urlencode({'url': DELAY_URL, 'timeout': 5000, 'expected': '204'})
-        path = ('/providers/proxies/' + quote(provider, safe='') + '/' + quote(actual, safe='') + '/healthcheck') if provider else ('/proxies/' + quote(actual, safe='') + '/delay')
+        path = provider_node_path(provider, actual) + '/healthcheck' if provider else ('/proxies/' + quote(actual, safe='') + '/delay')
         value = self.controller('GET', path + '?' + query)
         delay = value.get('delay')
         if type(delay) is not int or not 0 < delay <= 65535: raise RuntimeError('延迟测试未返回有效结果')
@@ -268,19 +317,30 @@ class Tests:
         job = self.read(self.path, None)
         if not job or job['id'] != ident: return
         job.update(status='running', message='正在测试'); atomic(self.path, job)
+        subscription = job.get('scope') == 'subscription'
         results = self.read(self.results, {})
         def save(name, value):
-            results.setdefault(name, {})[job['kind']] = value
-            atomic(self.results, results)
+            if not subscription:
+                results.setdefault(name, {})[job['kind']] = value
+                atomic(self.results, results)
             job.update(done=job['done'] + 1, message='已测试 %d / %d 个节点' % (job['done'] + 1, job['total']))
             atomic(self.path, job)
         try:
-            known = self.nodes()
-            results = {k: v for k, v in results.items() if k in known}
+            if subscription:
+                known = {node['name']: {'_name': node['name'], '_provider': SUBSCRIPTION_PROVIDER}
+                         for node in self.subscription_proxies()}
+                if not known:
+                    job.update(status='failed', message='当前订阅没有可检测的节点')
+                    return
+                job['total'] = len(known)
+                atomic(self.path, job)
+            else:
+                known = self.nodes()
+                results = {k: v for k, v in results.items() if k in known}
             if job['kind'] == 'delay':
                 # Schedule only four probes at a time, so cancellation cannot
                 # leave a large queue generating traffic after the user stops.
-                names = iter(job['names'])
+                names = iter(known if subscription else job['names'])
                 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
                     pending = {}
                     def schedule():
@@ -319,6 +379,7 @@ if __name__ == '__main__':
         elif action == 'start': result = tests.start(data)
         elif action == 'status': result = tests.status()
         elif action == 'cancel': result = tests.cancel(data)
+        elif action == 'subscription_nodes': result = tests.subscription_nodes()
         else: raise RuntimeError('不支持的测速操作')
         print(json.dumps(result, ensure_ascii=False))
     except Exception as error:

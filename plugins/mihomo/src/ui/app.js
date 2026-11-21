@@ -10,6 +10,7 @@ var document = window.XiaomiPluginClient.document;
     proxyProviderSkippedCount: 0,
     ruleProviderNames: [],
     subscriptionConfigured: false,
+    subscriptionHasNodes: false,
     running: false,
     coreBusy: false,
     dockerProxyAvailable: false,
@@ -60,6 +61,7 @@ var document = window.XiaomiPluginClient.document;
       syncProviderUpdate('proxy'); syncProviderUpdate('rule');
       Array.prototype.forEach.call(document.querySelectorAll('[data-update-provider]'), function (button) { button.disabled = button.getAttribute('data-provider-skipped') === 'true'; });
     }
+    syncSubscriptionCheck();
   }
 
   var updateButtonObserver = new MutationObserver(function () {
@@ -563,7 +565,7 @@ var document = window.XiaomiPluginClient.document;
     return element;
   }
 
-  var testNodes = [], testResults = {}, testJob = null, testTimer = null, testLoading = false, testError = '', testBackground = [];
+  var testNodes = [], testResults = {}, testJob = null, testTimer = null, testLoading = false, testPolling = false, testError = '', testBackground = [];
   function openNodeTests() {
     if (!byId('nodeTestDialog').hidden) return;
     testBackground = Array.from(document.querySelectorAll('.shell,.tabs')).map(function (element) { return { element: element, inert: element.inert }; });
@@ -637,13 +639,30 @@ var document = window.XiaomiPluginClient.document;
   }
   function pollNodeTest() {
     window.XiaomiPluginClient.clearTimer(testTimer);
-    if (updatePageClosed || byId('nodeTestDialog').hidden) return;
+    function watching() {
+      return !updatePageClosed && (!byId('nodeTestDialog').hidden || state.page === 'subscription');
+    }
+    if (!watching() || testPolling) return;
+    var previous = testJob;
+    var nextDelay = 1000;
+    testPolling = true;
+    syncSubscriptionCheck();
     postJson('node_test_status', {}).then(function (packet) {
-      testJob = packet.job; testResults = packet.results || {}; testError = ''; renderNodeTests();
-      if (testActive() && !byId('nodeTestDialog').hidden) testTimer = window.XiaomiPluginClient.setTimer(pollNodeTest, 1000);
+      if (testJob !== previous) return;
+      var checkingSubscription = testActive() && testJob.scope === 'subscription';
+      testJob = packet.job; testResults = packet.results || {}; testError = '';
+      if (checkingSubscription && !testActive() && state.page === 'subscription') {
+        loadSubscription();
+        if (testJob && testJob.status === 'failed') toast(testJob.message, true);
+      }
     }).catch(function (error) {
-      testError = error.message + '；可刷新节点重新读取结果'; renderNodeTests();
-      if (testActive() && !byId('nodeTestDialog').hidden) testTimer = window.XiaomiPluginClient.setTimer(pollNodeTest, 3000);
+      testError = error.message + '；可刷新节点重新读取结果';
+      nextDelay = 3000;
+    }).finally(function () {
+      testPolling = false;
+      syncSubscriptionCheck();
+      if (!byId('nodeTestDialog').hidden) renderNodeTests();
+      if (testActive() && watching()) testTimer = window.XiaomiPluginClient.setTimer(pollNodeTest, nextDelay);
     });
   }
   function loadNodeTests() {
@@ -657,17 +676,25 @@ var document = window.XiaomiPluginClient.document;
       testJob = packet.job;
       if (testActive()) pollNodeTest();
     }).catch(function (error) { testError = error.message; })
-      .finally(function () { testLoading = false; renderNodeTests(); });
+      .finally(function () { testLoading = false; renderNodeTests(); syncSubscriptionCheck(); });
+  }
+  function submitNodeTest(payload) {
+    if (testLoading || testActive()) return;
+    testLoading = true; testError = '';
+    if (!byId('nodeTestDialog').hidden) renderNodeTests();
+    syncSubscriptionCheck();
+    return postJson('node_test_start', payload).then(function (packet) {
+      testJob = packet.job; pollNodeTest();
+    }).catch(function (error) { toast(error.message, true); })
+      .finally(function () {
+        testLoading = false;
+        if (!byId('nodeTestDialog').hidden) renderNodeTests();
+        syncSubscriptionCheck();
+      });
   }
   function beginNodeTest(kind, names) {
     if (testLoading || testActive()) return;
-    var submit = function () {
-      testLoading = true; testError = ''; renderNodeTests();
-      postJson('node_test_start', { kind: kind, names: names }).then(function (packet) {
-        testJob = packet.job; pollNodeTest();
-      }).catch(function (error) { toast(error.message, true); })
-        .finally(function () { testLoading = false; renderNodeTests(); });
-    };
+    var submit = function () { submitNodeTest({ kind: kind, names: names }); };
     if (kind === 'speed') confirmAction('将通过“' + testNodes.find(function (node) { return node.key === names[0]; }).name + '”下载测试数据，最多约 20 MiB。结果受测速服务器、节点和当前网络影响。继续？', { title: '测试下载速度' }, submit);
     else submit();
   }
@@ -940,12 +967,30 @@ var document = window.XiaomiPluginClient.document;
     }).finally(function () { providerBusy[kind]=false;syncProviderUpdate(kind); });
   }
 
+  var subscriptionLoadSequence = 0;
+
+  function setSubscriptionNodeState(element, alive) {
+    element.dataset.state = alive === true ? 'available' : alive === false ? 'unavailable' : 'unknown';
+    element.textContent = alive === true ? '可用' : alive === false ? '不可用' : '未检测';
+  }
+
+  function syncSubscriptionCheck() {
+    var button = byId('checkSubscriptionNodes');
+    var checking = testActive() && testJob.scope === 'subscription';
+    button.disabled = !state.subscriptionHasNodes || testLoading || testPolling || Boolean(testActive()) || updateTaskBusy();
+    button.setAttribute('aria-busy', String(Boolean(checking)));
+    button.textContent = checking ? '检测中' + (testJob.total ? ' ' + testJob.done + '/' + testJob.total : '') : '全部检测';
+  }
+
+  byId('checkSubscriptionNodes').addEventListener('click', function () {
+    submitNodeTest({ kind: 'delay', scope: 'subscription' });
+  });
+
   function loadSubscription() {
+    var sequence = ++subscriptionLoadSequence;
     return request('subscription_status').then(function (data) {
+      if (sequence !== subscriptionLoadSequence) return;
       state.subscriptionConfigured = Boolean(data.configured);
-      var badge = byId('subscriptionBadge');
-      badge.className = 'mini-badge' + (data.configured ? ' ready' : '');
-      badge.textContent = data.configured ? '已配置' : '未配置';
       byId('updateSubscription').disabled = updateTaskBusy() || !data.configured;
       if (data.configured) {
         var pieces = [];
@@ -958,6 +1003,7 @@ var document = window.XiaomiPluginClient.document;
       }
       var nodeContainer = byId('subscriptionNodes');
       var nodes = Array.isArray(data.nodes) ? data.nodes : [];
+      state.subscriptionHasNodes = nodes.length > 0;
       nodeContainer.textContent = '';
       nodeContainer.className = 'stack subscription-node-list';
       if (!nodes.length) {
@@ -971,18 +1017,20 @@ var document = window.XiaomiPluginClient.document;
           title.className = 'row-title';
           title.appendChild(textElement('strong', '', node.name || '未命名节点'));
           title.appendChild(textElement('span', '', String(node.type || 'unknown').toUpperCase()));
-          var stateText = node.alive === false ? '不可用' : (node.alive === true ? '可用' : '未检测');
-          row.appendChild(title);
-          row.appendChild(textElement('span', 'node-state', stateText));
+          var status = textElement('span', 'node-state', '');
+          setSubscriptionNodeState(status, node.alive);
+          row.append(title, status);
           nodeContainer.appendChild(row);
         });
       }
     }).catch(function (error) {
+      if (sequence !== subscriptionLoadSequence) return;
+      state.subscriptionHasNodes = false;
       byId('subscriptionSummary').textContent = error.message;
       byId('subscriptionNodes').className = 'stack subscription-node-list empty-state';
       byId('subscriptionNodes').textContent = error.message;
       toast(error.message, true);
-    });
+    }).finally(syncSubscriptionCheck);
   }
 
   function loadConfig() {
@@ -1018,7 +1066,7 @@ var document = window.XiaomiPluginClient.document;
     tab.classList.add('active');
     page.classList.add('active');
     if (pageName === 'config' && !state.configLoaded) loadConfig();
-    if (pageName === 'subscription') { loadSubscription(); loadManualNodes(); loadRuleProviders(); }
+    if (pageName === 'subscription') { loadSubscription(); pollNodeTest(); loadManualNodes(); loadRuleProviders(); }
     if (pageName === 'overview') { loadStatus(false); loadProxies(); loadProviders(); }
     if (pageName === 'settings') { loadDockerProxy(false); loadNetworkAccess(false); loadCoreUpdate(false); loadGeoData(false); }
     if (pageName === 'logs') loadLogs();

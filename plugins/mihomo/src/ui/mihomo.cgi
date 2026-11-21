@@ -255,13 +255,9 @@ case "$action" in
     subscription_status)
         response=$("$SUBSCRIPTION" status 2>/dev/null) || json_error "无法读取订阅状态"
         printf '%s' "$response" | jq empty >/dev/null 2>&1 || json_error "订阅状态返回异常"
-        subscription_nodes='[]'
-        provider_response=$(api_call GET /providers/proxies 2>/dev/null || true)
-        if [ -n "$provider_response" ] && printf '%s' "$provider_response" | jq empty >/dev/null 2>&1; then
-            subscription_nodes=$(printf '%s' "$provider_response" | jq \
-                '[.providers["APP-SUBSCRIPTION"].proxies[]? | {name:(.name // ""),type:(.type // ""),alive:(.alive // null)}]')
-            [ -n "$subscription_nodes" ] || subscription_nodes='[]'
-        fi
+        provider_response=$(printf '{}' | PLUG_HOME_DIR="$PLUGIN_HOME" python3 -B "$SRC_DIR/files/node_tests.py" subscription_nodes 2>/dev/null) || true
+        subscription_nodes=$(printf '%s' "$provider_response" | jq -c 'if .ok then .nodes else [] end' 2>/dev/null) || subscription_nodes='[]'
+        [ -n "$subscription_nodes" ] || subscription_nodes='[]'
         response=$(printf '%s' "$response" | jq --argjson nodes "$subscription_nodes" '. + {nodes:$nodes}')
         json_header
         printf '%s\n' "$response"
