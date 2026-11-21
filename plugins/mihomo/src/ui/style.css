@@ -29,6 +29,9 @@
 [data-minas-plugin="mihomo"] .card-heading > div:first-child{min-width: 0px;}
 [data-minas-plugin="mihomo"] .card h2{margin: 0px 0px 4px; font-size: 17px; letter-spacing: -0.015em;}
 [data-minas-plugin="mihomo"] .card p{margin: 0px; color: var(--muted); font-size:13px; line-height: 1.55;}
+[data-minas-plugin="mihomo"] .overview-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+[data-minas-plugin="mihomo"] .workbench-overview .overview-actions .button{padding-inline:8px;overflow-wrap:anywhere;}
+[data-minas-plugin="mihomo"] #modeSwitch button[aria-pressed="true"]{border-color:var(--accent);background:var(--soft);color:var(--accent);}
 [data-minas-plugin="mihomo"] .segmented{display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px;}
 [data-minas-plugin="mihomo"] .segmented.two{grid-template-columns: repeat(2, 1fr);}
 [data-minas-plugin="mihomo"] .segmented button{padding: 11px 6px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); background: var(--surface-solid); cursor: pointer;}

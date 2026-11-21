@@ -377,7 +377,7 @@ var document = window.XiaomiPluginClient.document;
   function updateModeButtons(mode) {
     state.currentMode = normalizeMode(mode);
     document.querySelectorAll('#modeSwitch button').forEach(function (button) {
-      button.classList.toggle('active', button.dataset.mode === state.currentMode);
+      button.setAttribute('aria-pressed', String(button.dataset.mode === state.currentMode));
     });
   }
 

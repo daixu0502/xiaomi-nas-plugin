@@ -5,6 +5,7 @@ var root=document.querySelector('[data-minas-plugin="mediaeditor"]');
 var state={page:'media',catalog:null,detail:null,selected:null,mediaDraft:{},files:{},selectedFiles:{},seriesReference:null,sources:[],searchId:null,plan:null,saving:false,loading:false,detailSequence:0,disposed:false};
 state.pickerMode='source';state.relationTarget=null;state.catalogSequence=0;
 state.scope='owned';state.isAdmin=false;state.structuralSupported=false;state.offset=0;state.repairScan=null;state.relationChosen={};state.fileSequence=0;
+state.detailPending=false;state.scopeChanging=false;state.searchSequence=0;state.officialSearch=false;
 var fields=['midb_id','trans_name','season_number','season_name','collection_id'];
 var toastTimer=null;
 function id(name){return document.getElementById(name);}
@@ -12,7 +13,7 @@ function esc(value){return String(value==null?'':value).replace(/[&<>"']/g,funct
 function clone(value){return JSON.parse(JSON.stringify(value));}
 function text(value){return value==null?'未设置':String(value);}
 function toast(message){if(state.disposed)return;id('toast').textContent=message;id('toast').hidden=false;window.XiaomiPluginClient.clearTimer(toastTimer);toastTimer=window.XiaomiPluginClient.setTimer(function(){id('toast').hidden=true;},6000);}
-function request(action,body){body=Object.assign({},body||{},{scope:state.scope});return client.request({plugin:'mediaeditor',cgi:'mediaeditor.cgi',action:action,options:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{}),cache:'no-store'}}).then(function(response){if(!response.ok)throw new Error('请求失败：HTTP '+response.status);return response.json();}).then(function(value){if(value.helperVersion)id('helper-version').textContent=value.helperVersion;if(!value.ok)throw new Error(value.error||'操作失败');return value;});}
+function request(action,body,scope=state.scope){body=Object.assign({},body||{},{scope:scope});return client.request({plugin:'mediaeditor',cgi:'mediaeditor.cgi',action:action,options:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{}),cache:'no-store'}}).then(function(response){if(!response.ok)throw new Error('请求失败：HTTP '+response.status);return response.json();}).then(function(value){if(value.helperVersion)id('helper-version').textContent=value.helperVersion;if(!value.ok)throw new Error(value.error||'操作失败');return value;});}
 function changedFields(){var result={};if(!state.detail)return result;fields.forEach(function(key){if(state.mediaDraft[key]!==state.detail.media[key])result[key]=state.mediaDraft[key];});return result;}
 function dirty(){return !!state.seriesReference||Object.keys(changedFields()).length>0||Object.keys(state.files).some(function(key){var row=state.detail&&state.detail.files.find(function(f){return String(f.file_id)===key;});return row&&(state.files[key].session!==row.session||state.files[key].episode!==row.episode);});}
 function discardCheck(){if(dirty()){toast('有未保存的草稿，请先保存或点击“重置草稿”。');return false;}return true;}
@@ -20,25 +21,133 @@ function resetDraft(){state.relationChosen={};state.fileSequence++;id('relation-
 function renderList(){var rows=state.catalog?state.catalog.medias:[];if(state.pickerMode==='target')rows=rows.filter(function(row){return row.media_id!==state.selected;});var selected=state.pickerMode==='target'?(state.relationTarget&&state.relationTarget.media_id):state.selected;id('media-count').textContent='('+rows.length+')';id('media-list').innerHTML=rows.length?rows.map(function(row){return '<button type="button" data-media="'+row.media_id+'" class="'+(row.media_id===selected?'active':'')+'"><strong>'+esc(row.trans_name||row.origin_name||'未命名')+'</strong><br><span class="sub">'+esc(row.year||'年份未知')+' · '+esc(row.class||'未知类型')+' · #'+row.media_id+'</span></button>';}).join(''):'<p>当前筛选下没有影片。</p>';}
 function collectionOptions(){var current=state.mediaDraft.collection_id;var options='<option value="">不属于任何系列</option>';(state.catalog.series||[]).forEach(function(row){options+='<option value="'+row.id+'" '+(!state.seriesReference&&row.id===current?'selected':'')+'>'+esc(row.name||row.identifier)+' · 本地 #'+row.id+'</option>';});if(state.seriesReference)options+='<option value="reference" selected>使用官方搜索系列参考（自动映射本地编号）</option>';return options;}
 function mediaStep(n){[1,2,3].forEach(function(i){var e=id('mediaStep'+i);if(i===n)e.setAttribute('aria-current','step');else e.removeAttribute('aria-current');});}
-function renderSelection(){var m=state.detail&&state.detail.media;mediaStep(m?2:1);id('selected-media-title').textContent=m?(m.trans_name||m.origin_name||'未命名'):'尚未选择影片';id('selected-media-meta').textContent=m?[(m.year||'年份未知'),m.class,'本地 #'+m.media_id].filter(Boolean).join(' · '):'';}
-function renderMedia(){id('code-conflicts').hidden=true;renderSelection();var target=id('media-editor');if(!state.detail){target.innerHTML='<p>请选择已识别且有文件的影片。</p>';return;}var m=state.detail.media,d=state.mediaDraft,disabled=state.detail.editable?'':'disabled';var series=(state.catalog.series||[]).find(function(row){return row.id===d.collection_id;});if(state.seriesReference){var source=state.sources.find(function(s){return s.code===state.seriesReference.code;});series=source?{identifier:source.seriesIdentifier}:null;}
+function renderSelection(){var m=state.detail&&state.detail.media;mediaStep(m?2:1);id('selected-media-title').textContent=m?(m.trans_name||m.origin_name||'未命名'):state.detailPending?'正在读取影片…':'尚未选择影片';id('selected-media-meta').textContent=m?[(m.year||'年份未知'),m.class,'本地 #'+m.media_id,state.detail.editable?'':'只读'].filter(Boolean).join(' · '):'';}
+function renderMedia(){id('code-conflicts').hidden=true;renderSelection();var target=id('media-editor');if(!state.detail){target.innerHTML=state.detailPending?'<p>正在读取影片与文件…</p>':'<p>请选择已识别且有文件的影片。</p>';return;}var m=state.detail.media,d=state.mediaDraft,disabled=state.detail.editable?'':'disabled';var series=(state.catalog.series||[]).find(function(row){return row.id===d.collection_id;});if(state.seriesReference){var source=state.sources.find(function(s){return s.code===state.seriesReference.code;});series=source?{identifier:source.seriesIdentifier}:null;}
  target.innerHTML='<div class="section-heading"><div><h2>'+esc(m.trans_name||m.origin_name||'未命名')+'</h2><p>'+esc(m.year||'年份未知')+' · '+esc(m.class||'')+' · 本地记录 #'+m.media_id+'</p></div><span class="sub">'+state.detail.files.length+' 个关联文件</span></div>'+(!state.detail.editable?'<p class="notice">该条目被其他账号或共享库引用，目前仅可查看。</p>':'')+'<div class="field-grid"><label class="full"><span class="field-caption"><span>片名</span></span><input data-media-field="trans_name" value="'+esc(d.trans_name||'')+'" maxlength="300" '+disabled+'></label><label class="full"><span class="field-caption"><span>影片代码</span></span><input class="code" id="media-code" data-media-field="midb_id" value="'+esc(d.midb_id||'')+'" maxlength="32" spellcheck="false" disabled></label><label class="check full scope-choice"><input id="enable-code" type="checkbox" '+disabled+'><span>直接编辑影片代码</span><span class="sub">不会重新获取海报或简介</span></label><label class="full"><span class="field-caption"><span>所属系列</span></span><select id="media-series" '+disabled+'>'+collectionOptions()+'</select></label><details class="workbench-fold full"><summary>高级系列与季号</summary><div class="full"><span class="sub">系列源标识（只读）</span><div class="readonly code" id="series-identifier">'+esc(series?series.identifier:'无系列')+'</div></div><label><span class="field-caption"><span>影片季号</span></span><input type="number" min="0" max="9999" step="1" data-media-field="season_number" value="'+esc(d.season_number==null?0:d.season_number)+'" '+disabled+'></label><label><span class="field-caption"><span>季名称</span></span><input data-media-field="season_name" value="'+esc(d.season_name||'')+'" maxlength="300" '+disabled+'></label></details></div><div class="actions"><button type="button" id="media-reset">重置草稿</button><button type="button" id="media-preview" class="primary" '+disabled+'>预览影片修改</button></div>';
 }
 function renderFiles(){var rows=state.detail?state.detail.files:[];id('file-count').textContent=rows.length+' 个文件';id('file-rows').innerHTML=rows.length?rows.map(function(row){var d=state.files[row.file_id]||row,checked=state.selectedFiles[row.file_id],changed=d.session!==row.session||d.episode!==row.episode;return '<tr><td><input type="checkbox" aria-label="选择 '+esc(row.name)+'" data-select-file="'+row.file_id+'" '+(checked?'checked':'')+' '+(row.editable?'':'disabled')+'></td><td><strong>'+esc(row.name)+'</strong><div class="sub">当前 S'+esc(row.session==null?'?':row.session)+' E'+esc(row.episode==null?'?':row.episode)+' · #'+row.file_id+'</div><details><summary>文件路径</summary>'+esc(row.file_path)+'</details></td><td><input aria-label="'+esc(row.name)+' 新季号" type="number" min="0" max="9999" step="1" data-file-field="session" data-file="'+row.file_id+'" value="'+esc(d.session==null?0:d.session)+'" '+(checked&&row.editable?'':'disabled')+'></td><td><input aria-label="'+esc(row.name)+' 新集号" type="number" min="0" max="9999" step="1" data-file-field="episode" data-file="'+row.file_id+'" value="'+esc(d.episode==null?0:d.episode)+'" '+(checked&&row.editable?'':'disabled')+'></td><td class="'+(changed?'changed':'sub')+'">'+(!row.editable?'共享引用':changed?'待修改':'未变化')+'</td></tr>';}).join(''):'<tr><td colspan="5">请选择有文件的影片。</td></tr>';renderBatchSummary();renderRelationFiles();}
 function renderBatchSummary(){var rows=state.detail?state.detail.files:[];var chosen=rows.filter(function(r){return state.selectedFiles[r.file_id];});var count=chosen.filter(function(r){var d=state.files[r.file_id];return d&&(d.session!==r.session||d.episode!==r.episode);}).length;id('batch-summary').textContent='已选 '+chosen.length+' 个文件 · '+count+' 个文件有修改 · 每次最多 100 个';id('select-all').checked=!!rows.length&&rows.filter(function(r){return r.editable;}).every(function(r){return state.selectedFiles[r.file_id];});}
 function renderContext(){var editing=state.page!=='history'&&state.page!=='repair';id('admin-scope-row').hidden=!state.isAdmin||state.page==='history';id('editing-steps').hidden=!editing;id('editing-selection').hidden=!editing;}
 function activate(page){state.page=page;renderContext();document.querySelectorAll('[data-page]').forEach(function(el){el.classList.toggle('active',el.dataset.page===page);});id('browser').hidden=page==='history'||page==='repair';id('history-pane').hidden=page!=='history';id('repair-pane').hidden=page!=='repair';id('media-pane').hidden=page!=='media';id('episode-pane').hidden=page!=='episodes';id('relation-pane').hidden=page!=='relations';id('source-pane').hidden=page!=='media';if(page==='history')loadHistory();if(page==='relations')renderRelationFiles();}
-function loadDetail(mediaId){var seq=++state.detailSequence;state.selected=mediaId;renderList();id('media-editor').innerHTML='<p>正在读取影片与文件…</p>';return request('details',{mediaId:mediaId}).then(function(value){if(state.disposed||seq!==state.detailSequence)return;value.files.sort(function(a,b){return a.name.localeCompare(b.name,'zh-CN',{numeric:true});});state.detail=value;state.sources=[];state.searchId=null;id('search-status').textContent='';renderSources();resetDraft();renderMedia();renderFiles();id('official-keyword').value=value.media.trans_name||'';id('batch-season').value=value.media.season_number>0?value.media.season_number:1;return true;}).catch(function(error){if(seq===state.detailSequence){state.detail=null;renderMedia();renderFiles();toast(error.message);}});}
-function loadCatalog(keepSelection,browseOnly){var seq=++state.catalogSequence;state.loading=true;id('reload').disabled=true;return request('list',{libraryId:Number(id('library').value)||0,query:id('local-query').value,offset:state.offset}).then(function(value){if(state.disposed||seq!==state.catalogSequence)return;state.catalog=value;id('picker-pagination').hidden=!value.hasMore&&!value.offset;id('media-prev').disabled=!value.offset;id('media-next').disabled=!value.hasMore;id('picker-page-label').textContent='第 '+(Math.floor((value.offset||0)/500)+1)+' 页 · 本页 '+value.medias.length+' 条';var selection=Number(id('library').value)||0;id('library').innerHTML='<option value="0">全部自有媒体库</option>'+value.libraries.map(function(l){return '<option value="'+l.id+'">'+esc(l.name+(l.ownerUid?' · 用户 '+l.ownerUid:''))+'</option>';}).join('');id('library').value=String(selection);if(browseOnly){renderList();return;}if(keepSelection&&state.selected!==null)return loadDetail(state.selected);state.detailSequence++;state.selected=null;state.detail=null;state.sources=[];state.searchId=null;id('official-keyword').value='';id('search-status').textContent='';renderSources();resetDraft();renderList();renderMedia();renderFiles();}).finally(function(){if(seq===state.catalogSequence){state.loading=false;id('reload').disabled=false;}});}
-function renderSources(){id('source-results').innerHTML=state.sources.map(function(row,index){var mapping=row.sourceCollectionId==null?'无系列':row.sourceCollectionId+' → '+(row.localCollectionId?'本地 #'+row.localCollectionId:'本地尚无对应系列，保存时建立');return '<article class="source-card"><div class="section-heading"><div><h3>'+esc(row.title)+'</h3><p>'+esc(row.year||'年份未知')+' · '+(row.type==='movie'?'电影':'电视剧')+' · '+esc(row.originalTitle)+'</p></div>'+(row.existingMediaId?'<span class="sub">已入库 #'+row.existingMediaId+'</span>':'')+'</div><div class="code-grid"><span class="sub">影片代码</span><code>'+esc(row.code)+'</code><span class="sub">系列源代码 → 本地编号</span><span>'+esc(mapping)+'</span><span class="sub">系列源标识</span><code>'+esc(row.seriesIdentifier||'无')+'</code><span class="sub">系列名称 / 季号</span><span>'+esc(row.seriesName||'—')+' / '+esc(row.season==null?'—':row.season)+'</span></div><div class="inline-actions"><button type="button" data-source="'+index+'" data-use="code">带入影片代码</button><button type="button" data-source="'+index+'" data-use="series" '+(row.seriesIdentifier?'':'disabled')+'>只带入系列</button><button type="button" data-source="'+index+'" data-use="season">带入季号</button><button type="button" data-source="'+index+'" data-use="name">带入片名</button></div></article>';}).join('')||(state.searchId?'<p>未找到匹配影片，请换用原名或更短的片名。</p>':'');}
-function searchOfficial(event){event.preventDefault();var selected=state.selected,sequence=state.detailSequence;var keyword=id('official-keyword').value.trim();if(!keyword)return;var button=id('search-button');button.disabled=true;state.sources=[];state.searchId=null;id('source-results').innerHTML='';id('search-status').textContent='正在查询官方刮削源，请稍候…';request('search',{keyword:keyword}).then(function(value){if(state.disposed||state.selected!==selected||sequence!==state.detailSequence)return;state.sources=value.results;state.searchId=value.searchId;id('search-status').textContent='找到 '+value.results.length+' 个候选 · '+value.provider+'';renderSources();}).catch(function(error){id('search-status').textContent=error.message;}).finally(function(){button.disabled=false;});}
+function loadDetail(mediaId,preserveSearch){
+  var seq=++state.detailSequence;
+  state.selected=mediaId;
+  state.detail=null;
+  state.detailPending=true;
+  if(!preserveSearch)clearOfficialSearch();
+  renderList();
+  renderMedia();
+  renderFiles();
+  renderSourceAccess();
+  return request('details',{mediaId:mediaId}).then(function(value){
+   if(state.disposed||seq!==state.detailSequence)return;
+   value.files.sort(function(a,b){return a.name.localeCompare(b.name,'zh-CN',{numeric:true});});
+   state.detail=value;
+   if(!preserveSearch&&!id('official-keyword').value)id('official-keyword').value=value.media.trans_name||'';
+   id('batch-season').value=value.media.season_number>0?value.media.season_number:1;
+   return true;
+  }).catch(function(error){
+   if(state.disposed||seq!==state.detailSequence)return;
+   state.selected=null;
+   renderList();
+   toast(error.message);
+  }).finally(function(){
+   if(state.disposed||seq!==state.detailSequence)return;
+   state.detailPending=false;
+   resetDraft();
+   renderMedia();
+   renderFiles();
+   renderSourceAccess();
+  });
+}
+function loadCatalog(keepSelection,browseOnly,nextScope){
+  var seq=++state.catalogSequence;
+  state.loading=true;
+  id('reload').disabled=true;
+  return request('list',{libraryId:Number(id('library').value)||0,query:id('local-query').value,offset:state.offset},nextScope).then(function(value){
+   if(state.disposed||seq!==state.catalogSequence)return;
+   if(nextScope)state.scope=nextScope;
+   state.catalog=value;
+   id('picker-pagination').hidden=!value.hasMore&&!value.offset;
+   id('media-prev').disabled=!value.offset;
+   id('media-next').disabled=!value.hasMore;
+   id('picker-page-label').textContent='第 '+(Math.floor((value.offset||0)/500)+1)+' 页 · 本页 '+value.medias.length+' 条';
+   var selection=Number(id('library').value)||0;
+   id('library').innerHTML='<option value="0">'+(state.scope==='all'?'全部媒体库':'全部自有媒体库')+'</option>'+value.libraries.map(function(l){return '<option value="'+l.id+'">'+esc(l.name+(l.ownerUid?' · 用户 '+l.ownerUid:''))+'</option>';}).join('');
+   id('library').value=String(selection);
+   if(browseOnly){renderList();return;}
+   if(keepSelection&&state.selected!==null)return loadDetail(state.selected,!!nextScope);
+   state.detailSequence++;
+   state.selected=null;
+   state.detail=null;
+   state.detailPending=false;
+   clearOfficialSearch();
+   resetDraft();
+   renderList();
+   renderMedia();
+   renderFiles();
+  }).finally(function(){if(seq===state.catalogSequence){state.loading=false;id('reload').disabled=false;}});
+}
+function sourceAccessMessage(){
+  if(state.scopeChanging)return '正在切换媒体库范围…';
+  if(state.detailPending)return '正在读取所选影片…';
+  if(!state.detail)return '请先在影片编辑中选择要带入资料的本地影片。';
+  if(state.detail.editable)return '';
+  return '已选影片被其他账号或共享库引用，当前为只读。'+(state.isAdmin?'':'需要修改时，请联系 NAS 管理员。');
+}
+function renderSourceAccess(){
+  var message=sourceAccessMessage();
+  var note=id('source-selection-note');
+  var showMessage=!!message&&(!!state.detail||state.sources.length>0||state.detailPending||state.scopeChanging);
+  note.textContent=showMessage?message:'';
+  note.hidden=!showMessage;
+  id('source-use-all').hidden=!(state.isAdmin&&state.scope==='owned'&&state.detail&&!state.detail.editable&&!state.scopeChanging);
+  id('admin-scope').disabled=state.scopeChanging||state.detailPending;
+  id('choose-media').disabled=state.scopeChanging||state.detailPending;
+  id('source-results').querySelectorAll('[data-use]').forEach(function(button){
+   button.disabled=!!message||(button.dataset.use==='series'&&!state.sources[Number(button.dataset.source)].seriesIdentifier);
+  });
+}
+function renderSources(){id('source-results').innerHTML=state.sources.map(function(row,index){var mapping=row.sourceCollectionId==null?'无系列':row.sourceCollectionId+' → '+(row.localCollectionId?'本地 #'+row.localCollectionId:'本地尚无对应系列，保存时建立');return '<article class="source-card"><div class="section-heading"><div><h3>'+esc(row.title)+'</h3><p>'+esc(row.year||'年份未知')+' · '+(row.type==='movie'?'电影':'电视剧')+' · '+esc(row.originalTitle)+'</p></div>'+(row.existingMediaId?'<span class="sub">已入库 #'+row.existingMediaId+'</span>':'')+'</div><div class="code-grid"><span class="sub">影片代码</span><code>'+esc(row.code)+'</code><span class="sub">系列源代码 → 本地编号</span><span>'+esc(mapping)+'</span><span class="sub">系列源标识</span><code>'+esc(row.seriesIdentifier||'无')+'</code><span class="sub">系列名称 / 季号</span><span>'+esc(row.seriesName||'—')+' / '+esc(row.season==null?'—':row.season)+'</span></div><div class="inline-actions"><button type="button" data-source="'+index+'" data-use="code">带入影片代码</button><button type="button" data-source="'+index+'" data-use="series">只带入系列</button><button type="button" data-source="'+index+'" data-use="season">带入季号</button><button type="button" data-source="'+index+'" data-use="name">带入片名</button></div></article>';}).join('')||(state.searchId?'<p>未找到匹配影片，请换用原名或更短的片名。</p>':'');renderSourceAccess();}
+function clearOfficialSearch(){
+ state.searchSequence++;
+ state.sources=[];
+ state.searchId=null;
+ id('official-keyword').value='';
+ id('search-status').textContent='';
+ id('search-button').disabled=!state.officialSearch;
+ renderSources();
+}
+function searchOfficial(event){
+ event.preventDefault();
+ var keyword=id('official-keyword').value.trim(),button=id('search-button');
+ if(!keyword||button.disabled)return;
+ var seq=++state.searchSequence;
+ button.disabled=true;
+ state.sources=[];
+ state.searchId=null;
+ id('source-results').innerHTML='';
+ id('search-status').textContent='正在查询官方刮削源，请稍候…';
+ renderSourceAccess();
+ request('search',{keyword:keyword}).then(function(value){
+  if(state.disposed||seq!==state.searchSequence)return;
+  state.sources=value.results;
+  state.searchId=value.searchId;
+  id('search-status').textContent='找到 '+value.results.length+' 个候选 · '+value.provider;
+  renderSources();
+ }).catch(function(error){
+  if(!state.disposed&&seq===state.searchSequence)id('search-status').textContent=error.message;
+ }).finally(function(){
+  if(!state.disposed&&seq===state.searchSequence)button.disabled=false;
+ });
+}
 function showPreview(value,undo){state.plan=value.planId;id('preview-title').textContent=undo?'核对回退':'核对修改';id('preview-description').textContent=value.affectedRecords+' 条记录，'+(value.totalChanges||value.changes.length)+' 项字段变化。'+(value.scope==='all'?'管理员全库范围，包含其他账号及共享记录。':'')+(value.totalChanges>value.changes.length?'当前展示前 '+value.changes.length+' 项。':'');id('preview-warning').hidden=!value.warning;id('preview-warning').textContent=value.warning||'';id('preview-rows').innerHTML=value.changes.map(function(row){return '<tr><td><strong>'+esc(row.record)+'</strong><br>'+esc(row.label)+' <span class="technical">'+esc(row.field)+'</span><br><span class="sub">#'+row.id+'</span></td><td class="code">'+esc(text(row.before))+'</td><td class="code changed">'+esc(text(row.after))+'</td></tr>';}).join('');id('preview-error').textContent='';id('preview-save').textContent=undo?'确认回退':value.deletedHistoryRecords?'确认执行并删除上述观看记录':'确认保存';if(id('preview-dialog').open)id('preview-dialog').close();mediaStep(3);client.openDialog(id('preview-dialog'));}
-function previewMedia(){if(!state.detail)return;var body={kind:'media',mediaId:state.selected,fingerprint:state.detail.fingerprint,fields:changedFields()};if(state.seriesReference)body.seriesReference=state.seriesReference;var check=body.fields.midb_id?request('check_code',{mediaId:state.selected,code:body.fields.midb_id}):Promise.resolve({conflicts:[]});check.then(function(value){if(value.conflicts.length){showCodeConflicts(value.conflicts);return;}return request('preview',body).then(function(value){showPreview(value,false);});}).catch(function(error){toast(error.message);});}
+function previewMedia(){if(!state.detail||!state.detail.editable||state.scopeChanging)return;var body={kind:'media',mediaId:state.selected,fingerprint:state.detail.fingerprint,fields:changedFields()};if(state.seriesReference)body.seriesReference=state.seriesReference;var check=body.fields.midb_id?request('check_code',{mediaId:state.selected,code:body.fields.midb_id}):Promise.resolve({conflicts:[]});check.then(function(value){if(value.conflicts.length){showCodeConflicts(value.conflicts);return;}return request('preview',body).then(function(value){showPreview(value,false);});}).catch(function(error){toast(error.message);});}
 function previewEpisodes(){if(!state.detail)return;var edits=state.detail.files.filter(function(row){var d=state.files[row.file_id];return state.selectedFiles[row.file_id]&&d&&(d.session!==row.session||d.episode!==row.episode);}).map(function(row){var d=state.files[row.file_id];return {fileId:row.file_id,session:d.session,episode:d.episode,fingerprint:row.fingerprint};});request('preview',{kind:'episodes',edits:edits,allowDuplicates:id('allow-duplicates').checked}).then(function(value){showPreview(value,false);}).catch(function(error){toast(error.message);});}
 function savePreview(){if(!state.plan||state.saving)return;state.saving=true;id('preview-save').disabled=true;id('preview-cancel').disabled=true;id('preview-close').disabled=true;id('preview-error').textContent='正在备份、写入并校验，请勿重复提交…';request('apply',{planId:state.plan}).then(function(){id('preview-dialog').close();resetDraft();toast('已保存，备份已保留。');return loadCatalog(true);}).then(function(){if(state.page==='history')loadHistory();if(state.page==='repair')scanRepairs();}).catch(function(error){id('preview-error').textContent=error.message;}).finally(function(){state.saving=false;id('preview-save').disabled=false;id('preview-cancel').disabled=false;id('preview-close').disabled=false;});}
 function fillEpisodes(){if(!state.detail)return;var mode=id('batch-mode').value,season=Number(id('batch-season').value),next=Number(id('batch-start').value),count=0,skipped=0;if(id('batch-season').value===''||!Number.isInteger(season)||season<0||season>9999||mode==='sequence'&&(!Number.isInteger(next)||next<1||next>9999)){toast('请填写有效的目标季号与起始集号。');return;}state.detail.files.forEach(function(row){if(!state.selectedFiles[row.file_id]||!row.editable)return;var episode;if(mode==='sequence')episode=next++;else{var match=row.name.match(/S\d{1,3}[ ._-]*E(\d{1,4})/i)||row.name.match(/\d{1,3}x(\d{1,4})/i)||row.name.match(/第\s*(\d{1,4})\s*集/);if(!match){skipped++;return;}episode=Number(match[1]);}state.files[row.file_id]={session:season,episode:episode};count++;});renderFiles();toast('已填写 '+count+' 个文件的草稿'+(skipped?'，'+skipped+' 个文件未识别到集号，已跳过':'')+'。');}
 function loadHistory(){return request('history').then(function(value){var note=id('backup-summary');if(!note){note=document.createElement('p');note.id='backup-summary';id('history-list').before(note);}note.textContent='保留备份 '+(value.backupCount||0)+' 份 · '+((value.backupBytes||0)/1048576).toFixed(1)+' MiB；可用记录显示回退按钮。';var names={applied:'已保存',reverted:'已回退',failed:'写入失败',prepared:'待核对'};id('history-list').innerHTML=value.records.length?value.records.map(function(row){return '<article class="history-card"><div class="inline-actions"><div><strong>'+esc(names[row.state]||row.state)+'</strong> · <span class="sub">'+new Date((row.applied||row.created)*1000).toLocaleString()+' · '+row.affectedRecords+' 条记录</span></div>'+(row.canUndo?'<button type="button" data-undo="'+row.planId+'">预览回退</button>':'')+'</div><div class="history-changes">'+row.changes.map(function(c){return '<div>'+esc(c.record)+' · '+esc(c.label)+'：<span class="code">'+esc(text(c.before))+'</span> → <span class="code">'+esc(text(c.after))+'</span></div>';}).join('')+'</div>'+(row.backup?'<p class="technical">备份：'+esc(row.backup)+'</p>':'')+'</article>';}).join(''):'<p>还没有已执行的修改。</p>';}).catch(function(error){toast(error.message);});}
-document.addEventListener('click',function(event){var button=event.target.closest('button');if(!button)return;if(button.dataset.page){activate(button.dataset.page);return;}if(button.dataset.media){if(state.loading)return;var mediaId=Number(button.dataset.media);if(state.pickerMode==='target'){var chosen=state.catalog.medias.find(function(row){return row.media_id===mediaId&&row.media_id!==state.selected;});if(chosen){state.relationTarget=chosen;renderRelationTarget();id('media-picker').close();}return;}if(discardCheck())loadDetail(mediaId).then(function(ok){if(ok&&id('media-picker').open)id('media-picker').close();});return;}if(button.dataset.use){if(!state.detail||!state.detail.editable){toast('请先选择可编辑的自有影片。');return;}var row=state.sources[Number(button.dataset.source)];if(!row)return;if(button.dataset.use==='code'){state.mediaDraft.midb_id=row.code;renderMedia();id('enable-code').checked=true;id('media-code').disabled=false;toast(row.existingMediaId&&row.existingMediaId!==state.selected?'该代码已属于本地 #'+row.existingMediaId+'。预览时将显示重复影片，请先修改该影片的代码。':'影片代码已带入草稿，其他识别信息不会自动改变。');}if(button.dataset.use==='name'){state.mediaDraft.trans_name=row.title;renderMedia();toast('片名已带入草稿。');}if(button.dataset.use==='series'){state.seriesReference={searchId:state.searchId,code:row.code};renderMedia();toast('系列参考已带入，保存时按源标识映射本地系列编号。');}if(button.dataset.use==='season'){state.mediaDraft.season_number=row.season;state.mediaDraft.season_name=row.seasonName||'';renderMedia();toast('季号与季名称已带入草稿。');}return;}if(button.dataset.undo){request('preview_undo',{planId:button.dataset.undo}).then(function(value){showPreview(value,true);}).catch(function(error){toast(error.message);});return;}switch(button.id){case'choose-media':if(discardCheck())openMediaPicker('source');break;case'choose-relation-target':openMediaPicker('target');break;case'media-picker-close':id('media-picker').close();break;case'reload':if(discardCheck())window.XiaomiPluginWorkbench.refresh(id('reload'),()=>loadCatalog(true)).catch(function(e){toast(e.message);});break;case'media-reset':case'batch-reset':resetDraft();renderMedia();renderFiles();toast('已重置当前影片与文件草稿。');break;case'media-preview':previewMedia();break;case'batch-fill':fillEpisodes();break;case'batch-preview':previewEpisodes();break;case'history-refresh':window.XiaomiPluginWorkbench.refresh(id('history-refresh'),loadHistory);break;case'preview-close':case'preview-cancel':if(!state.saving)id('preview-dialog').close();break;case'preview-save':savePreview();break;}});
+document.addEventListener('click',function(event){var button=event.target.closest('button');if(!button)return;if(button.dataset.page){activate(button.dataset.page);return;}if(button.dataset.media){if(state.loading)return;var mediaId=Number(button.dataset.media);if(state.pickerMode==='target'){var chosen=state.catalog.medias.find(function(row){return row.media_id===mediaId&&row.media_id!==state.selected;});if(chosen){state.relationTarget=chosen;renderRelationTarget();id('media-picker').close();}return;}if(discardCheck())loadDetail(mediaId).then(function(ok){if(ok&&id('media-picker').open)id('media-picker').close();});return;}if(button.dataset.use){if(button.disabled||sourceAccessMessage())return;var row=state.sources[Number(button.dataset.source)];if(!row)return;if(button.dataset.use==='code'){state.mediaDraft.midb_id=row.code;renderMedia();id('enable-code').checked=true;id('media-code').disabled=false;toast(row.existingMediaId&&row.existingMediaId!==state.selected?'该代码已属于本地 #'+row.existingMediaId+'。预览时将显示重复影片，请先修改该影片的代码。':'影片代码已带入草稿，其他识别信息不会自动改变。');}if(button.dataset.use==='name'){state.mediaDraft.trans_name=row.title;renderMedia();toast('片名已带入草稿。');}if(button.dataset.use==='series'){state.seriesReference={searchId:state.searchId,code:row.code};renderMedia();toast('系列参考已带入，保存时按源标识映射本地系列编号。');}if(button.dataset.use==='season'){state.mediaDraft.season_number=row.season;state.mediaDraft.season_name=row.seasonName||'';renderMedia();toast('季号与季名称已带入草稿。');}return;}if(button.dataset.undo){request('preview_undo',{planId:button.dataset.undo}).then(function(value){showPreview(value,true);}).catch(function(error){toast(error.message);});return;}switch(button.id){case'choose-media':if(discardCheck())openMediaPicker('source');break;case'choose-relation-target':openMediaPicker('target');break;case'media-picker-close':id('media-picker').close();break;case'reload':if(discardCheck())window.XiaomiPluginWorkbench.refresh(id('reload'),()=>loadCatalog(true)).catch(function(e){toast(e.message);});break;case'media-reset':case'batch-reset':resetDraft();renderMedia();renderFiles();toast('已重置当前影片与文件草稿。');break;case'media-preview':previewMedia();break;case'batch-fill':fillEpisodes();break;case'batch-preview':previewEpisodes();break;case'history-refresh':window.XiaomiPluginWorkbench.refresh(id('history-refresh'),loadHistory);break;case'preview-close':case'preview-cancel':if(!state.saving)id('preview-dialog').close();break;case'preview-save':savePreview();break;}});
 document.addEventListener('input',function(event){var input=event.target;if(input.dataset.mediaField){var key=input.dataset.mediaField;state.mediaDraft[key]=key==='season_number'?(input.value===''?'':Number(input.value)):input.value;}if(input.dataset.fileField){var fid=Number(input.dataset.file),row=state.detail.files.find(function(f){return f.file_id===fid;});var draft=state.files[fid]||{session:row.session==null?0:row.session,episode:row.episode==null?0:row.episode};draft[input.dataset.fileField]=input.value===''?'':Number(input.value);state.files[fid]=draft;input.closest('tr').querySelector('td:last-child').textContent=draft.session!==row.session||draft.episode!==row.episode?'待修改':'未变化';renderBatchSummary();}});
 document.addEventListener('change',function(event){var input=event.target;if(input.id==='enable-code')id('media-code').disabled=!input.checked;if(input.id==='media-series'){state.seriesReference=null;state.mediaDraft.collection_id=input.value===''?null:Number(input.value);var series=state.catalog.series.find(function(r){return r.id===state.mediaDraft.collection_id;});id('series-identifier').textContent=series?series.identifier:'无系列';}if(input.id==='library'){state.offset=0;if(discardCheck())loadCatalog(false,true).catch(function(e){id('picker-error').textContent=e.message;});else input.value=String(state.catalog.libraries.some(function(l){return l.id===Number(input.value);})?state.libraryBefore||0:0);}if(input.id==='batch-mode')id('start-field').hidden=input.value!=='sequence';if(input.dataset.selectFile){var fid=Number(input.dataset.selectFile);state.selectedFiles[fid]=input.checked;if(!input.checked)delete state.files[fid];renderFiles();}if(input.id==='select-all'&&state.detail){state.detail.files.forEach(function(row){state.selectedFiles[row.file_id]=input.checked&&row.editable;if(!input.checked)delete state.files[row.file_id];});renderFiles();}});
 id('library').addEventListener('focus',function(){state.libraryBefore=this.value;});
@@ -57,7 +166,35 @@ function previewRepairs(){if(!state.repairScan)return;var selected=Array.from(do
 id('relation-preview').onclick=previewRelations;
 id('repair-scan').onclick=scanRepairs;id('repair-preview').onclick=previewRepairs;
 id('repair-all').onchange=function(){document.querySelectorAll('[data-repair]').forEach(function(el,index){el.checked=id('repair-all').checked&&index<200;});};
-id('admin-scope').onchange=function(){if(!discardCheck()){this.checked=state.scope==='all';return;}state.scope=this.checked?'all':'owned';state.offset=0;state.repairScan=null;id('repair-issues').innerHTML='';id('repair-preview').disabled=true;id('scope-notice').textContent=this.checked?'管理员全库模式：编辑会影响其他账号及共享记录。':'当前为自有媒体库范围。';id('library').value='0';loadCatalog(false).catch(function(error){toast(error.message);});};
+async function changeScope(scope){
+ var checkbox=id('admin-scope');
+ if(!state.isAdmin||scope===state.scope||state.loading||state.detailPending||!discardCheck()){
+  checkbox.checked=state.scope==='all';
+  return;
+ }
+ var previousOffset=state.offset,previousLibrary=id('library').value;
+ state.scopeChanging=true;
+ state.offset=0;
+ id('library').value='0';
+ renderSourceAccess();
+ try{
+  await loadCatalog(scope==='all'&&!!state.detail,false,scope);
+  state.repairScan=null;
+  id('repair-issues').innerHTML='';
+  id('repair-preview').disabled=true;
+ }catch(error){
+  state.offset=previousOffset;
+  id('library').value=previousLibrary;
+  toast(error.message);
+ }finally{
+  state.scopeChanging=false;
+  checkbox.checked=state.scope==='all';
+  id('scope-notice').textContent=checkbox.checked?'管理员全库模式：编辑会影响其他账号及共享记录。':'当前为自有媒体库范围。';
+  renderSourceAccess();
+ }
+}
+id('admin-scope').onchange=function(){changeScope(this.checked?'all':'owned');};
+id('source-use-all').onclick=function(){changeScope('all');};
 id('media-prev').onclick=function(){state.offset=Math.max(0,state.offset-500);loadCatalog(false,true).catch(function(error){toast(error.message);});};
 id('media-next').onclick=function(){state.offset+=500;loadCatalog(false,true).catch(function(error){toast(error.message);});};
 document.addEventListener('click',function(event){var button=event.target.closest('[data-conflict]');if(!button)return;var mid=Number(button.dataset.conflict);resetDraft();if(state.isAdmin&&button.dataset.conflictScope==='all'){state.scope='all';id('admin-scope').checked=true;id('scope-notice').textContent='管理员全库模式：正在编辑冲突影片。';}state.offset=0;id('library').value='0';loadCatalog(false,true).then(function(){return loadDetail(mid);}).catch(function(error){toast(error.message);});});
@@ -69,5 +206,5 @@ document.addEventListener('change',function(event){var input=event.target;if(inp
 
 global.addEventListener('pagehide',function(){state.disposed=true;window.XiaomiPluginClient.clearTimer(toastTimer);});
 global.addEventListener('unmount',function(){state.disposed=true;window.XiaomiPluginClient.clearTimer(toastTimer);});
-request('status').then(function(value){id('connection').textContent='官方资料搜索：'+(value.officialSearch?'可用':'暂不可用');id('storage-path').textContent=value.storage;id('search-button').disabled=!value.officialSearch;state.isAdmin=!!value.isAdmin;state.structuralSupported=!!value.structuralSupported;renderContext();id('repair-tab').hidden=!state.isAdmin;id('relation-preview').disabled=!state.structuralSupported;return loadCatalog(false);}).catch(function(error){id('connection').textContent=error.message;id('connection').classList.add('error');});
+request('status').then(function(value){id('connection').textContent='官方资料搜索：'+(value.officialSearch?'可用':'暂不可用');id('storage-path').textContent=value.storage;state.officialSearch=!!value.officialSearch;id('search-button').disabled=!state.officialSearch;state.isAdmin=!!value.isAdmin;state.structuralSupported=!!value.structuralSupported;renderContext();id('repair-tab').hidden=!state.isAdmin;id('relation-preview').disabled=!state.structuralSupported;return loadCatalog(false);}).catch(function(error){id('connection').textContent=error.message;id('connection').classList.add('error');});
 })(window);

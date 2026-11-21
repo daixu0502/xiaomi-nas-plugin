@@ -11,8 +11,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Mihomo</title>
   <link rel="icon" href="../../icon/mihomo.icon">
-  <link rel="stylesheet" href="style.css?v=1.7.86&amp;ui=docker-proxy-state">
-  <link rel="stylesheet" href="palette.css?v=1.7.86&amp;ui=compact-metrics-20260930">
+  <link rel="stylesheet" href="style.css?v=1.7.87&amp;ui=docker-proxy-state">
+  <link rel="stylesheet" href="palette.css?v=1.7.87&amp;ui=compact-metrics-20260930">
 </head>
 <body><div data-minas-plugin="mihomo"><div class="minas-plugin-body">
   <main class="shell">
@@ -51,28 +51,22 @@
       <article class="metric metric-current-node"><span>当前节点</span><strong id="currentNodeSummary">读取中</strong><small id="currentDelaySummary" hidden></small></article></div>
       <article class="card">
         <div class="card-heading">
-          <div>
-            <h2>核心控制</h2>
-
-          </div>
+          <h2>核心控制</h2>
         </div>
-        <div class="button-row">
-          <button id="startButton" class="button primary">启动核心</button>
-          <button id="stopButton" class="button danger">停止核心</button>
-          <button id="restartButton" class="button danger">重启核心</button>
+        <div class="overview-actions">
+          <button id="startButton" class="button primary" type="button">启动核心</button>
+          <button id="stopButton" class="button danger" type="button">停止核心</button>
+          <button id="restartButton" class="button danger" type="button">重启核心</button>
         </div>
       </article>
       <article class="card">
         <div class="card-heading">
-          <div>
-            <h2>运行模式</h2>
-            <p>立即生效，不修改配置文件。</p>
-          </div>
+          <h2>运行模式</h2>
         </div>
-        <div id="modeSwitch" class="segmented" role="group" aria-label="运行模式">
-          <button data-mode="rule">规则</button>
-          <button data-mode="global">全局</button>
-          <button data-mode="direct">直连</button>
+        <div id="modeSwitch" class="overview-actions" role="group" aria-label="运行模式">
+          <button class="button secondary" type="button" data-mode="rule" aria-pressed="false">规则</button>
+          <button class="button secondary" type="button" data-mode="global" aria-pressed="false">全局</button>
+          <button class="button secondary" type="button" data-mode="direct" aria-pressed="false">直连</button>
         </div>
       </article>
       <article class="card workbench-full">
@@ -292,7 +286,7 @@
       </article>
     </section>
 
-    <footer id="pluginVersion">插件版本 1.7.86 · 公共权限组件读取中</footer>
+    <footer id="pluginVersion">插件版本 1.7.87 · 公共权限组件读取中</footer>
   </main>
 
   <div id="nodeTestBackdrop" class="mi-picker-backdrop" hidden></div>
@@ -342,8 +336,8 @@
   </section>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="client-bridge.js?v=1.7.86&amp;ui=compact-metrics-20260930"></script>
-  <script src="app.js?v=1.7.86&amp;ui=docker-proxy-state"></script>
+  <script src="client-bridge.js?v=1.7.87&amp;ui=compact-metrics-20260930"></script>
+  <script src="app.js?v=1.7.87&amp;ui=docker-proxy-state"></script>
   <script>
     (function () {
       var document = window.XiaomiPluginClient.document;
