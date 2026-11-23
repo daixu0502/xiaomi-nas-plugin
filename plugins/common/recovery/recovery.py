@@ -29,7 +29,7 @@ PLUGINS = {'mihomo', 'dockermanager', 'taskcenter', 'nascenter', 'sshrecovery', 
 SERVERS = {'mihomo', 'quickshare', 'downloadcenter'}
 MANAGED = SERVERS | {'taskcenter'}
 UNIT = 'minas-plugin-recovery-v2'
-VERSION = '2.0.2'
+VERSION = '2.0.3'
 WATCH_UNIT = UNIT + '-watch.service'
 RUNTIME = Path('/run/minas-plugin-recovery-v2')
 
@@ -366,6 +366,18 @@ def install_daemon(user, plugin):
         atomic(marker_file, unit.encode(), 0o644)
 
 
+def service_in_maintenance(user, plugin):
+    marker = Path('/data/minas/plugins/manager/maintenance.json')
+    try:
+        targets = read(marker).get('targets')
+    except FileNotFoundError:
+        return False
+    # An admitted core update for another account/plugin must be able to
+    # complete its stop/start pair. Older global markers still gate all targets.
+    return (not isinstance(targets, list) or not targets or
+            any(not isinstance(pair, list) or len(pair) != 2 for pair in targets) or [user, plugin] in targets)
+
+
 def service_operation(user, plugin, operation):
     identity(user, plugin)
     unit = daemon_unit(user, plugin)
@@ -373,9 +385,9 @@ def service_operation(user, plugin, operation):
     require(directory.is_dir() and not (directory / 'removed').exists(), 'plugin is not registered')
     if operation == 'status':
         return call(['systemctl', 'is-active', '--quiet', unit], check=False).returncode
-    require(not Path('/data/minas/plugins/manager/maintenance.json').exists(), '插件正在维护，请稍后操作')
+    require(not service_in_maintenance(user, plugin), '插件正在维护，请稍后操作')
     with record_lock(directory):
-        require(not Path('/data/minas/plugins/manager/maintenance.json').exists() and not (directory / 'removed').exists(),
+        require(not service_in_maintenance(user, plugin) and not (directory / 'removed').exists(),
                 '插件正在维护或已卸载')
         require((Path('/etc/systemd/system') / unit).is_file(), 'daemon unit missing')
         if operation.startswith('update-'):
@@ -899,8 +911,7 @@ def manager_module():
 def restore_record(directory, intents=None, check_source=True):
     if (directory / 'removed').exists():
         return
-    with record_lock(directory):
-        return manager_module().repair_record(directory, intents, check_source)
+    return manager_module().repair_record(directory, intents, check_source)
 
 
 
@@ -1052,13 +1063,22 @@ def native_operation_busy():
     return False
 
 
+def foreign_maintenance():
+    try:
+        return not Path('/run/minas-plugin-maintenance').read_text().startswith('manager:')
+    except FileNotFoundError:
+        return False
+
+
 def event_reconcile(requests):
-    if Path('/data/minas/plugins/manager/maintenance.json').exists() or native_operation_busy():
+    if native_operation_busy():
         return False
     with open(plain(Path('/data/plugin/.local-plugin-installer.lock')), 'a') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
+            return False
+        if foreign_maintenance():
             return False
         reconcile(requests)
     return True
@@ -1077,9 +1097,10 @@ def watch():
             poll.register(events.fd, select.POLLIN)
             poll.register(mounts.fileno(), select.POLLPRI | select.POLLERR)
             pending = {key: True for key in events.specs}
+            recover_guard = Path('/data/minas/plugins/manager/maintenance.json').exists()
             uptime = float(Path('/proc/uptime').read_text().split()[0])
             ready_at = time.monotonic() + max(5, 90 - uptime)
-            deadline = ready_at if pending else None
+            deadline = ready_at if pending or recover_guard else None
             first_event = time.monotonic()
             rebuild, failures = False, 0
             status = dict(version=VERSION, pid=os.getpid(), procPid=int(os.readlink('/proc/self')), checks=0, fullChecks=0,
@@ -1134,9 +1155,10 @@ def watch():
                     pending = {key: deep for key, deep in pending.items() if key in events.specs
                                and os.path.ismount(Path(events.specs[key]['src']).parents[3])}
                     try:
-                        if pending and not event_reconcile(pending):
+                        if (pending or recover_guard) and not event_reconcile(pending):
                             deadline = time.monotonic() + 5
                             continue
+                        recover_guard = False
                         if pending:
                             status['checks'] += 1
                             status['fullChecks'] += sum(pending.values())
@@ -1200,8 +1222,6 @@ def main():
         for item in sorted(records.iterdir()) if records.exists() else []:
             print(item.name+(' removed' if (item/'removed').exists() else ' registered'))
         return
-    if (Path('/run/minas-plugin-maintenance').exists() or Path('/data/minas/plugins/manager/maintenance.json').exists()) and args.action in ('watch','reconcile','bootstrap'):
-        return
     if str(BASE)=='/data/minas/plugins/recovery':ensure_data_layout()
     protected(BASE)
     # Install/uninstall already owns this lock; their child coordinator must not
@@ -1216,6 +1236,8 @@ def main():
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
+                return
+            if foreign_maintenance():
                 return
         if args.action == 'watch':
             watch()

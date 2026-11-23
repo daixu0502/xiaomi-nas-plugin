@@ -7,6 +7,7 @@ _update_sys.path.insert(0, str(_UpdatePath(__file__).resolve().parent.parent / '
 from online_update_cgi import intercept as _online_update_intercept
 _online_update_intercept('downloadcenter')
 # END SHARED ONLINE UPDATE CGI
+import contextlib
 import json
 import os
 import pwd
@@ -21,6 +22,7 @@ UI = Path(__file__).resolve().parent
 sys.path.insert(0, str(UI.parent / "files"))
 from download_lib import DownloadError
 from service import manager
+from plugin_paths import MaintenanceBusy, plugin_activity
 
 
 def output(data, mime="application/json; charset=utf-8"):
@@ -56,35 +58,36 @@ try:
         if not isinstance(data, dict):
             raise DownloadError("请求格式无效")
         home = Path("/home") / user / "plugin/downloadcenter"
-        try:
-            m = manager(home)
-        except RuntimeError as error:
-            # A firmware cache purge must not make the start button unusable.
-            # The existing fixed broker prepares RAM before starting the core.
-            if action != 'service' or data.get('command') != 'start':
-                raise DownloadError(str(error))
-            subprocess.Popen(['/bin/sh',str(home/'scripts/control'),'start'],stdin=subprocess.DEVNULL,
-                             stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True,close_fds=True,
-                             env={k:v for k,v in os.environ.items() if k!='MINAS_SERVICE_MANAGED'})
-            output({'ok':True,'pending':True})
-            sys.exit(0)
-        if action == "service":
-            if m.core_state().get('state') == 'installing' or m.qb_update_state().get('state') == 'installing':
-                raise DownloadError('正在切换下载核心，请稍后再操作服务')
-            command = data.get("command")
-            if command not in ("start", "stop", "restart"):
-                raise DownloadError("无效服务操作")
-            # Fire-and-poll: never hold a CGI request open while stopping the engine.
-            m.ready()
-            with (m.runtime / "control.log").open("w") as log:
-                subprocess.Popen(['/bin/sh', str(home / 'scripts/control'), command],
-                                 stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True,
-                                 env={k:v for k,v in os.environ.items() if k != 'MINAS_SERVICE_MANAGED'})
-            result = {"pending": True}
-        else:
-            result = m.dispatch(action, data)
-        output(dict(result, ok=True))
-except (DownloadError, ValueError, OSError) as exc:
+        with plugin_activity(home / 'var') if action == 'service' else contextlib.nullcontext() as activity_fd:
+            try:
+                m = manager(home)
+            except RuntimeError as error:
+                # A firmware cache purge must not make the start button unusable.
+                # The existing fixed broker prepares RAM before starting the core.
+                if action != 'service' or data.get('command') != 'start':
+                    raise DownloadError(str(error))
+                subprocess.Popen(['/bin/sh',str(home/'scripts/control'),'start'],stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True,pass_fds=(activity_fd,),
+                                 env={k:v for k,v in os.environ.items() if k!='MINAS_SERVICE_MANAGED'})
+                output({'ok':True,'pending':True})
+                sys.exit(0)
+            if action == "service":
+                if m.core_state().get('state') == 'installing' or m.qb_update_state().get('state') == 'installing':
+                    raise DownloadError('正在切换下载核心，请稍后再操作服务')
+                command = data.get("command")
+                if command not in ("start", "stop", "restart"):
+                    raise DownloadError("无效服务操作")
+                # Fire-and-poll: never hold a CGI request open while stopping the engine.
+                m.ready()
+                with (m.runtime / "control.log").open("w") as log:
+                    subprocess.Popen(['/bin/sh', str(home / 'scripts/control'), command],
+                                     stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, pass_fds=(activity_fd,),
+                                     env={k:v for k,v in os.environ.items() if k != 'MINAS_SERVICE_MANAGED'})
+                result = {"pending": True}
+            else:
+                result = m.dispatch(action, data)
+            output(dict(result, ok=True))
+except (MaintenanceBusy, DownloadError, ValueError, OSError) as exc:
     output({"ok": False, "error": str(exc)})
 except Exception:
     output({"ok": False, "error": "内部错误，请检查下载插件日志"})

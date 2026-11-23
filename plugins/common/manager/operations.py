@@ -1,7 +1,7 @@
 """User-UID source staging and read-only activity probes shared by all installers."""
-import array, contextlib, ctypes, json, os, pwd, re, socket, stat, subprocess, sys
+import array, contextlib, ctypes, fcntl, json, os, pwd, re, socket, stat, subprocess, sys
 from pathlib import Path
-from layout import ENV, REGISTRY, require, lock as maintenance_lock
+from layout import DATA, ENV, REGISTRY, SERVERS, plain, require, lock as maintenance_lock
 HOMES = Path('/home')
 PRIVILEGED = Path('/data/minas/privileged')
 def run(args, **kwargs):
@@ -128,6 +128,31 @@ def clean_source_stage(user, plugin, src, tokens):
         os.close(parent)
 
 
+@contextlib.contextmanager
+def exclude_activity(row, data):
+    if row['plugin'] not in SERVERS:
+        yield
+        return
+    state = data / row['user'] / row['plugin'] / 'var'
+    # Broken uninstall removes redirected links without following their targets.
+    if row.get('uninstall') and any(p.is_symlink() for p in (state, *state.parents)):
+        yield
+        return
+    try:
+        fd = os.open(plain(state), os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY)
+    except FileNotFoundError:
+        yield  # fresh install: the marker precedes creation of this directory
+        return
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError('插件有正在执行的操作，请完成后再维护：' + row['plugin']) from None
+        yield
+    finally:
+        os.close(fd)
+
+
 def idle_cache_locks(user, plugin, home):
     names = {'mihomo': ('update-operation.lock','core-update.lock','node-test.lock'),
              'downloadcenter': ('core-update.lock','tracker-update.lock','lifecycle.lock')}.get(plugin, ())
@@ -135,9 +160,8 @@ def idle_cache_locks(user, plugin, home):
         return
     code = '''import fcntl,os,stat,sys
 from pathlib import Path
-base=Path(sys.argv[1])/'tmp/runtime'
-for name in sys.argv[2:]:
- p=base/name
+home=Path(sys.argv[1])
+for p in (base/name for base in (home/'var',home/'tmp/runtime') for name in sys.argv[2:]):
  try:fd=os.open(p,os.O_RDONLY|os.O_NOFOLLOW)
  except FileNotFoundError:continue
  try:
@@ -151,7 +175,7 @@ for name in sys.argv[2:]:
         raise ValueError('插件有核心更新、测速或服务切换操作，或活动锁不可读取：' + plugin) from error
 
 
-def idle(user, plugin, home, uninstall=False, incomplete=False):
+def idle(user, plugin, home, uninstall=False, incomplete=False, repair=False):
     # Read-only probes run with the plugin UID, including access to its caches.
     if uninstall and incomplete:
         # Broken code cannot be used to inspect or remove itself. The outer
@@ -164,18 +188,23 @@ def idle(user, plugin, home, uninstall=False, incomplete=False):
         service = subprocess.run(['systemctl','is-active','--quiet','minas-plugin-downloadcenter-' + user + '.service'], env=ENV, capture_output=True, timeout=15)
         if service.returncode != 0:
             return
-        environment = dict(ENV, REQUEST_METHOD='POST', CONTENT_TYPE='application/json', CONTENT_LENGTH='2', QUERY_STRING='action=status')
-        result = subprocess.run(['runuser', '-u', user, '--', str(home / 'src/ui/downloadcenter.cgi')], input=b'{}', env=environment, capture_output=True, timeout=45)
+        probe = b'{"maintenanceProbe":true}'
+        environment = dict(ENV, REQUEST_METHOD='POST', CONTENT_TYPE='application/json', CONTENT_LENGTH=str(len(probe)), QUERY_STRING='action=status')
+        result = subprocess.run(['runuser', '-u', user, '--', str(home / 'src/ui/downloadcenter.cgi')], input=probe, env=environment, capture_output=True, timeout=45)
         try:
             data = json.loads(re.split(br'\r?\n\r?\n', result.stdout, maxsplit=1)[1])
             require(data.get('ok') and not data.get('error'), '无法确认下载服务空闲，请稍后重试')
             require(not any(data.get(key, {}).get('state') in ('pending','checking','downloading','installing','running')
-                            for key in ('coreUpdate','qbUpdate','job','trackerApply')), '下载中心有后台更新或批量操作，请稍后维护')
-            require(not any(t.get('status') in ('active', 'waiting', 'downloading', 'stalledDL', 'metaDL', 'forcedDL', 'queuedDL', 'checkingDL', 'checkingResumeData', 'allocating') for t in data.get('tasks', [])), '有下载任务正在运行，请暂停任务后再更新')
+                            for key in ('coreUpdate','qbUpdate','job','trackerApply')) and
+                    data.get('trackerStatus', {}).get('state') != 'pending', '下载中心有后台更新或批量操作，请稍后维护')
+            require(not data.get('engineBusy') and not any(t.get('status') in ('active', 'waiting', 'downloading', 'stalledDL', 'metaDL', 'forcedDL', 'queuedDL', 'checkingDL', 'checkingResumeData', 'allocating') for t in data.get('tasks', [])), '有下载任务正在运行，请暂停任务后再更新')
         except (IndexError, json.JSONDecodeError):
             raise ValueError('无法确认下载服务空闲，请稍后重试') from None
     if plugin == 'quickshare':
-        raw = run(['runuser', '-u', user, '--', '/usr/bin/python3', '-I', '-B', '-c', 'from pathlib import Path;print((Path.home()/"plugin/quickshare/var/server.port").read_text().strip())'])
+        if repair and subprocess.run(['systemctl','is-active','--quiet','minas-plugin-quickshare-' + user + '.service'],
+                                     env=ENV, capture_output=True, timeout=15).returncode:
+            return
+        raw = run(['runuser', '-u', user, '--', 'cat', DATA / user / plugin / 'var/server.port' if repair else home / 'var/server.port'])
         port = int(raw.strip())
         for table in (Path('/proc/net/tcp'), Path('/proc/net/tcp6')):
             for line in table.read_text().splitlines()[1:] if table.exists() else []:
@@ -183,7 +212,7 @@ def idle(user, plugin, home, uninstall=False, incomplete=False):
                 require(not (int(fields[1].split(':')[1], 16) == port and fields[3] == '01'), '文件快传有活动连接，请传输完成后再更新')
     admin = PRIVILEGED / 'component_admin.py'
     if plugin not in ('quickshare', 'downloadcenter') and admin.is_file():
-        if not uninstall:
+        if not uninstall and not repair:
             run(['/usr/bin/python3', '-I', '-B', admin, 'check', '--plugin', plugin, '--user', user], timeout=30)
         for relative in ('docker.lock', 'modules/mediaeditor/var/write.lock',
                          'modules/sshrecovery/var/operations.lock', 'modules/mihomo/proxy.lock'):

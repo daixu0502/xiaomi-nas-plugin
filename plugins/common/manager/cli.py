@@ -157,12 +157,9 @@ def backend(args):
             return {'ok': True, 'targets': pairs, 'dryRun': True}
         with L.lock(L.INSTALL_LOCK):
             manager.recover_pending(already_locked=True)
-            r = manager.recovery()
             for user, plugin in pairs:
                 directory = L.RECOVERY / 'records' / (user + '-' + plugin)
-                if not args.dry_run:
-                    with r.record_lock(directory):
-                        manager.repair_record(directory)
+                manager.repair_record(directory)
         return {'ok': True, 'targets': pairs, 'dryRun': args.dry_run}
     bundle = Bundle(args.bundle) if args.action != 'uninstall' else None
     print('正在预检账号、源码、依赖和可用空间…', file=sys.stderr, flush=True)

@@ -2,7 +2,7 @@
   "plugin": "mihomo",
   "name": "Mihomo",
   "id": 19090,
-  "version": "1.7.88",
+  "version": "1.7.89",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "Mihomo 代理管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "当前订阅支持手动检测全部节点，准确显示未检测、不可用和可用。",
+  "changelog": "节点测速、订阅和内核更新与安装维护互斥，清理缓存后正在执行的操作仍持有原锁。",
   "system": false,
-  "size": 430041,
+  "size": 431387,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

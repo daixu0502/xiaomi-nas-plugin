@@ -1,6 +1,8 @@
 """Open flock files without generating writable-close filesystem events."""
 import os
 import stat
+import contextlib
+import fcntl
 
 
 def open_lock(path):
@@ -22,3 +24,13 @@ def open_lock(path):
     except BaseException:
         os.close(fd)
         raise
+
+
+@contextlib.contextmanager
+def core_update_lock(state, inherited=None):
+    path = state / 'core-update.lock'
+    with open_lock(path) if inherited is None else os.fdopen(inherited, 'rb') as lock:
+        if not os.path.samestat(os.fstat(lock.fileno()), path.lstat()):
+            raise ValueError('核心操作锁已改变')
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield lock.fileno()

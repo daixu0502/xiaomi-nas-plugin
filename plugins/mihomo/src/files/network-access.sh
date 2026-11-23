@@ -57,7 +57,7 @@ do_set() {
     case "$access_mode" in local|lan) ;; *) json_error "不支持的访问范围" ;; esac
     [ -s "$CONFIG_FILE" ] || json_error "配置文件不存在"
     mkdir -p "$VAR_DIR"
-    exec 9>"$RUNTIME_DIR/network-access.lock"
+    exec 9>>"$VAR_DIR/network-access.lock"
     flock -n 9 || json_error "另一个网络访问设置正在进行"
     umask 077
     config_tmp="$RUNTIME_DIR/config.network-access.$$"

@@ -20,7 +20,7 @@ import time
 from urllib.parse import quote, urlencode
 from urllib.request import Request, build_opener, ProxyHandler
 from urllib.error import HTTPError, URLError
-from plugin_paths import runtime_directory
+from plugin_paths import plugin_activity, runtime_directory
 
 DELAY_URL = 'https://cp.cloudflare.com/generate_204'
 SUBSCRIPTION_PROVIDER = 'APP-SUBSCRIPTION'
@@ -86,7 +86,7 @@ class Tests:
 
     @contextlib.contextmanager
     def lock(self, name, shared=False):
-        fd = os.open(self.runtime / name, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        fd = os.open(self.home / 'var' / name, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         try:
             fcntl.flock(fd, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
             yield fd
@@ -179,7 +179,7 @@ class Tests:
                 raise RuntimeError('延迟最多测试 200 个节点；下载测速每次选择一个节点')
             if any(not isinstance(n, str) or not n or len(n) > 256 for n in names) or len(set(names)) != len(names):
                 raise RuntimeError('节点名称无效或重复')
-        with self.lock('node-test.lock') as job_fd, self.lock('update-operation.lock', True) as update_fd:
+        with plugin_activity(self.home / 'var') as activity_fd, self.lock('node-test.lock') as job_fd, self.lock('update-operation.lock', True) as update_fd:
             if not subscription:
                 nodes = self.nodes()
                 if any(n not in nodes for n in names): raise RuntimeError('节点已改变，请刷新节点列表')
@@ -195,7 +195,7 @@ class Tests:
             try:
                 subprocess.Popen([sys.executable, '-B', str(Path(__file__).resolve()), 'worker', job['id']],
                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                    start_new_session=True, close_fds=True, pass_fds=(job_fd, update_fd), env=env)
+                    start_new_session=True, close_fds=True, pass_fds=(activity_fd, job_fd, update_fd), env=env)
             except OSError:
                 job.update(status='failed', message='无法启动测速进程'); atomic(self.path, job)
                 raise RuntimeError('无法启动测速进程') from None

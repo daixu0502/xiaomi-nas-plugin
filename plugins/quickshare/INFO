@@ -2,7 +2,7 @@
   "plugin": "quickshare",
   "name": "文件快传",
   "id": 19092,
-  "version": "1.1.84",
+  "version": "1.1.85",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "临时下载链接与文件上传入口",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "精简帮助与提示文字。折叠端口转发说明，统一选项高亮颜色。",
+  "changelog": "文件上传和下载在传输结束前持锁，安装维护和自动修复会避开正在进行的传输。",
   "system": false,
-  "size": 295443,
+  "size": 296796,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

@@ -1,4 +1,6 @@
 """Disposable user runtime in firmware plugintmp; never credentials or code."""
+import contextlib
+import fcntl
 import os
 from pathlib import Path
 import re
@@ -8,17 +10,15 @@ import shutil
 
 HOME_ROOT=Path('/home')
 PERSISTENT_ROOT=Path('/data/minas/plugins/data')
+MAINTENANCE = Path('/data/minas/plugins/manager/maintenance.json')
 
 DISPOSABLE = {
-    'mihomo': {'mihomo.pid', 'mihomo.log', 'mihomo.log.1', 'update-tasks',
-        'update-operation.lock','geodata-update.lock','core-update.lock','network-access.lock',
-        'manual-node.lock','rule-provider.lock'},
+    'mihomo': {'mihomo.pid', 'mihomo.log', 'mihomo.log.1', 'update-tasks'},
     'quickshare': {'server.pid', 'server.log', 'server.log.1'},
     'downloadcenter': {'service.pid', 'service.log', 'service.log.1', 'aria2.log', 'aria2.conf',
         'qbittorrent.log', 'qbittorrent.log.1', 'qb-session.json', 'qb-applied.json',
         'tracker-status.json', 'tracker-apply.json', 'job.json', 'core-update.json',
-        'core-update.log', 'qb-update.json', 'qb-update.log','control.log','dht.dat','dht6.dat',
-        'api.lock','lifecycle.lock','core-update.lock','tracker-update.lock','supervisor.lock'},
+        'core-update.log', 'qb-update.json', 'qb-update.log','control.log','dht.dat','dht6.dat'},
 }
 
 
@@ -96,6 +96,33 @@ def open_state_directory(home, name='var'):
         result=fd;fd=-1;return result
     finally:
         if fd!=-1:os.close(fd)
+
+
+class MaintenanceBusy(RuntimeError):
+    pass
+
+
+@contextlib.contextmanager
+def plugin_activity(state):
+    """Share the persistent var directory lock with admitted background children."""
+    state = Path(state)
+    if state.is_relative_to(HOME_ROOT):
+        if state.name != 'var' or not state.is_symlink():
+            raise MaintenanceBusy('插件持久目录未就绪，请稍后操作')
+        fd = open_state_directory(state.parent)
+    else:
+        fd = os.open(state, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise MaintenanceBusy('插件正在维护，请稍后操作') from None
+        if MAINTENANCE.exists():
+            raise MaintenanceBusy('插件正在维护，请稍后操作')
+        yield fd
+    finally:
+        # A child explicitly inheriting this open file description still owns it.
+        os.close(fd)
 
 
 def runtime_directory(home):

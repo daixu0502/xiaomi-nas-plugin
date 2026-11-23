@@ -10,9 +10,10 @@ import stat
 import subprocess
 import time
 
-VERSION = '1.3.3'
+VERSION = '1.3.4'
 LAYOUT_VERSION = 3
 API_VERSION = 1
+MAINTENANCE = Path('/data/minas/plugins/manager/maintenance.json')
 BASE = Path('/data/minas/privileged')
 DOCKER = '/data/docker/docker'
 MODULES = {'dockermanager', 'taskcenter', 'sshrecovery', 'mihomo', 'nascenter', 'mediaeditor'}
@@ -214,6 +215,27 @@ def registry():
     if data.get('apiVersion') != API_VERSION:
         raise ValueError('不兼容的权限组件 API 版本')
     return data
+
+
+def active_worker(run, boot, plugin, user=None):
+    if run.get('state') != 'running' or (run.get('boot') or run.get('bootId') or boot) != boot:
+        return False
+    pid = run.get('pid')
+    if not pid:
+        return plugin == 'taskcenter' and time.time() - run.get('started', 0) < 90
+    try:
+        process = Path('/proc') / str(int(pid))
+        if run.get('processStart'):
+            return str(run['processStart']) == (process / 'stat').read_text().rsplit(')', 1)[1].split()[19]
+        # Legacy records have no start tick. Match the worker, not any reused PID.
+        args = (process / 'cmdline').read_bytes().decode(errors='replace').rstrip('\0').split('\0')
+        if plugin == 'taskcenter':
+            return args[-3:] == ['worker', user, run.get('id')] and any(
+                Path(arg).name in ('minas-helper', 'task-center-helper') for arg in args)
+        return any(Path(arg).name == 'docker-manager-helper' for arg in args) or (
+            len(args) >= 2 and Path(args[-2]).name == 'minas-helper' and args[-1] == 'dockermanager')
+    except (OSError, ValueError, IndexError, TypeError):
+        return False
 
 
 def authorize(user, plugin):

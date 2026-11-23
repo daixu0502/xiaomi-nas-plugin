@@ -167,7 +167,7 @@ do_update() {
     command -v flock >/dev/null 2>&1 || json_error "设备缺少 flock，无法安全更新核心"
     operation_lock
     mkdir -p "$VAR_DIR"
-    exec 9>"$RUNTIME_DIR/core-update.lock"
+    exec 9>>"$VAR_DIR/core-update.lock"
     flock -n 9 || json_error "另一个核心更新任务正在运行"
 
     fetch_latest

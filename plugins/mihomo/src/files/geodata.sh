@@ -170,7 +170,7 @@ do_update() {
     operation_lock
     command -v flock >/dev/null 2>&1 || json_error "设备缺少 flock，无法安全更新 Geo 数据"
     mkdir -p "$ETC_DIR" "$VAR_DIR"
-    exec 9>"$RUNTIME_DIR/geodata-update.lock"
+    exec 9>>"$VAR_DIR/geodata-update.lock"
     flock -n 9 || json_error "另一个 Geo 数据更新任务正在运行"
     umask 077
     staging=$(python3 -B "$PLUGIN_HOME/src/files/plugin_paths.py" --update-staging "$PLUGIN_HOME") \

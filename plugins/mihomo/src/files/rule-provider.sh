@@ -61,7 +61,7 @@ do_import() {
     [ -s "$CONFIG_FILE" ] || json_error "配置文件不存在"
 
     mkdir -p "$VAR_DIR" "$ETC_DIR/rules"
-    exec 9>"$RUNTIME_DIR/rule-provider.lock"
+    exec 9>>"$VAR_DIR/rule-provider.lock"
     flock -n 9 || json_error "另一个规则提供者操作正在进行"
     umask 077
     config_tmp="$RUNTIME_DIR/config.rule-provider.$$"

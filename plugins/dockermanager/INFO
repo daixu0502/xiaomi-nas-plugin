@@ -2,7 +2,7 @@
   "plugin": "dockermanager",
   "name": "docker",
   "id": 19091,
-  "version": "1.1.59",
+  "version": "1.1.60",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "容器、镜像与存储卷管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "精简帮助与提示文字。调整状态卡片排列。",
+  "changelog": "维护期间可查看容器、镜像、磁盘与网络，公共恢复组件可清理中断事务留下的维护标记。",
   "system": false,
   "size": 240893,
   "port": "",

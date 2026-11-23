@@ -702,7 +702,7 @@ def install_boot_recovery(journal):
     if not bootstrap.is_file() or bootstrap.read_bytes() != (Path(__file__).parent / 'bootstrap.py').read_bytes():
         L.atomic(bootstrap, (Path(__file__).parent / 'bootstrap.py').read_bytes(), 0o755)
     unit = ('[Unit]\nDescription=Recover interrupted NAS plugin transactions\nAfter=local-fs.target\n'
-            'Before=' + WATCH + ' minas-maintenance-events.service\n[Service]\nType=oneshot\n'
+            '[Service]\nType=oneshot\n'
             'ExecStart=/usr/bin/python3 -B ' + str(L.BASE / 'bootstrap.py') + '\n'
             'TimeoutStartSec=infinity\nUMask=0077\n[Install]\nWantedBy=multi-user.target\n')
     unit_path = UNITS / 'minas-plugin-manager-recover.service'
@@ -1172,28 +1172,51 @@ def retire_unused_manager():
     run(['systemctl', 'daemon-reload'])
 
 
+def clear_maintenance():
+    if MAINTENANCE.exists():
+        MAINTENANCE.unlink()
+        L.fsync_dir(MAINTENANCE.parent)
+    if LEGACY_GUARD.is_file() and LEGACY_GUARD.read_text().startswith('manager:'):
+        LEGACY_GUARD.unlink()
+
+
 def recover_pending(already_locked=False):
     with contextlib.nullcontext() if already_locked else L.lock(L.INSTALL_LOCK):
         directory = L.BASE / 'transactions'
         recovered = []
         for path in sorted(directory.iterdir()) if directory.exists() else []:
             if not (path / 'journal.json').exists():
+                if MAINTENANCE.exists() and L.read(MAINTENANCE).get('transaction') == path.name:
+                    raise ValueError('维护事务缺少日志，已保留现场：' + str(path))
                 continue
             journal = Journal(path, L.read(path / 'journal.json'))
             if journal.state['phase'] == 'initializing':
                 remove_path(path)
                 continue
+            if journal.state.get('admissionOnly'):
+                # No plugin or service has been changed. Even an unmounted pool
+                # must not prevent clearing an interrupted admission.
+                journal.state['phase'] = 'rolled-back'
+                journal.save()
             for row in journal.state['targets'] if journal.state['phase'] not in ('committed', 'rolled-back') else []:
                 if row.get('pool'):
                     L.require(os.path.ismount('/nas/' + row['pool']), '等待事务存储池挂载：' + row['pool'])
             r = types.SimpleNamespace(daemon_unit=lambda user, plugin: 'minas-plugin-' + plugin + '-' + user + '.service')
-            if journal.state['phase'] not in ('committed', 'rolled-back'):
-                rollback(journal, r)
-            finish(journal, r)
+            with contextlib.ExitStack() as held:
+                if journal.state['phase'] not in ('committed', 'rolled-back'):
+                    for row in journal.state['targets']:
+                        held.enter_context(operations.exclude_activity(row, L.DATA))
+                    marker = L.read(MAINTENANCE, {})
+                    if marker.get('transaction') != path.name:
+                        publish_marker(journal)
+                    for row in journal.state['targets']:
+                        record = L.RECOVERY / 'records' / (row['user'] + '-' + row['plugin'])
+                        if record.is_dir():
+                            held.enter_context(L.lock(record / '.service.lock'))
+                    rollback(journal, r)
+                finish(journal, r)
             recovered.append(journal.state)
-        MAINTENANCE.unlink(missing_ok=True)
-        if LEGACY_GUARD.is_file() and LEGACY_GUARD.read_text().startswith('manager:'):
-            LEGACY_GUARD.unlink()
+        clear_maintenance()
         for state in recovered:
             resume_observers(state)
         for path in sorted(directory.iterdir()) if directory.exists() else []:
@@ -1207,12 +1230,12 @@ def recover_pending(already_locked=False):
 def resume_observers(state):
     committed = state['phase'] == 'committed'
     if (UNITS / 'minas-maintenance-events.service').exists() and (committed or state.get('eventsRunning')):
-        run(['systemctl', 'start', 'minas-maintenance-events.service'])
+        run(['systemctl', 'start', '--no-block', 'minas-maintenance-events.service'])
     if (UNITS / WATCH).is_file() and (state.get('watchRunning') or committed and state.get('action') != 'uninstall'):
-        run(['systemctl', 'start', WATCH])
+        run(['systemctl', 'start', '--no-block', WATCH])
 
 
-def begin_maintenance(journal):
+def publish_marker(journal):
     # Scheduling reserves a worker under the shared component lock. Check those
     # reservations and publish the marker under its exclusive counterpart so a
     # queued worker cannot be rejected after its run has already been recorded.
@@ -1222,6 +1245,19 @@ def begin_maintenance(journal):
             module(admin, 'minas_manager_idle').check_idle()
         L.atomic(MAINTENANCE, dict(transaction=journal.directory.name, pid=os.getpid(),
                                  targets=[[row['user'], row['plugin']] for row in journal.state['targets']]))
+
+
+def begin_maintenance(journal):
+    try:
+        publish_marker(journal)
+    except BaseException:
+        # replace() may have succeeded before the directory fsync failed.
+        # Preserve the frozen engine until recovery can retire the visible guard.
+        if not MAINTENANCE.exists():
+            remove_path(journal.directory)
+        else:
+            run(['systemctl', 'start', '--no-block', 'minas-plugin-manager-recover.service'], False)
+        raise
 
 
 def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=None):
@@ -1243,6 +1279,7 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
         recover_pending(already_locked=True)
         rows, cutover = preflight(action, pairs, bundle, pool)
         for row in rows:
+            held.enter_context(operations.exclude_activity(row, L.DATA))
             if (row['user'], row['plugin']) != owned_update:
                 jobs = L.UPDATER / 'users' / row['user'] / row['plugin'] / 'jobs'
                 for file in jobs.glob('*/status.json'):
@@ -1258,7 +1295,7 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
         L.protected(L.BASE / 'transactions')
         L.require(not LEGACY_GUARD.exists(), '另一个维护操作正在使用原厂恢复暂停标记')
         journal = Journal(L.BASE / 'transactions' / uuid.uuid4().hex, phase='initializing')
-        journal.state.update(action=action, targets=rows, cutover=cutover)
+        journal.state.update(action=action, targets=rows, cutover=cutover, admissionOnly=True)
         journal.save()
         install_boot_recovery(journal)
         use_installed = (L.RECOVERY / 'recovery.py').is_file() and bundle and L.version(code_version(L.RECOVERY / 'recovery.py')) > L.version(bundle.manifest['components']['recovery']['version'])
@@ -1268,15 +1305,11 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
         journal.state['watchRunning'] = was_watch
         journal.state['eventsRunning'] = run(['systemctl', 'is-active', '--quiet', 'minas-maintenance-events.service'], False).returncode == 0
         journal.save()
+        begin_maintenance(journal)
         try:
-            begin_maintenance(journal)
-        except BaseException:
-            remove_path(journal.directory)
-            raise
-        L.atomic(LEGACY_GUARD, 'manager:' + journal.directory.name)
-        run(['systemctl', 'stop', WATCH], False)
-        run(['systemctl', 'stop', 'minas-maintenance-events.service'], False)
-        try:
+            L.atomic(LEGACY_GUARD, 'manager:' + journal.directory.name)
+            run(['systemctl', 'stop', WATCH], False)
+            run(['systemctl', 'stop', 'minas-maintenance-events.service'], False)
             journal.checkpoint('backup')
             for row in rows:
                 directory = L.RECOVERY / 'records' / (row['user'] + '-' + row['plugin'])
@@ -1287,6 +1320,8 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
             for row in rows:
                 if not row['fresh']:
                     operations.idle(row['user'], row['plugin'], Path(row['home']), action == 'uninstall', row.get('incomplete', False))
+            del journal.state['admissionOnly']
+            journal.save()
             component_guard = contextlib.ExitStack()
             if L.COMPONENT.exists():
                 component_guard.enter_context(L.lock(L.COMPONENT / 'component.lock'))
@@ -1344,7 +1379,11 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
             journal.state['failure'] = failure
             journal.save()
             try:
-                rollback(journal, r)
+                if journal.state.get('admissionOnly'):
+                    journal.state['phase'] = 'rolled-back'
+                    journal.save()
+                else:
+                    rollback(journal, r)
             except BaseException as rollback_error:
                 journal.state['rollbackFailure'] = failure_summary(rollback_error)
                 journal.save()
@@ -1357,8 +1396,7 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
                 try:
                     finish(journal, r)
                     held.close()
-                    MAINTENANCE.unlink(missing_ok=True)
-                    LEGACY_GUARD.unlink(missing_ok=True)
+                    clear_maintenance()
                     resume_observers(journal.state)
                     if not journal.state.get('pendingPools'):
                         remove_path(journal.directory)
@@ -1378,22 +1416,34 @@ def repair_record(directory, intents=None, check_source=True):
     r = recovery()
     if MAINTENANCE.exists():
         return
-    if restoration.record_healthy(r, directory, intents, check_source):
-        return
-    saved = r.load_generation(directory)
-    record = r.read(saved / 'record.json')
+    with L.lock(directory / '.service.lock'):
+        if restoration.record_healthy(r, directory, intents, check_source):
+            return
+        saved = r.load_generation(directory)
+        record = r.read(saved / 'record.json')
     row = target(record['user'], record['plugin'])
+    with operations.exclude_activity(row, L.DATA), contextlib.ExitStack() as held:
+        return repair_idle_record(r, directory, saved, row, held, intents, check_source)
+
+
+def repair_idle_record(r, directory, saved, row, held, intents, check_source):
+    if LEGACY_GUARD.exists():
+        raise ValueError('另一个维护操作正在使用原厂恢复暂停标记')
     L.protected(L.BASE / 'transactions')
     journal = Journal(L.BASE / 'transactions' / uuid.uuid4().hex, phase='initializing')
-    journal.state.update(targets=[row], action='repair')
+    journal.state.update(targets=[row], action='repair', admissionOnly=True)
     journal.save()
     install_boot_recovery(journal)
+    begin_maintenance(journal)
     try:
-        begin_maintenance(journal)
-    except BaseException:
-        remove_path(journal.directory)
-        raise
-    try:
+        # Privileged service_restart holds component.lock before .service.lock.
+        # Drain it before taking the record lock, then refresh its service intent.
+        held.enter_context(L.lock(directory / '.service.lock'))
+        row = target(row['user'], row['plugin'])
+        journal.state['targets'] = [row]
+        operations.idle(row['user'], row['plugin'], Path(row['home']), repair=True)
+        del journal.state['admissionOnly']
+        journal.save()
         journal.registration(row['user'], row['plugin'])
         journal.ports(row['user'], row['plugin'])
         for path in (Path(row['home']), Path(row['tmp']).parent, L.DATA, L.DATA / row['user'], L.DATA / row['user'] / row['plugin']):
@@ -1407,11 +1457,15 @@ def repair_record(directory, intents=None, check_source=True):
         journal.state['phase'] = 'committed'
         journal.save()
     except BaseException:
-        rollback(journal, r)
+        if journal.state.get('admissionOnly'):
+            journal.state['phase'] = 'rolled-back'
+            journal.save()
+        else:
+            rollback(journal, r)
         raise
     finally:
         if journal.state['phase'] in ('committed', 'rolled-back'):
             finish(journal, r)
-            MAINTENANCE.unlink(missing_ok=True)
+            clear_maintenance()
             resume_observers(journal.state)
             remove_path(journal.directory)

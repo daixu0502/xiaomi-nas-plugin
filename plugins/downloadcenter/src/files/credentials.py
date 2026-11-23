@@ -43,7 +43,7 @@ def read(m):
 def save(m, data):
     from service import live
     updates = validate(data)
-    with open_lock(m.runtime / 'core-update.lock') as core, open_lock(m.runtime / 'lifecycle.lock') as lifecycle:
+    with open_lock(m.var / 'core-update.lock') as core, open_lock(m.var / 'lifecycle.lock') as lifecycle:
         for lock in (core, lifecycle):
             try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError: raise DownloadError('服务正在启动或更新，请稍后再试')

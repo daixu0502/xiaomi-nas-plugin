@@ -2,7 +2,7 @@
   "plugin": "downloadcenter",
   "name": "下载中心",
   "id": 19096,
-  "version": "1.1.69",
+  "version": "1.1.70",
   "tags": [
     "tool"
   ],
@@ -10,9 +10,9 @@
   "desc": "直链、磁链、BT 与 Tracker 管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "精简帮助与提示文字。折叠协议与来源说明，删除重复服务提示。",
+  "changelog": "核心更新、后台任务与维护操作互斥，清理缓存后仍保留操作锁。",
   "system": false,
-  "size": 493444,
+  "size": 499147,
   "port": "",
   "type": "standard",
   "forceupgrade": false,

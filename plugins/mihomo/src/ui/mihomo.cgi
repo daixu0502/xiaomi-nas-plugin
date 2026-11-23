@@ -157,8 +157,9 @@ esac
 case "$action" in
     set_mode|select_proxy|manual_node_import|manual_node_delete|network_access_set|start|stop|restart|config_save)
         require_post
-        mkdir -p "$VAR_DIR"
-        exec 8>"$RUNTIME_DIR/update-operation.lock"
+        exec 7<"$VAR_DIR"
+        flock -sn 7 && [ ! -e /data/minas/plugins/manager/maintenance.json ] || json_error "插件正在维护，请稍后操作"
+        exec 8>>"$VAR_DIR/update-operation.lock"
         flock -n 8 || json_error "已有更新或配置应用任务正在执行，请等待完成"
         ;;
 esac

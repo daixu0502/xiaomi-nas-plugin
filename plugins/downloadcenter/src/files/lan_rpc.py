@@ -1,4 +1,5 @@
 """Opt-in HTTP JSON-RPC LAN listener; the aria2 core stays on loopback."""
+import contextlib
 import http.client
 import ipaddress
 import json
@@ -10,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from openlist_gateway import lan_config, client_allowed, map_path, safe_mkdir
 from download_lib import DownloadError
+from plugin_paths import MaintenanceBusy, plugin_activity
 
 
 def map_payload(m, payload, depth=0):
@@ -88,15 +90,22 @@ class Handler(BaseHTTPRequestHandler):
             body = self.rfile.read(length)
             payload = json.loads(body)
             if not isinstance(payload, (dict, list)): return self.respond(400)
-            payload = map_payload(self.server.manager, payload)
-            body = json.dumps(payload).encode()
-            # Fixed upstream only. Core verifies the RPC token for protected methods.
-            upstream = http.client.HTTPConnection('127.0.0.1', self.server.rpc_port, timeout=15)
-            upstream.request('POST', '/jsonrpc', body, {'Content-Type': 'application/json'})
-            result = upstream.getresponse()
-            raw = result.read(16 * 1024 * 1024 + 1)
-            if len(raw) > 16 * 1024 * 1024: return self.respond(502)
-            self.respond(result.status, raw)
+            reads = {'aria2.getVersion', 'aria2.getGlobalStat', 'aria2.tellStatus', 'aria2.tellActive',
+                     'aria2.tellWaiting', 'aria2.tellStopped', 'aria2.getFiles', 'aria2.getGlobalOption',
+                     'aria2.getOption', 'aria2.getPeers', 'aria2.getServers', 'aria2.getUris', 'system.listMethods'}
+            readonly = isinstance(payload, dict) and payload.get('method') in reads
+            with contextlib.nullcontext() if readonly else plugin_activity(self.server.manager.var):
+                payload = map_payload(self.server.manager, payload)
+                body = json.dumps(payload).encode()
+                # Fixed upstream only. Core verifies the RPC token for protected methods.
+                upstream = http.client.HTTPConnection('127.0.0.1', self.server.rpc_port, timeout=15)
+                upstream.request('POST', '/jsonrpc', body, {'Content-Type': 'application/json'})
+                result = upstream.getresponse()
+                raw = result.read(16 * 1024 * 1024 + 1)
+                if len(raw) > 16 * 1024 * 1024: return self.respond(502)
+                self.respond(result.status, raw)
+        except MaintenanceBusy:
+            self.respond(503)
         except DownloadError:
             self.respond(400, json.dumps({'error': {'code': -32602, 'message': '下载路径或参数无效，请检查 NAS 下载目录'}}).encode())
         except (ValueError, OSError, http.client.HTTPException):

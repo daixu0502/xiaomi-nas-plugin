@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from quickshare_lib import ShareError, Store
+from plugin_paths import MaintenanceBusy, plugin_activity
 from folder_archive import open_folder, open_file, signature, inventory, write_zip
 from upload_transaction import Upload, server_guard
 
@@ -74,7 +75,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self.server.transfer_slots.acquire(blocking=False):
             self.close_connection = True
             return self.send_json({'ok':False,'error':'传输繁忙，请稍后重试'},503)
-        try: return operation(token)
+        try:
+            with plugin_activity(self.server.store.state_dir):
+                return operation(token)
+        except MaintenanceBusy as error:
+            self.close_connection = True
+            return self.send_json({'ok': False, 'error': str(error)}, 503)
         finally: self.server.transfer_slots.release()
 
     def transfer_event(self, record, name, direction, size, complete, started):

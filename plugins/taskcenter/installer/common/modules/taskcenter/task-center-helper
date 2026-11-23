@@ -261,15 +261,14 @@ def process_start(pid):
     except (OSError, ValueError, IndexError, TypeError):
         return None
 
-def reconcile(state):
+def reconcile(state, user=None):
     current_boot = boot_id()
     for run in state['runs']:
         if run['state'] != 'running':
             continue
         pid = run.get('pid')
-        started = process_start(pid) if pid else None
-        alive = started and (not run.get('processStart') or run['processStart'] == started)
-        if run['boot'] != current_boot or (not alive and time.time() - run['started'] > 30):
+        alive = pid and runtime.active_worker(run, current_boot, 'taskcenter', user)
+        if run.get('boot', current_boot) != current_boot or (not alive and time.time() - run['started'] > 30):
             run.update(state='interrupted', ended=time.time(), final=True, retryAt=None, message='设备重启或执行进程中断')
 
 def find_task(state, ident):
@@ -411,7 +410,7 @@ def worker(user, ident):
 def tick_user(user):
     launch_ids = []
     with database(user) as state:
-        reconcile(state)
+        reconcile(state, user)
         # Display-only liveness is disposable; do not fsync the task database
         # every minute when no task or execution state changed.
         try: write_state(user, 'taskcenter', 'heartbeat.json', {'at': time.time(), 'boot': boot_id()})
@@ -482,7 +481,8 @@ def api(user, req):
         return {'containers': [json.loads(s) for s in containers.stdout.splitlines() if s], 'images': [json.loads(s) for s in images.stdout.splitlines() if s]}
     launch_id = None
     with database(user) as state:
-        reconcile(state)
+        if not (action in ('list', 'log') and runtime.MAINTENANCE.exists()):
+            reconcile(state, user)
         if action == 'list':
             tasks = []
             for t in state['tasks']:

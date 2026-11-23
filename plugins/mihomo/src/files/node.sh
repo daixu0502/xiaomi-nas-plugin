@@ -65,7 +65,7 @@ restore_manual() {
 prepare_change() {
     mkdir -p "$VAR_DIR" "$PROVIDER_DIR"
     umask 077
-    exec 9>"$RUNTIME_DIR/manual-node.lock"
+    exec 9>>"$VAR_DIR/manual-node.lock"
     flock -n 9 || json_error "另一个手动节点操作正在进行，请稍后重试"
     manual_backup="$RUNTIME_DIR/manual-node.backup.$$"
     if [ -s "$MANUAL_FILE" ]; then

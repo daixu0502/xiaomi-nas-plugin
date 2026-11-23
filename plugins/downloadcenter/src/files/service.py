@@ -2,6 +2,7 @@
 """Unprivileged supervisor: graceful shutdown, session persistence and tracker refresh."""
 import fcntl
 from runtime_lock import open_lock
+from plugin_paths import MaintenanceBusy, plugin_activity
 import json
 import os
 import signal
@@ -38,11 +39,16 @@ def live(m):
 
 
 def apply_saved_trackers(m):
-    try:
-        with m.locked():
-            m.apply_trackers()
-    except DownloadError:
-        print('Saved Tracker list will be retried when settings are applied', flush=True)
+    while True:
+        try:
+            with plugin_activity(m.var), m.locked():
+                m.apply_trackers()
+            return
+        except MaintenanceBusy:
+            time.sleep(5)  # the service can start before the installer releases its lock
+        except DownloadError:
+            print('Saved Tracker list will be retried when settings are applied', flush=True)
+            return
 
 
 def tracker_error(exc):
@@ -69,12 +75,12 @@ def tracker_error(exc):
 
 def update_trackers(m):
     # Prevent duplicate workers without blocking normal API calls.
-    with open_lock(m.runtime / "tracker-update.lock") as lock:
-        try:
+    try:
+        with plugin_activity(m.var), open_lock(m.var / "tracker-update.lock") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return
-        _update_trackers(m)
+            _update_trackers(m)
+    except (MaintenanceBusy, BlockingIOError):
+        return
 
 
 def _update_trackers(m):
@@ -172,7 +178,7 @@ def normalize_aria_session(session, completed_gids=()):
 
 def serve(m):
     m.ready()
-    with open_lock(m.runtime / "supervisor.lock") as lock:
+    with open_lock(m.var / "supervisor.lock") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -300,7 +306,11 @@ def _serve_locked(m):
                             events.wait(timeout=0)  # Drain our writes while mutation lock is held.
                         fingerprint=current
                     if job_pending:
-                        m.process_job()
+                        try:
+                            with plugin_activity(m.var):
+                                m.process_job()
+                        except MaintenanceBusy:
+                            pass  # the persisted batch resumes after maintenance
                         with m.locked(storage=False):
                             job_pending=json.loads((m.var/'job.json').read_text()).get('state')=='pending'
                             rows=m.rows()
@@ -347,7 +357,7 @@ def _serve_locked(m):
 
 def control(m, command):
     m.ready()
-    with open_lock(m.runtime / "lifecycle.lock") as lock:
+    with open_lock(m.var / "lifecycle.lock") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         control_locked(m, command)
 

@@ -304,6 +304,8 @@ def write_upgrade_status(payload):
     payload = dict(payload)
     payload["updatedAt"] = _dt.datetime.now(_dt.timezone.utc).isoformat()
     payload["bootId"] = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+    if payload.get('state') == 'running' and payload.get('pid'):
+        payload['processStart'] = process_start(payload['pid'])
     user_state_io.write_state(STATE_USER, 'dockermanager', UPGRADE_STATUS, payload)
 
 
@@ -696,7 +698,7 @@ def launch_upgrade_worker(task_id, target, name):
 def container_upgrade(request):
     target = safe_target(request)
     active = read_upgrade_status()
-    if active and active.get("state") == "running" and process_exists(active.get("pid")):
+    if active and worker_alive(active):
         if active.get("target") != target:
             raise ApiError("另一个容器正在升级，请等待完成")
         return {
@@ -716,26 +718,31 @@ def container_upgrade(request):
     }
 
 
-def container_upgrade_status(request):
+def container_upgrade_status(request, readonly=False):
     status = read_upgrade_status()
     task_id = required_text(request, "taskId", 80) if request.get('taskId') else (status or {}).get('taskId')
     if not status and not task_id: return {'state':'idle'}
     if not status or status.get("taskId") != task_id:
         raise ApiError("未找到容器升级任务")
-    if status.get("state") == "running" and not process_exists(status.get("pid")):
+    if status.get("state") == "running" and not worker_alive(status):
+        if readonly:
+            return {**{k: v for k, v in status.items() if k not in ('pid', 'processStart')},
+                    'state': 'error', 'message': '升级进程已中断，维护结束后将核对容器状态'}
         try:
             with runtime.docker_transaction():recover_upgrade()
             message='容器升级进程中断，已核对并恢复未完成事务；请刷新容器状态'
         except Exception as exc:message='容器升级中断，事务等待恢复：'+str(exc)
         status.update({'state':'error','message':message})
         write_upgrade_status(status)
-    return {key: value for key, value in status.items() if key != "pid"}
+    return {key: value for key, value in status.items() if key not in ('pid', 'processStart')}
 
 
 def write_bulk_status(payload):
     payload = dict(payload)
     payload["updatedAt"] = _dt.datetime.now(_dt.timezone.utc).isoformat()
     payload["bootId"] = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+    if payload.get('state') == 'running' and payload.get('pid'):
+        payload['processStart'] = process_start(payload['pid'])
     user_state_io.write_state(STATE_USER, 'dockermanager', BULK_STATUS, payload)
 
 
@@ -749,12 +756,9 @@ def read_bulk_status():
         return None
 
 
-def process_exists(pid):
-    try:
-        os.kill(int(pid), 0)
-        return True
-    except (OSError, TypeError, ValueError):
-        return False
+def worker_alive(value):
+    boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+    return runtime.active_worker(value, boot, 'dockermanager')
 
 
 def process_start(pid):
@@ -769,7 +773,7 @@ def write_operation_status(value):
                               dict(value, updatedAt=time.time()))
 
 
-def operation_status(request):
+def operation_status(request, readonly=False):
     value = user_state_io.read_state(STATE_USER, 'dockermanager', OPERATION_STATUS) or {'state': 'idle'}
     if not isinstance(value, dict):
         raise ApiError('后台操作状态不可读取，请刷新实际资源状态')
@@ -780,7 +784,8 @@ def operation_status(request):
                  and value.get('processStart') and value['processStart'] == process_start(value.get('pid')))
         if not alive:
             value.update(state='error', message='后台操作已中断；请核对实际结果后再操作，勿重复创建容器')
-            write_operation_status(value)
+            if not readonly:
+                write_operation_status(value)
     return {k: v for k, v in value.items() if k not in ('pid', 'processStart', 'bootId')}
 
 
@@ -907,7 +912,7 @@ def launch_bulk_worker(task_id, operation, ids, command, verb):
 def container_bulk_action(request):
     operation = required_text(request, "operation", 16)
     active = read_bulk_status()
-    if active and active.get("state") == "running" and process_exists(active.get("pid")):
+    if active and worker_alive(active):
         if active.get("operation") != operation:
             raise ApiError("另一个批量容器操作正在进行，请等待完成")
         return {
@@ -939,15 +944,16 @@ def container_bulk_action(request):
     }
 
 
-def container_bulk_status(request):
+def container_bulk_status(request, readonly=False):
     task_id = required_text(request, "taskId", 80)
     status = read_bulk_status()
     if not status or status.get("taskId") != task_id:
         raise ApiError("未找到批量操作任务")
-    if status.get("state") == "running" and not process_exists(status.get("pid")):
+    if status.get("state") == "running" and not worker_alive(status):
         status.update({"state": "error", "message": "批量操作进程意外结束"})
-        write_bulk_status(status)
-    return {key: value for key, value in status.items() if key != "pid"}
+        if not readonly:
+            write_bulk_status(status)
+    return {key: value for key, value in status.items() if key not in ('pid', 'processStart')}
 
 
 def container_logs(request):
@@ -1228,6 +1234,12 @@ ACTIONS = {
 
 MUTATIONS = {'engine_action', 'container_action', 'container_upgrade', 'container_bulk_action',
              'container_create', 'image_pull', 'image_remove', 'volume_create', 'volume_remove'}
+
+
+def maintenance_status(user, request):
+    global STATE_USER
+    STATE_USER = user
+    return ACTIONS[request['action']](request, readonly=True)
 
 
 def dispatch(request):

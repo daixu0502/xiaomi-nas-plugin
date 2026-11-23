@@ -7,6 +7,7 @@ _update_sys.path.insert(0, str(_UpdatePath(__file__).resolve().parent.parent / '
 from online_update_cgi import intercept as _online_update_intercept
 _online_update_intercept('quickshare')
 # END SHARED ONLINE UPDATE CGI
+import contextlib
 import json
 import os
 import pwd
@@ -28,7 +29,7 @@ STATE_DIR=PLUGIN_HOME/"var"
 PORT_FILE=STATE_DIR/"server.port"
 sys.path.insert(0,str(SCRIPT_DIR.parent/"files"))
 from quickshare_lib import ShareError, Store, public_record
-from plugin_paths import runtime_directory
+from plugin_paths import plugin_activity, runtime_directory
 from service_process import managed_pids
 
 def service_port():
@@ -104,12 +105,12 @@ action=action_name()
 if not action: serve_static()
 if os.environ.get("REQUEST_METHOD","GET")!="POST": error("API 仅接受 POST 请求")
 STORE=Store(STATE_DIR,PLUGIN_USER)
-try:
+def handle_request():
     data=body(); base=base_url()
     if action=="status":
         is_running,pid=running(); records=STORE.list(); active=sum(1 for item in records if Store.status(item)=="active")
-        try: version=json.loads((PLUGIN_HOME/"INFO").read_text()).get("version","1.1.84")
-        except Exception: version="1.1.84"
+        try: version=json.loads((PLUGIN_HOME/"INFO").read_text()).get("version","1.1.85")
+        except Exception: version="1.1.85"
         respond({"ok":True,"running":is_running,"pid":pid,"port":PORT,"lanUrl":f"http://{lan_ip()}:{PORT}","baseUrl":base,"activeShares":active,"totalShares":len(records),"pluginVersion":version})
     if action=="list": respond({"ok":True,"shares":[public_record(item,base) for item in STORE.list()]})
     if action=="transfers": respond({"ok":True,**STORE.transfers()})
@@ -131,6 +132,10 @@ try:
     if action=="server_stop": control("stop"); respond({"ok":True})
     if action=="server_restart": control("restart"); respond({"ok":True})
     error("未知操作")
+try:
+    reads = {'status', 'list', 'transfers', 'browse', 'settings_get'}
+    with contextlib.nullcontext() if action in reads else plugin_activity(STATE_DIR):
+        handle_request()
 except ShareError as exc: error(exc)
 except subprocess.TimeoutExpired: error("服务操作超时")
 except Exception as exc: error("操作失败："+str(exc))

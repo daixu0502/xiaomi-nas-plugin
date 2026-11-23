@@ -111,7 +111,7 @@ start_core() {
         -f "$CONFIG_FILE" \
         -ext-ctl "127.0.0.1:$CONTROLLER_PORT" \
         -secret "$secret" \
-        >/dev/null 2>&1 8>&- 9>&- &
+        >/dev/null 2>&1 7>&- 8>&- 9>&- &
     relay_pid=$!
     relay_wait=0
     while [ ! -s "$PID_FILE" ] && kill -0 "$relay_pid" 2>/dev/null && [ "$relay_wait" -lt 30 ]; do

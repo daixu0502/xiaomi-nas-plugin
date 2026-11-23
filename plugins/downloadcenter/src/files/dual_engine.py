@@ -471,7 +471,22 @@ class DualManager(Manager):
         return {'configured': len(configured), 'tasks': len(tasks), 'checked': len(rows), 'rows': rows,
                 'partial': len(rows) < len(tasks)}
 
-    def dispatch(self, action, data):
+    def _dispatch(self, action, data):
+        if action == 'status' and data.get('maintenanceProbe') is True:
+            result = self.snapshot(include_settings=False)
+            if result['running']:
+                # LAN RPC and Openlist jobs can be absent from the plugin's task table.
+                active = int(result['stats'].get('numActive', 0)) > 0
+                waiting = int(result['stats'].get('numWaiting', 0))
+                for offset in range(0, waiting, 256):
+                    if active:
+                        break
+                    active = any(item.get('status') == 'waiting' for item in self.rpc('tellWaiting', offset, 256, ['status']))
+                result['engineBusy'] = active or any(
+                    item.get('state') in {'downloading', 'forcedDL', 'stalledDL', 'metaDL', 'forcedMetaDL',
+                                          'queuedDL', 'checkingDL', 'checkingResumeData', 'allocating', 'moving'}
+                    or item.get('upspeed', 0) > 0 for item in self.qb.torrents())
+            return result
         if action in ('credentials_get', 'credentials_save'):
             from credentials import read, save
             if action == 'credentials_save': return save(self, data)
@@ -490,4 +505,4 @@ class DualManager(Manager):
                 address = cfg[0] if cfg else '127.0.0.1'
                 return {'url': 'http://downloadcenter:%s@%s:%d/' % (quote(password, safe=''), address, port),
                         'directory': str(self.root / self.settings().get('openlistDirectory', 'Download'))}
-        return super().dispatch(action, data)
+        return super()._dispatch(action, data)

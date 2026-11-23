@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Per-user, verified static-core updates. No arbitrary URLs or root helper."""
-import fcntl
-from runtime_lock import open_lock
+import contextlib
+from runtime_lock import core_update_lock
+from plugin_paths import plugin_activity
 from memory_paths import update_staging
 import hashlib
 import io
@@ -175,6 +176,15 @@ def install_candidate(m, candidate, version):
 
 
 def queue(m, command, proxy=False):
+    with plugin_activity(m.var) as activity_fd:
+        try:
+            with core_update_lock(m.var) as lock_fd:
+                return queue_worker(m, command, proxy, activity_fd, lock_fd)
+        except BlockingIOError:
+            raise DownloadError('已有核心操作正在执行，请稍后再试') from None
+
+
+def queue_worker(m, command, proxy, activity_fd, lock_fd):
     from qb_update import state as qb_state
     if qb_state(m).get('state') in BUSY:
         raise DownloadError('qBittorrent 正在检查或升级，请稍后再操作 aria2')
@@ -184,22 +194,25 @@ def queue(m, command, proxy=False):
     write_state(m, state='pending', command=command, message='正在准备' + ('检查更新…' if command == 'check' else '下载更新…'))
     try:
         with (m.runtime/'core-update.log').open('a') as log:
-            subprocess.Popen([sys.executable, '-B', str(Path(__file__).resolve()), command, str(m.home), 'proxy' if proxy else 'direct'],
-                             stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True)
+            subprocess.Popen([sys.executable, '-B', str(Path(__file__).resolve()), command, str(m.home),
+                              'proxy' if proxy else 'direct', str(lock_fd)], pass_fds=(activity_fd, lock_fd),
+                             stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
     except OSError as exc:
         write_state(m, state='error', message='无法启动更新进程')
         raise DownloadError('无法启动更新进程') from exc
     return {'pending': True}
 
 
-def run(m, command, proxy):
+def run(m, command, proxy, inherited=None):
     from service import tracker_error
     if command not in ('check', 'apply'): raise DownloadError('无效核心更新操作')
     if os.geteuid() == 0: raise DownloadError('核心更新禁止以 root 运行')
     m.ready()
-    with open_lock(m.runtime/'core-update.lock') as lock:
-        try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError: return
+    with contextlib.ExitStack() as held:
+        try:
+            held.enter_context(core_update_lock(m.var, inherited))
+        except BlockingIOError:
+            return
         common = {'command': command, 'proxy': proxy}
         try:
             write_state(m, **common, state='checking', message='正在检查当前渠道的最新版本…')
@@ -228,4 +241,4 @@ def run(m, command, proxy):
 if __name__ == '__main__':
     from service import manager
     os.umask(0o077)
-    run(manager(sys.argv[2]), sys.argv[1], sys.argv[3] == 'proxy')
+    run(manager(sys.argv[2]), sys.argv[1], sys.argv[3] == 'proxy', int(sys.argv[4]) if len(sys.argv) > 4 else None)

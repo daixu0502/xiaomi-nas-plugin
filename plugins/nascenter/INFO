@@ -2,7 +2,7 @@
   "plugin": "nascenter",
   "name": "控制中心",
   "id": 19093,
-  "version": "1.1.87",
+  "version": "1.1.88",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "性能、硬盘健康、网络和服务管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "精简帮助与提示文字。删除重复状态说明，保留磁盘风险提醒。",
+  "changelog": "维护期间可查看概览详情和 SMART 信息，修正服务重启与自动修复同时执行时的锁等待。",
   "system": false,
   "size": 241896,
   "port": "",

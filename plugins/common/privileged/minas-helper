@@ -13,6 +13,16 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'common'))
 import privileged_runtime as runtime
 
+MAINTENANCE_READS = {
+    'dockermanager': {'system_summary', 'system_disk', 'container_list', 'container_stats',
+                      'container_logs', 'container_inspect', 'image_list', 'volume_list', 'network_list'},
+    'taskcenter': {'list', 'log', 'templates', 'resources', 'schedule_preview'},
+    'nascenter': {'overview', 'overview_details', 'smart', 'processes', 'process_network', 'health_details'},
+    'mediaeditor': {'status', 'list', 'files', 'details', 'history'},
+    'mihomo': {'docker_proxy_status'},
+    'sshrecovery': {'status'},
+}
+DOCKER_POLLS = {'container_upgrade_status', 'container_bulk_status', 'docker_operation_status'}
 
 def load(name, filename):
     paths = {'docker-manager-helper':'modules/dockermanager/docker-manager-helper', 'task-center-helper':'modules/taskcenter/task-center-helper', 'ssh-recovery-helper':'modules/sshrecovery/ssh-recovery-helper', 'mihomo-api.py':'modules/mihomo/api.py', 'nascenter-api.py':'modules/nascenter/api.py', 'mediaeditor-api.py':'modules/mediaeditor/api.py'}
@@ -32,10 +42,6 @@ def load(name, filename):
 def dispatch(plugin, request, caller):
     if plugin not in runtime.MODULES:
         raise ValueError('未知权限模块')
-    if Path('/data/minas/plugins/manager/maintenance.json').exists():
-        allowed = {'capabilities', 'system_summary', 'list', 'overview', 'status'}
-        if request.get('action') not in allowed:
-            raise ValueError('插件正在维护，请稍后操作')
     user = caller if caller and caller != 'root' else request.get('pluginUser')
     if caller and caller != 'root':
         runtime.authorize(user, plugin)
@@ -46,6 +52,16 @@ def dispatch(plugin, request, caller):
     if request.get('action') == 'capabilities':
         return {'apiVersion': runtime.API_VERSION, 'helperVersion': runtime.VERSION, 'module': plugin,
                 'sharedDockerLock': True, 'registeredUsers': None}
+    if runtime.MAINTENANCE.exists():
+        if plugin == 'dockermanager' and request.get('action') in DOCKER_POLLS:
+            user = runtime.authorize(user, plugin)
+            docker = load('minas_docker', 'docker-manager-helper')
+            if hasattr(docker, 'maintenance_status'):
+                return docker.maintenance_status(user, request)
+            # Older Docker modules can restart containers while polling status.
+            return {'state': 'maintenance', 'message': '维护结束后可核对后台操作结果'}
+        if request.get('action') not in MAINTENANCE_READS[plugin]:
+            raise ValueError('插件正在维护，请稍后操作')
     if plugin == 'dockermanager':
         return load('minas_docker', 'docker-manager-helper').dispatch(request)
     user = runtime.authorize(user, plugin)
@@ -65,14 +81,15 @@ def main():
         raise ValueError('缺少权限模块')
     caller = os.environ.get('SUDO_USER')
     mode = sys.argv[1]
+    if mode == 'boot' and len(sys.argv) == 2:
+        if caller not in (None, 'root'):
+            raise ValueError('禁止调用内部启动模式')
+        time.sleep(60)
     # Acquire before importing feature modules so code updates are atomic to callers.
     with runtime.component_use():
-        if Path('/data/minas/plugins/manager/maintenance.json').exists() and (mode == 'boot' or len(sys.argv) > 2):
+        if runtime.MAINTENANCE.exists() and (mode == 'boot' or len(sys.argv) > 2):
             raise ValueError('插件正在维护，暂停后台任务')
         if mode == 'boot' and len(sys.argv) == 2:
-            if caller not in (None, 'root'):
-                raise ValueError('禁止调用内部启动模式')
-            time.sleep(60)
             if (runtime.BASE/'modules/dockermanager/docker-manager-helper').is_file():
                 with runtime.docker_transaction():
                     load('minas_docker_recover','docker-manager-helper').recover_upgrade()

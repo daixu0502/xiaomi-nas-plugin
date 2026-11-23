@@ -2,7 +2,7 @@
   "plugin": "taskcenter",
   "name": "定时任务",
   "id": 19094,
-  "version": "1.0.60",
+  "version": "1.0.61",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "可视化任务计划与执行记录",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "精简帮助与提示文字。保留执行身份、删除和重启提醒。",
+  "changelog": "维护期间可查看任务和模板，修正任务进程退出或设备重启后仍被判断为运行中的问题。",
   "system": false,
   "size": 217255,
   "port": "",

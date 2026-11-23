@@ -5,6 +5,7 @@ import contextlib
 import errno
 import fcntl
 from runtime_lock import open_lock
+from plugin_paths import plugin_activity
 import hashlib
 import json
 import os
@@ -19,7 +20,7 @@ from urllib.parse import urlsplit, parse_qs, unquote
 from urllib.request import Request, build_opener, ProxyHandler
 from urllib.error import HTTPError
 
-VERSION = "1.1.69"
+VERSION = "1.1.70"
 MAX_TORRENT = 4 * 1024 * 1024
 DEFAULTS = {"directory": "", "concurrent": 3, "connections": 4, "downloadKiB": 0,
             "uploadKiB": 1024, "seedRatio": 1.0, "seedMinutes": 60,
@@ -261,7 +262,7 @@ class Manager:
     @contextlib.contextmanager
     def locked(self, storage=True):
         self.ready(storage=storage)
-        with open_lock(self.runtime / "api.lock") as handle:
+        with open_lock(self.var / "api.lock") as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             yield
 
@@ -1144,6 +1145,12 @@ class Manager:
                 atomic_json(self.var / "job.json", job)
 
     def dispatch(self, action, data):
+        reads = ('status', 'browse', 'torrent_browse', 'torrent_nas_preview', 'torrent_preview',
+                 'detail', 'credentials_get', 'openlist_info', 'tracker_verify', 'bt_cache_list', 'bt_cache_preview')
+        with contextlib.nullcontext() if action in reads else plugin_activity(self.var):
+            return self._dispatch(action, data)
+
+    def _dispatch(self, action, data):
         if action == 'status':
             self.ready()
             # SQLite reads and atomic settings snapshots do not need the mutation

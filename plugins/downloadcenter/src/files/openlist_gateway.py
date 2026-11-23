@@ -10,6 +10,7 @@ import json
 import re
 import secrets
 import threading
+from plugin_paths import MaintenanceBusy, plugin_activity
 import time
 from email.parser import BytesParser
 from email.policy import default
@@ -159,12 +160,13 @@ class Handler(BaseHTTPRequestHandler):
                 uri = params.get('urls', '')
                 valid_url(uri)
                 if urlsplit(uri).scheme not in ('magnet', 'http', 'https'): raise DownloadError('不支持的 BT 链接')
-                destination = map_path(m, params.get('savepath', ''))
-                # Keep a fresh explicit directory, with every component checked.
-                safe_mkdir(m, destination)
-                result = qb.request('torrents/add', {'urls': uri, 'savepath': str(destination), 'tags': tag,
-                                    'autoTMM': 'false', 'stopped': 'false', 'stopCondition': 'None',
-                                    'contentLayout': 'Original', 'useDownloadPath': 'false'})
+                with plugin_activity(m.var):
+                    destination = map_path(m, params.get('savepath', ''))
+                    # Keep a fresh explicit directory, with every component checked.
+                    safe_mkdir(m, destination)
+                    result = qb.request('torrents/add', {'urls': uri, 'savepath': str(destination), 'tags': tag,
+                                        'autoTMM': 'false', 'stopped': 'false', 'stopCondition': 'None',
+                                        'contentLayout': 'Original', 'useDownloadPath': 'false'})
                 if not added_ok(result): raise DownloadError('qBittorrent 拒绝创建任务')
                 return self.respond('Ok.')
             # Only expose this adapter's tasks, never plugin-managed or manually added jobs.
@@ -189,15 +191,19 @@ class Handler(BaseHTTPRequestHandler):
                     return self.respond('File deletion is not allowed', 403)
                 hashes = params.get('hashes', '').split('|')
                 if not hashes or not set(hashes) <= {v['hash'] for v in jobs}: return self.respond('Not found', 404)
-                qb.request('torrents/delete', {'hashes': '|'.join(hashes), 'deleteFiles': 'false'})
+                with plugin_activity(m.var):
+                    qb.request('torrents/delete', {'hashes': '|'.join(hashes), 'deleteFiles': 'false'})
                 return self.respond('Ok.')
             if action == 'torrents/deleteTags':
                 tags = params.get('tags', '').split(',')
                 if self.command != 'POST' or not all(re.fullmatch(r'openlist-[A-Za-z0-9_-]{1,100}', t) for t in tags):
                     return self.respond('Forbidden', 403)
-                qb.request('torrents/deleteTags', {'tags': ','.join(tags)})
+                with plugin_activity(m.var):
+                    qb.request('torrents/deleteTags', {'tags': ','.join(tags)})
                 return self.respond('Ok.')
             return self.respond('Unsupported endpoint', 403)
+        except MaintenanceBusy as error:
+            return self.respond(str(error), 503)
         except (DownloadError, ValueError, OSError):
             return self.respond('Openlist adapter request failed; check service and download paths', 400)
 

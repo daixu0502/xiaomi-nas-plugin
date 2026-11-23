@@ -18,10 +18,10 @@ import uuid
 HERE = Path(__file__).resolve().parent
 HOME = Path(os.environ.get('PLUG_HOME_DIR', '/home/' + HERE.parts[3] + '/plugin/mihomo'))
 VAR = HOME / 'var'
-from plugin_paths import runtime_directory
+from plugin_paths import plugin_activity, runtime_directory
 RUNTIME = runtime_directory(HOME)
 TASKS = RUNTIME / 'update-tasks'
-LOCK = RUNTIME / 'update-operation.lock'
+LOCK = VAR / 'update-operation.lock'
 ACTIONS = {'subscription_update', 'subscription_import', 'geodata_update', 'geodata_apply_policy',
            'rule_provider_import', 'update_provider', 'update_rule_provider', 'core_update_check', 'core_update_apply'}
 TITLES = {'subscription_update': '更新订阅', 'subscription_import': '导入订阅',
@@ -121,6 +121,11 @@ def hot_apply(kind):
 def start(action, payload):
     if action not in ACTIONS or not isinstance(payload, dict):
         raise RuntimeError('不支持的后台更新操作')
+    with plugin_activity(VAR) as activity_fd:
+        return start_worker(action, payload, activity_fd)
+
+
+def start_worker(action, payload, activity_fd):
     TASKS.mkdir(mode=0o700, parents=True, exist_ok=True)
     fd = os.open(LOCK, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
@@ -152,7 +157,7 @@ def start(action, payload):
             env = dict(os.environ, PLUG_HOME_DIR=str(HOME), PYTHONDONTWRITEBYTECODE='1')
             subprocess.Popen([sys.executable, '-B', str(Path(__file__).resolve()), 'worker', ident, str(fd)],
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                             close_fds=True, pass_fds=(fd,), start_new_session=True, env=env, cwd=str(VAR))
+                             close_fds=True, pass_fds=(fd, activity_fd), start_new_session=True, env=env, cwd=str(VAR))
         except BaseException:
             request.unlink(missing_ok=True)
             change(ident, status='failed', stage='failed', error='无法启动后台更新进程')

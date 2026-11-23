@@ -65,25 +65,15 @@ def validate_tree(directory):
 
 
 def check_idle():
-    # The component exclusive lock already excludes current shared workers.
-    for directory in [BASE]:
-        users = directory / 'users'
-        if not users.is_dir(): continue
-        for file in users.glob('u*/state.json'):
-            state = json.loads(file.read_text())
-            for run in state.get('runs', []):
-                if run.get('state') == 'running':
-                    pid = run.get('pid')
-                    if pid and Path('/proc/%s' % int(pid)).exists():
-                        raise ValueError('存在执行中的定时任务，稍后再更新')
-                    # Do not silently classify a just-reserved worker as dead.
-                    import time
-                    if time.time() - run.get('started', 0) < 90:
-                        raise ValueError('存在刚提交的定时任务，稍后再更新')
+    boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+    for file in (BASE / 'users').glob('u*/state.json'):
+        for run in json.loads(file.read_text()).get('runs', []):
+            if runtime.active_worker(run, boot, 'taskcenter', file.parent.name):
+                raise ValueError('定时任务已提交或正在执行，稍后再更新')
     for file in [Path('/run/dockermanager-upgrade-status.json'), Path('/run/dockermanager-bulk-status.json')]:
         if not file.is_file(): continue
         data = json.loads(file.read_text())
-        if data.get('state') == 'running' and data.get('pid') and Path('/proc/%s' % int(data['pid'])).exists():
+        if runtime.active_worker(data, boot, 'dockermanager'):
             raise ValueError('Docker 正在升级或批量操作，稍后再安装')
 
 

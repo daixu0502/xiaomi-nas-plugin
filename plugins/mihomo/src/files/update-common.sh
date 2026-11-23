@@ -6,7 +6,9 @@ task_progress() {
 operation_lock() {
     mkdir -p "$VAR_DIR"
     [ "${MIHOMO_TASK_LOCKED:-}" != 1 ] || return 0
-    exec 8>"$RUNTIME_DIR/update-operation.lock"
+    exec 7<"$VAR_DIR"
+    flock -sn 7 && [ ! -e /data/minas/plugins/manager/maintenance.json ] || json_error "插件正在维护，请稍后操作"
+    exec 8>>"$VAR_DIR/update-operation.lock"
     flock -n 8 || json_error "已有更新或配置应用任务正在执行，请等待完成"
 }
 hot_apply() {
