@@ -126,6 +126,16 @@ sh manage.sh repair --users u123456 --plugins quickshare
 
 安装中断后先运行 `sh manage.sh recover --ip NAS地址`，再重试原操作；NAS 本机省略 `--ip`。恢复失败会保留事务材料并显示路径，不要手动删除。若提示 `/etc/config/plugin` 的挂载句柄失效，先恢复事务并重启 NAS，再使用最新套件；不要直接编辑 `/data/etc/upper` 下的文件。
 
+多个插件在重启后仍提示“正在维护”时，在解压后的新套件目录运行以下命令。第一条显示事务涉及的插件、阶段和维护标记，第二条按设备上的事务日志恢复。
+
+```sh
+sh manage.sh recover --ip NAS地址 --dry-run --json
+sh manage.sh recover --ip NAS地址
+sh manage.sh recover --ip NAS地址 --dry-run --json
+```
+
+末次检查应显示 `transactions` 为空且 `maintenanceMarker` 为 `false`。如果仍有事务，提交 Issue 时可以贴第一条命令的 JSON 摘要和恢复报错。请将整个事务目录及其备份留在设备本地，里面可能有服务密钥和分享记录。
+
 ## 项目结构与文档
 
 ```text

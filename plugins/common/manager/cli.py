@@ -56,8 +56,14 @@ def show_result(args, result):
             print('存在未完成事务，请运行 sh manage.sh recover：' + ', '.join(t['id'] for t in result['transactions']))
     elif args.action == 'recover':
         pending = result.get('transactions', [])
-        print('待恢复事务：' + str(len(pending)) if args.dry_run else
-              '尚有存储池待挂载清理：' + ', '.join(sorted({p for t in pending for p in t.get('pendingPools', [])})) if pending else '事务恢复完成。')
+        if args.dry_run:
+            print('当前有 %d 个待恢复事务。' % len(pending))
+            for item in pending:
+                print('  ' + ' / '.join(filter(None, (item['id'], item['action'], ', '.join(item['plugins']), item['phase'], item['step']))))
+            if result['maintenanceMarker']:
+                print('检测到安装器维护标记。执行 recover 时将持锁核对并恢复。')
+        else:
+            print('尚有存储池待挂载清理：' + ', '.join(sorted({p for t in pending for p in t.get('pendingPools', [])})) if pending else '事务恢复完成。')
     else:
         show_plan(result)
         if args.dry_run:
@@ -119,23 +125,31 @@ def selected(args, rows):
     return pairs
 
 
+def transaction_status():
+    pending = []
+    for path in sorted((L.BASE / 'transactions').glob('*/journal.json')):
+        state = L.read(path)
+        if state is None:
+            continue  # a concurrent recovery finished after enumeration
+        pending.append(dict(id=path.parent.name, action=state.get('action'), phase=state.get('phase'),
+                            step=state.get('step'), pendingPools=state.get('pendingPools', []),
+                            plugins=sorted({row['plugin'] for row in state.get('targets', []) if row.get('plugin') in L.PLUGINS})))
+    return pending
+
+
 def backend(args):
     L.require(os.geteuid() == 0 and os.environ.get('SUDO_USER') in (None, 'root'), '需要 NAS root 终端')
     labels = dict(backup='保存回退材料', stop='暂停服务', component='安装公共组件',
                   remove='移除原安装', layout='准备目录', source='替换源码', grant='配置账号授权',
                   registration='更新原厂注册', verification='原厂校验', snapshot='保存恢复快照',
-                  start='启动服务', health='业务检查', rollback='恢复原安装', cleanup='清理事务')
+                  start='启动服务', health='业务检查', repair='修复插件登记和文件', rollback='恢复原安装', cleanup='清理事务')
     manager.PROGRESS = lambda step, row: print('[' + labels.get(step, step) + ']' +
         (' ' + row['user'] + '/' + row['plugin'] if row else ''), file=sys.stderr, flush=True)
     if args.action == 'recover':
-        if args.dry_run:
-            pending = [{'id': p.parent.name, 'phase': L.read(p).get('phase')}
-                       for p in (L.BASE / 'transactions').glob('*/journal.json')]
-            return {'ok': True, 'dryRun': True, 'transactions': pending}
-        manager.recover_pending()
-        pending = [{'id': p.parent.name, 'phase': L.read(p).get('phase'), 'pendingPools': L.read(p).get('pendingPools', [])}
-                   for p in (L.BASE / 'transactions').glob('*/journal.json')]
-        return {'ok': True, 'transactions': pending}
+        if not args.dry_run:
+            manager.recover_pending()
+        return dict(ok=True, dryRun=args.dry_run, transactions=transaction_status(),
+                    maintenanceMarker=manager.MAINTENANCE.exists())
     rows = manager.inventory()
     if args.action == 'status':
         if args.users:
@@ -144,8 +158,7 @@ def backend(args):
         if args.plugins:
             plugins = choose('插件', list(L.PLUGINS), args.plugins, args.all_plugins)
             rows = [row for row in rows if row['plugin'] in plugins]
-        pending = [{'id': p.parent.name, 'phase': L.read(p).get('phase')} for p in (L.BASE / 'transactions').glob('*/journal.json')]
-        return {'ok': True, 'plugins': rows, 'transactions': pending}
+        return {'ok': True, 'plugins': rows, 'transactions': transaction_status()}
     pairs = selected(args, rows)
     L.require(pairs, '所选账号没有可执行此操作的插件')
     if args.action == 'repair':

@@ -2,7 +2,7 @@
   "plugin": "quickshare",
   "name": "文件快传",
   "id": 19092,
-  "version": "1.1.85",
+  "version": "1.1.86",
   "tags": [
     "tool"
   ],
@@ -10,7 +10,7 @@
   "desc": "临时下载链接与文件上传入口",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "文件上传和下载在传输结束前持锁，安装维护和自动修复会避开正在进行的传输。",
+  "changelog": "修复旧版文件快传自动修复中断后监听服务未恢复的问题，恢复时保留现有分享和服务密钥。",
   "system": false,
   "size": 296796,
   "port": "",

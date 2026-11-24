@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Small stable boot entry. Recover with the transaction's immutable engine."""
+import contextlib
 import json
 import fcntl
 import os
@@ -12,6 +13,35 @@ import subprocess
 BASE = Path('/data/minas/plugins/manager')
 INSTALL_LOCK = Path('/data/plugin/.local-plugin-installer.lock')
 LEGACY_GUARD = Path('/run/minas-plugin-maintenance')
+UNITS = Path('/etc/systemd/system')
+OBSERVERS = (('eventsRunning', 'minas-maintenance-events.service'),
+             ('watchRunning', 'minas-plugin-recovery-v2-watch.service'))
+
+
+@contextlib.contextmanager
+def installer_lock():
+    fd = os.open(INSTALL_LOCK, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise ValueError('unsafe installer lock')
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
+
+
+def resume_repair_observers(state, units):
+    for field, name in OBSERVERS:
+        if not (units / name).is_file():
+            continue
+        active = state.get(field)
+        if active is None:
+            # Older repair journals saved unit enablement but no running flags.
+            result = subprocess.run(['/usr/bin/systemctl', 'is-enabled', name], capture_output=True, timeout=15)
+            active = result.stdout.strip() in (b'enabled', b'enabled-runtime')
+        if active:
+            subprocess.run(['/usr/bin/systemctl', 'start', '--no-block', name], check=True, timeout=15)
 
 
 def recover_orphan():
@@ -23,12 +53,7 @@ def recover_orphan():
         subprocess.run(['/usr/bin/python3', '-B', str(engine), 'recover', '--backend'], check=True)
         return
     # An interrupted first install may have published only this bootstrap.
-    fd = os.open(INSTALL_LOCK, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-    try:
-        info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
-            raise ValueError('unsafe installer lock')
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    with installer_lock():
         if list((BASE / 'transactions').glob('*/journal.json')):
             return  # the journal owns recovery
         if marker.is_file():
@@ -43,8 +68,6 @@ def recover_orphan():
                 os.close(parent)
         if LEGACY_GUARD.is_file() and LEGACY_GUARD.read_text().startswith('manager:'):
             LEGACY_GUARD.unlink()
-    finally:
-        os.close(fd)
 
 
 def main():
@@ -95,6 +118,13 @@ def main():
                 mounts.seek(0); mounts.read()
         if journal.exists():
             subprocess.run(command, check=True)
+            # Old frozen engines replay the journal but can leave an enabled
+            # watcher stopped after rolling back their own interrupted repair.
+            if state.get('action') == 'repair' and state['phase'] != 'committed' and 'watchRunning' not in state:
+                with installer_lock():
+                    if (not (BASE / 'maintenance.json').exists() and not LEGACY_GUARD.exists()
+                            and not any(directory.glob('*/journal.json'))):
+                        resume_repair_observers(state, UNITS)
         break
     else:
         # Older versions could publish the persistent guard and lose its journal.

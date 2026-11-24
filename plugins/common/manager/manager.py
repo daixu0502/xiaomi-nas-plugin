@@ -20,6 +20,7 @@ import types
 import uuid
 
 import adapters
+import bootstrap
 import layout as L
 import operations
 import restoration
@@ -464,8 +465,16 @@ class Journal:
         self.save()
 
     def restore(self):
+        # Older automatic repairs backed up installation defaults even though
+        # repair never writes them. Shares and credentials can change before replay.
+        install_only = set()
+        if self.state.get('action') == 'repair':
+            for row in self.state['targets']:
+                install_only.update(initial_files(row))
         for item in reversed(self.state['entries']):
             path = Path(item['path'])
+            if path in install_only:
+                continue
             L.plain(path.parent)
             if not item['exists']:
                 if root_state(path) and path.is_dir() and not path.is_symlink() and any(p.name == 'lock' or p.name.endswith('.lock') for p in path.rglob('*')):
@@ -632,6 +641,11 @@ def prepare_layout(row, r):
         r.linked(path, destination, owner)
 
 
+def initial_files(row):
+    base = L.DATA / row['user'] / row['plugin']
+    return [base / name for name in adapters.INITIAL_FILES.get(row['plugin'], ())]
+
+
 def watched_files(row, payload=None):
     user, plugin = row['user'], row['plugin']
     home = Path(row['home'])
@@ -654,8 +668,6 @@ def watched_files(row, payload=None):
         if payload:
             manifest = L.read(payload / 'installer/common/manifest.json')
             paths.extend(L.COMPONENT / name for name in manifest['files'])
-    for name in (() if row.get('uninstall') else adapters.INITIAL_FILES.get(plugin, ())):
-        paths.append(L.DATA / user / plugin / name)
     return paths
 
 
@@ -709,6 +721,7 @@ def install_boot_recovery(journal):
     if not unit_path.is_file() or unit_path.read_text() != unit:
         L.atomic(unit_path, unit, 0o644)
         run(['systemctl', 'daemon-reload'])
+    if run(['systemctl', 'is-enabled', '--quiet', unit_path.name], False).returncode:
         run(['systemctl', 'enable', unit_path.name])
     journal.state['phase'] = 'prepared'
     journal.save()
@@ -1228,6 +1241,9 @@ def recover_pending(already_locked=False):
 
 
 def resume_observers(state):
+    if state.get('action') == 'repair' and state['phase'] == 'rolled-back':
+        bootstrap.resume_repair_observers(state, UNITS)
+        return
     committed = state['phase'] == 'committed'
     if (UNITS / 'minas-maintenance-events.service').exists() and (committed or state.get('eventsRunning')):
         run(['systemctl', 'start', '--no-block', 'minas-maintenance-events.service'])
@@ -1339,7 +1355,10 @@ def apply(action, pairs, bundle=None, dry_run=False, pool=None, owned_update=Non
                     if action == 'uninstall' and path.is_symlink():
                         continue
                     journal.metadata(path)
-                for path in watched_files(row, payload):
+                paths = watched_files(row, payload)
+                if action != 'uninstall':
+                    paths.extend(initial_files(row))
+                for path in paths:
                     capture_missing_parents(journal, path.parent)
                     journal.capture(path)
                 if row['fresh']:
@@ -1432,6 +1451,8 @@ def repair_idle_record(r, directory, saved, row, held, intents, check_source):
     L.protected(L.BASE / 'transactions')
     journal = Journal(L.BASE / 'transactions' / uuid.uuid4().hex, phase='initializing')
     journal.state.update(targets=[row], action='repair', admissionOnly=True)
+    for field, name in bootstrap.OBSERVERS:
+        journal.state[field] = run(['systemctl', 'is-active', '--quiet', name], False).returncode == 0
     journal.save()
     install_boot_recovery(journal)
     begin_maintenance(journal)
@@ -1443,7 +1464,7 @@ def repair_idle_record(r, directory, saved, row, held, intents, check_source):
         journal.state['targets'] = [row]
         operations.idle(row['user'], row['plugin'], Path(row['home']), repair=True)
         del journal.state['admissionOnly']
-        journal.save()
+        journal.checkpoint('backup', row)
         journal.registration(row['user'], row['plugin'])
         journal.ports(row['user'], row['plugin'])
         for path in (Path(row['home']), Path(row['tmp']).parent, L.DATA, L.DATA / row['user'], L.DATA / row['user'] / row['plugin']):
@@ -1453,6 +1474,7 @@ def repair_idle_record(r, directory, saved, row, held, intents, check_source):
         for path in paths:
             capture_missing_parents(journal, path.parent)
             journal.capture(path)
+        journal.checkpoint('repair', row)
         restoration.restore_locked_record(r, directory, intents, check_source, transaction=journal.directory.name)
         journal.state['phase'] = 'committed'
         journal.save()
