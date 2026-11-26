@@ -2,15 +2,15 @@
   "plugin": "mihomo",
   "name": "Mihomo",
   "id": 19090,
-  "version": "1.7.89",
+  "version": "1.7.90",
   "tags": [
     "tool"
   ],
-  "timestamp": 1795271762,
+  "timestamp": 1795683389,
   "desc": "Mihomo 代理管理",
   "developer": "daixu0502",
   "publisher": "Local",
-  "changelog": "节点测速、订阅和内核更新与安装维护互斥，清理缓存后正在执行的操作仍持有原锁。",
+  "changelog": "随包更新公共恢复组件至 2.0.4。原厂应用市场下架本地插件后，可按账号恢复手机 App 中这些插件原有的置顶顺序。",
   "system": false,
   "size": 431387,
   "port": "",

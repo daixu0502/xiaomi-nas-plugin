@@ -29,7 +29,7 @@ PLUGINS = {'mihomo', 'dockermanager', 'taskcenter', 'nascenter', 'sshrecovery', 
 SERVERS = {'mihomo', 'quickshare', 'downloadcenter'}
 MANAGED = SERVERS | {'taskcenter'}
 UNIT = 'minas-plugin-recovery-v2'
-VERSION = '2.0.3'
+VERSION = '2.0.4'
 WATCH_UNIT = UNIT + '-watch.service'
 RUNTIME = Path('/run/minas-plugin-recovery-v2')
 
@@ -936,6 +936,160 @@ def reconcile(requests=None):
     require(not failures, str(failures) + ' recovery record(s) need attention')
 
 
+# The firmware writes USER_CONFIG_DIR/app_list as the account. Keep all access
+# to that user-controlled tree in a child with only the account's privileges.
+_QUICK_APP_IO = r'''
+import json, os, stat, sys, uuid
+
+def stamp(info):
+    return [info.st_dev, info.st_ino, info.st_mtime_ns, info.st_ctime_ns, info.st_size]
+
+def process():
+    flags = os.O_DIRECTORY | os.O_RDONLY | os.O_NOFOLLOW
+    try:
+        home = os.open(sys.argv[1], flags)
+        directory = os.open('config', flags, dir_fd=home)
+        fd = os.open('app_list', os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW, dir_fd=directory)
+    except FileNotFoundError:
+        return None
+    with os.fdopen(fd, 'rb') as source:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_size > 65536:
+            raise ValueError('invalid quick app file')
+        raw = source.read(65537)
+        if len(raw) != info.st_size or stamp(os.fstat(fd)) != stamp(info):
+            raise ValueError('quick app file changed while reading')
+    request = json.load(sys.stdin)
+    if request is None:
+        return dict(items=json.loads(raw), stamp=stamp(info), uid=info.st_uid)
+    if request['stamp'] != stamp(info):
+        raise ValueError('quick app list changed before restore')
+    content = json.dumps(request['items'], ensure_ascii=False).encode()
+    if len(content) > 65536:
+        raise ValueError('restored quick app list exceeds limit')
+    name = '.app_list-' + uuid.uuid4().hex
+    fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=directory)
+    try:
+        with os.fdopen(fd, 'wb') as dest:
+            dest.write(content)
+            dest.flush()
+            if os.fstat(fd).st_gid != info.st_gid:
+                os.fchown(fd, -1, info.st_gid)
+            os.fchmod(fd, info.st_mode & 0o777)
+            os.fsync(fd)
+        current = os.stat('app_list', dir_fd=directory, follow_symlinks=False)
+        if stamp(current) != stamp(info):
+            raise ValueError('quick app list changed during restore')
+        os.replace(name, 'app_list', src_dir_fd=directory, dst_dir_fd=directory)
+        os.fsync(directory)
+    finally:
+        try:
+            os.unlink(name, dir_fd=directory)
+        except FileNotFoundError:
+            pass
+    # Re-read on the close/move notification, including a concurrent UI write.
+    return True
+
+print(json.dumps(process()))
+'''
+
+
+def quick_app_io(user, change=None):
+    require(re.fullmatch(r'u[0-9]+', user), 'invalid quick app account')
+    account = pwd.getpwnam(user)
+    require(account.pw_uid > 0, 'ordinary quick app account required')
+    proc = subprocess.run([sys.executable, '-I', '-B', '-c', _QUICK_APP_IO, str(Path('/home') / user)],
+                          user=account.pw_uid, group=account.pw_gid, extra_groups=[],
+                          input=encoded(change), capture_output=True, timeout=8)
+    require(proc.returncode == 0, '快捷应用文件读取或条件写入失败：' + user)
+    return json.loads(proc.stdout)
+
+
+def ordered_quick_apps(items):
+    # An empty Lua table can be serialized as {} as well as [].
+    if items == {}:
+        return []
+    require(isinstance(items, list) and len(items) <= 256, '快捷应用列表格式异常')
+    for row in items:
+        require(isinstance(row, dict) and type(row.get('id')) is int and
+                type(row.get('quick_index', 0)) is int, '快捷应用条目格式异常')
+    require(len({row['id'] for row in items}) == len(items), '快捷应用编号重复')
+    return sorted(items, key=lambda row: row.get('quick_index', 0))
+
+
+def registered_quick_id(info):
+    value = info.get('id')
+    if type(value) is int and value > 0:
+        return value
+    if isinstance(value, str) and re.fullmatch(r'[1-9][0-9]{0,18}', value):
+        return int(value)
+
+
+def market_removed_pins(output, user, plugins, after_ns, written_ns):
+    """Match successful offline uninstalls in one marketplace process to the App write."""
+    started, batches = {}, {}
+    for line in output.splitlines():
+        row = json.loads(line)
+        pid, message = row.get('_PID'), row.get('MESSAGE')
+        if not pid or not isinstance(message, str):
+            continue
+        start = re.search(r'\[plugin_uninstall_offline:\d+\] uninstall offline plugin (\w+) for user (u\d+)$', message)
+        if start:
+            started[pid, start[1]] = start[2]
+            continue
+        done = re.search(r'\[plugin_uninstall:\d+\] plugin (\w+) uninstall success$', message)
+        if done and started.pop((pid, done[1]), None) == user and done[1] in plugins:
+            when = int(row['__REALTIME_TIMESTAMP']) * 1000
+            if after_ns < when:
+                batches.setdefault(pid, {})[done[1]] = when
+    # The notification can reach the client just before the success log line.
+    return any(plugins == set(batch) and abs(written_ns - max(batch.values())) <= 3_000_000_000
+               for batch in batches.values())
+
+
+def confirm_market_removal(user, plugins, previous, written):
+    seconds = written // 1_000_000_000
+    result = call(['journalctl', '--boot', '-t', 'plugincenter', '--no-pager', '-o', 'json',
+                   '--since', '@' + str(seconds - 600), '--until', '@' + str(seconds + 5)], timeout=15)
+    return market_removed_pins(result.stdout, user, plugins, previous, written)
+
+
+def sync_quick_apps(user, plugins):
+    snapshot = BASE / ('quick-apps-' + user + '.json')
+    current = quick_app_io(user) if plugins else None
+    if current is None:
+        snapshot.unlink(missing_ok=True)
+        return
+    current['items'] = ordered_quick_apps(current['items'])
+    try:
+        previous = read(snapshot)
+    except FileNotFoundError:
+        previous = None
+    if previous == current:
+        return
+    if previous and previous['uid'] == current['uid']:
+        before = previous['items']
+        live = {row['id']: row for row in current['items']}
+        missing = {row['id'] for row in before} - live.keys()
+        # An addition, reorder, or removal of another app is a user edit.
+        survivors = [row['id'] for row in before if row['id'] not in missing]
+        if missing and missing <= plugins.keys() and survivors == list(live):
+            names = {plugins[app_id] for app_id in missing}
+            if confirm_market_removal(user, names, previous['stamp'][2], current['stamp'][2]):
+                registry = read(Path('/data/plugin') / (user + '.list'))
+                for app_id in missing:
+                    entry = registry.get(plugins[app_id], {})
+                    if entry.get('install') is not True or registered_quick_id(entry.get('info', {})) != app_id:
+                        return  # The registry change after a successful repair retries this account.
+                merged = [dict(live.get(row['id'], row), quick_index=index)
+                          for index, row in enumerate(before, 1)]
+                require(quick_app_io(user, dict(stamp=current['stamp'], items=merged)) is True,
+                        '快捷应用文件已移除：' + user)
+                print('已恢复快捷应用：' + user + ' ' + ','.join(sorted(names)), flush=True)
+                return  # Keep the old baseline until the resulting file is observed.
+    save(snapshot, current)
+
+
 class PluginEvents:
     """Kernel notifications only. No periodic stat, scan, or cache access."""
     CHANGE = 0x00000008 | 0x00000080 | 0x00000100 | 0x00000200 | 0x00000040
@@ -952,6 +1106,8 @@ class PluginEvents:
             raise OSError(ctypes.get_errno(), 'inotify_init1')
         self.subscriptions = {}
         self.specs = {}
+        self.quick_plugins = {}
+        self.quick_changed = set()
 
     def close(self):
         os.close(self.fd)
@@ -983,7 +1139,7 @@ class PluginEvents:
             user, plugin = record['user'], record['plugin']
             require(directory.name == user + '-' + plugin, 'invalid watch record identity')
             try:
-                home, _ = identity(user, plugin)
+                home, owner = identity(user, plugin)
             except KeyError:
                 continue
             src = Path(record['src'])
@@ -991,6 +1147,13 @@ class PluginEvents:
                     'invalid watch source path')
             key = directory.name
             self.specs[key] = record
+            app_id = registered_quick_id(record['entry']['info'])
+            if app_id is not None and owner[0] > 0:
+                if user not in self.quick_plugins:
+                    self.quick_plugins[user] = {}
+                    self.add(home.parent.parent, user, 'quick-directory', {'config'})
+                    self.add(home.parent.parent / 'config', user, 'quick-apps', {'app_list'})
+                self.quick_plugins[user][app_id] = plugin
             self.add(directory, key, 'registry', {'service-intent.json'})
             self.add(Path('/data/plugin'), key, 'registry', {user + '.list'})
             self.add(Path('/home'), key, 'source', {user})
@@ -1013,6 +1176,7 @@ class PluginEvents:
 
     def drain(self):
         requests, rebuild = {}, False
+        self.quick_changed.clear()
         while True:
             try:
                 data = os.read(self.fd, 256 * 1024)
@@ -1027,12 +1191,18 @@ class PluginEvents:
                 offset += 16 + size
                 if mask & self.OVERFLOW:
                     requests.update({key: True for key in self.specs})
+                    self.quick_changed.update(self.quick_plugins)
                     rebuild = True
                     continue
                 for target, kind, names in self.subscriptions.get(wd, []):
                     if name and names is not None and name not in names:
                         continue
-                    if kind == 'config':
+                    if kind in ('quick-apps', 'quick-directory'):
+                        if kind == 'quick-apps' and mask & 0x00000100:
+                            continue  # Wait for IN_CLOSE_WRITE on a newly created file.
+                        self.quick_changed.add(target)
+                        rebuild = rebuild or kind == 'quick-directory' or bool(mask & self.SELF)
+                    elif kind == 'config':
                         if names is None and name and not re.fullmatch(r'u[0-9]+-[a-z0-9]+', name):
                             continue
                         rebuild = True
@@ -1070,7 +1240,7 @@ def foreign_maintenance():
         return False
 
 
-def event_reconcile(requests):
+def event_reconcile(requests, quick_accounts=None):
     if native_operation_busy():
         return False
     with open(plain(Path('/data/plugin/.local-plugin-installer.lock')), 'a') as lock:
@@ -1080,7 +1250,15 @@ def event_reconcile(requests):
             return False
         if foreign_maintenance():
             return False
-        reconcile(requests)
+        if requests is not None:
+            reconcile(requests)
+        errors = []
+        for user, plugins in (quick_accounts or {}).items():
+            try:
+                sync_quick_apps(user, plugins)
+            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError, KeyError) as error:
+                errors.append(user + ': ' + str(error))
+        require(not errors, '；'.join(errors))
     return True
 
 
@@ -1097,10 +1275,13 @@ def watch():
             poll.register(events.fd, select.POLLIN)
             poll.register(mounts.fileno(), select.POLLPRI | select.POLLERR)
             pending = {key: True for key in events.specs}
+            quick_pending = set(events.quick_plugins)
+            quick_pending.update(p.stem[len('quick-apps-'):] for p in BASE.glob('quick-apps-u*.json')
+                                 if re.fullmatch(r'quick-apps-u\d+', p.stem))
             recover_guard = Path('/data/minas/plugins/manager/maintenance.json').exists()
             uptime = float(Path('/proc/uptime').read_text().split()[0])
             ready_at = time.monotonic() + max(5, 90 - uptime)
-            deadline = ready_at if pending or recover_guard else None
+            deadline = ready_at if pending or quick_pending or recover_guard else None
             first_event = time.monotonic()
             rebuild, failures = False, 0
             status = dict(version=VERSION, pid=os.getpid(), procPid=int(os.readlink('/proc/self')), checks=0, fullChecks=0,
@@ -1113,6 +1294,10 @@ def watch():
                     for fd, _ in poll.poll(timeout):
                         if fd == events.fd:
                             incoming, changed = events.drain()
+                            quick_pending.update(events.quick_changed)
+                            if events.quick_changed and not incoming and not changed and deadline is None:
+                                deadline = max(ready_at, time.monotonic())
+                                status['lastReason'] = 'quick-apps'
                             if incoming or changed:
                                 if not pending:
                                     first_event = time.monotonic()
@@ -1136,6 +1321,7 @@ def watch():
                         # Arm new watches before repairing; events generated by
                         # the repair are queued and checked on the next pass.
                         previous_keys = set(events.specs)
+                        previous_accounts = events.quick_plugins
                         replacement = PluginEvents()
                         try:
                             replacement.configure()
@@ -1145,6 +1331,8 @@ def watch():
                         poll.unregister(events.fd)
                         events.close()
                         events = replacement
+                        quick_pending.update(user for user in previous_accounts.keys() | events.quick_plugins.keys()
+                                             if previous_accounts.get(user) != events.quick_plugins.get(user))
                         poll.register(events.fd, select.POLLIN)
                         for key in events.specs:
                             if key not in previous_keys:
@@ -1155,7 +1343,10 @@ def watch():
                     pending = {key: deep for key, deep in pending.items() if key in events.specs
                                and os.path.ismount(Path(events.specs[key]['src']).parents[3])}
                     try:
-                        if (pending or recover_guard) and not event_reconcile(pending):
+                        quick_pending.update(events.specs[key]['user'] for key in pending)
+                        accounts = {user: events.quick_plugins.get(user, {}) for user in quick_pending}
+                        if (pending or recover_guard or accounts) and not event_reconcile(
+                                pending if pending or recover_guard else None, accounts):
                             deadline = time.monotonic() + 5
                             continue
                         recover_guard = False
@@ -1175,6 +1366,7 @@ def watch():
                         deadline = time.monotonic() + 60 * failures
                     else:
                         pending = {}
+                        quick_pending.clear()
                         deadline = None
             finally:
                 events.close()
